@@ -57,3 +57,6 @@ logs/
 *.tmp
 *.bak
 *.swp
+
+# Ignore pytest coverage report
+coverage.xml
