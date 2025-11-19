@@ -57,7 +57,7 @@ Date: November 2025
 
 import sys
 import argparse
-from typing import Dict, Set
+from typing import Dict, Set, Tuple
 from collections import defaultdict
 
 
@@ -128,7 +128,7 @@ def filter_excessive_urls(
     excessive_surts: Set[str],
     output_path: str = '-',
     buffer_size: int = 1024 * 1024
-) -> tuple[int, int]:
+) -> Tuple[int, int]:
     """
     Filter out excessive URLs from CDXJ file.
     
@@ -188,7 +188,7 @@ def process_pipeline(
     threshold: int = 1000,
     buffer_size: int = 1024 * 1024,
     verbose: bool = False
-) -> tuple[int, int, int]:
+) -> Tuple[int, int, int]:
     """
     Find and filter excessive URLs in one pass (requires two file reads).
     
