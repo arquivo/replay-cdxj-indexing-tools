@@ -7,6 +7,7 @@ jobs=1
 # C0111: missing-docstring
 # R0913: too-many-arguments
 # R0914: too-many-locals
+# R0917: too-many-positional-arguments (Python 3.12+ check)
 # W0718: broad-exception-caught (catching general Exception is intentional)
 # W0621: redefined-outer-name (common in nested functions)
 # R1732: consider-using-with (manual resource management needed for stdin/stdout)
@@ -15,7 +16,7 @@ jobs=1
 # R0912: too-many-branches (complex logic required)
 # R0915: too-many-statements (long functions with clear structure)
 # R0801: duplicate-code (acceptable for similar I/O patterns)
-disable=C0111,R0913,R0914,W0718,W0621,R1732,W1514,R1705,R0912,R0915,R0801
+disable=C0111,R0913,R0914,R0917,W0718,W0621,R1732,W1514,R1705,R0912,R0915,R0801
 
 [FORMAT]
 # Maximum number of characters on a single line
