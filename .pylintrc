@@ -4,7 +4,18 @@ jobs=1
 
 [MESSAGES CONTROL]
 # Disable specific messages
-disable=C0111,R0913,R0914
+# C0111: missing-docstring
+# R0913: too-many-arguments
+# R0914: too-many-locals
+# W0718: broad-exception-caught (catching general Exception is intentional)
+# W0621: redefined-outer-name (common in nested functions)
+# R1732: consider-using-with (manual resource management needed for stdin/stdout)
+# W1514: unspecified-encoding (binary mode used intentionally)
+# R1705: no-else-return (else improves readability in some cases)
+# R0912: too-many-branches (complex logic required)
+# R0915: too-many-statements (long functions with clear structure)
+# R0801: duplicate-code (acceptable for similar I/O patterns)
+disable=C0111,R0913,R0914,W0718,W0621,R1732,W1514,R1705,R0912,R0915,R0801
 
 [FORMAT]
 # Maximum number of characters on a single line

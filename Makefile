@@ -68,11 +68,11 @@ test-coverage: ## Run tests with HTML coverage report
 lint: ## Run code quality checks (flake8, pylint, mypy)
 	@echo "Running code quality checks..."
 	@echo "→ flake8..."
-	$(VENV_BIN)/flake8 replay_cdxj_indexing_tools/ tests/ || true
+	$(VENV_BIN)/flake8 replay_cdxj_indexing_tools/ tests/
 	@echo "→ pylint..."
-	$(VENV_BIN)/pylint replay_cdxj_indexing_tools/ || true
+	$(VENV_BIN)/pylint replay_cdxj_indexing_tools/
 	@echo "→ mypy..."
-	$(VENV_BIN)/mypy || true
+	$(VENV_BIN)/mypy
 	@echo "✓ Lint checks complete"
 .PHONY: lint
 
