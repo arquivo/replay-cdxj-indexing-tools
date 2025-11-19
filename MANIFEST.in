@@ -1,0 +1,10 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include replay_cdxj_indexing_tools *.py
+recursive-include replay_cdxj_indexing_tools *.sh
+recursive-include tests *.py
+recursive-include docs *.md
+prune build
+prune dist
+prune *.egg-info

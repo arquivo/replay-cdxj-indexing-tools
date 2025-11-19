@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["replay_cdxj_indexing_tools*"]
+
+[tool.setuptools.package-data]
+replay_cdxj_indexing_tools = ["*.sh"]
+
+[project]
+name = "replay-cdxj-indexing-tools"
+version = "1.0.0"
+description = "Tools for web archive replay CDXJ indexing like parallel indexing, merging large CDXJ files, and converting to ZipNum format"
+readme = "README.md"
+requires-python = ">=3.6"
+license = {text = "MIT"}
+authors = [
+    {name = "Arquivo.pt Team", email = "arquivo@fccn.pt"}
+]
+keywords = ["cdxj", "web-archive", "indexing", "pywb", "warc"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Archiving",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+]
+
+dependencies = [
+    "pywb>=2.9.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "black>=23.0",
+    "flake8>=6.0",
+    "mypy>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/arquivo/replay-cdxj-indexing-tools"
+Repository = "https://github.com/arquivo/replay-cdxj-indexing-tools"
+Issues = "https://github.com/arquivo/replay-cdxj-indexing-tools/issues"
+
+[project.scripts]
+merge-cdxj = "replay_cdxj_indexing_tools.merge.merge_sorted_files:main"
+cdxj-to-zipnum = "replay_cdxj_indexing_tools.zipnum.cdxj_to_zipnum:main"
+filter-excessive-urls = "replay_cdxj_indexing_tools.filter.excessive_urls:main"
+filter-blocklist = "replay_cdxj_indexing_tools.filter.blocklist:main"
+cdxj-index-collection = "replay_cdxj_indexing_tools.process_collection_wrapper:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"
+
+[tool.black]
+line-length = 100
+target-version = ['py36', 'py37', 'py38', 'py39', 'py310', 'py311']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.venv
+  | venv
+  | build
+  | dist
+)/
+'''
+
+[tool.coverage.run]
+source = ["replay_cdxj_indexing_tools"]
+omit = ["*/tests/*", "*/test_*.py"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
