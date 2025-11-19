@@ -16,4 +16,4 @@ __author__ = "Arquivo.pt Team"
 
 from .merge.merge_sorted_files import merge_sorted_files, get_all_files
 
-__all__ = ['merge_sorted_files', 'get_all_files', '__version__']
+__all__ = ["merge_sorted_files", "get_all_files", "__version__"]

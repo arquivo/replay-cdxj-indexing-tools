@@ -42,13 +42,14 @@ Performance:
     - Space Complexity: O(k) for the heap
     - Memory efficient: only k lines held in memory at once
 
-Author: Ivo Branco / Copilot    
+Author: Ivo Branco / Copilot
 """
 
 import heapq
 import argparse
 import os
 import sys
+
 
 def get_all_files(paths):
     """
@@ -72,7 +73,8 @@ def get_all_files(paths):
                 for f in files:
                     yield os.path.join(root, f)
 
-def merge_sorted_files(files, output_file, buffer_size=1024*1024):
+
+def merge_sorted_files(files, output_file, buffer_size=1024 * 1024):
     """
     Merge multiple sorted files into a single sorted output file using a min-heap.
 
@@ -96,7 +98,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024*1024):
     Space Complexity: O(k) for the heap
     """
     # Open all input files with buffering for efficient I/O
-    file_handles = [open(f, 'r', buffering=buffer_size) for f in files]
+    file_handles = [open(f, "r", buffering=buffer_size) for f in files]
 
     # Initialize min-heap with the first line from each file
     # Heap elements are tuples: (line_content, file_index)
@@ -110,7 +112,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024*1024):
 
     # Open output file with buffering for efficient writing
     # Use stdout if output_file is '-', otherwise open a file
-    if output_file == '-':
+    if output_file == "-":
         out = sys.stdout
         # Process all lines in sorted order
         while heap:
@@ -124,7 +126,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024*1024):
                 # Add the new line back to the heap if file has more content
                 heapq.heappush(heap, (next_line, idx))
     else:
-        with open(output_file, 'w', buffering=buffer_size) as out:
+        with open(output_file, "w", buffering=buffer_size) as out:
             # Process all lines in sorted order
             while heap:
                 # Extract the lexicographically smallest line
@@ -140,6 +142,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024*1024):
     # Clean up: close all input file handles
     for fh in file_handles:
         fh.close()
+
 
 if __name__ == "__main__":
     # Set up command-line argument parsing
