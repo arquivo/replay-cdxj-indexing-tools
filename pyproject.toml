@@ -87,3 +87,18 @@ exclude_lines = [
     "raise AssertionError",
     "raise NotImplementedError",
 ]
+
+[tool.flake8]
+max-line-length = 100
+extend-ignore = ["E203", "W503"]
+per-file-ignores = [
+    "tests/*:E501",
+]
+
+[tool.pylint.messages_control]
+max-line-length = 100
+disable = ["C0111", "R0913", "R0914"]
+
+[tool.mypy]
+ignore_missing_imports = true
+files = ["replay_cdxj_indexing_tools"]

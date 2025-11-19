@@ -68,11 +68,11 @@ test-coverage: ## Run tests with HTML coverage report
 lint: ## Run code quality checks (flake8, pylint, mypy)
 	@echo "Running code quality checks..."
 	@echo "→ flake8..."
-	-$(VENV_BIN)/flake8 replay_cdxj_indexing_tools/ tests/ --max-line-length=100 --extend-ignore=E203,W503
+	$(VENV_BIN)/flake8 replay_cdxj_indexing_tools/ tests/ || true
 	@echo "→ pylint..."
-	-$(VENV_BIN)/pylint replay_cdxj_indexing_tools/ --max-line-length=100 --disable=C0111,R0913,R0914
+	$(VENV_BIN)/pylint replay_cdxj_indexing_tools/ || true
 	@echo "→ mypy..."
-	-$(VENV_BIN)/mypy replay_cdxj_indexing_tools/ --ignore-missing-imports
+	$(VENV_BIN)/mypy || true
 	@echo "✓ Lint checks complete"
 .PHONY: lint
 

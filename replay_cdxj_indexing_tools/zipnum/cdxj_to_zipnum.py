@@ -284,7 +284,8 @@ def cdxj_to_zipnum(
 
                     # Buffer idx entries to reduce I/O calls
                     idx_buffer.append(
-                        f"{pre}\t{shard_name_no_ext}\t{start_offset}\t{comp_len}\t{current_shard + 1}\n"
+                        f"{pre}\t{shard_name_no_ext}\t{start_offset}\t"
+                        f"{comp_len}\t{current_shard + 1}\n"
                     )
 
                     if len(idx_buffer) >= idx_buffer_size:
