@@ -577,7 +577,7 @@ class TestEdgeCases(unittest.TestCase):
         lines = []
         # Create 100k lines with varied distribution
         for i in range(50000):
-            lines.append(f'pt,domain{i%1000},www)/ 20230101{i:06d} {{"url": "..."}}\n')
+            lines.append(f'pt,domain{i % 1000},www)/ 20230101{i:06d} {{"url": "..."}}\n')
 
         # Add some excessive ones
         lines.extend(['pt,spam,www)/ 20230101120000 {"url": "..."}\n'] * 5000)
