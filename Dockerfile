@@ -17,16 +17,12 @@ RUN apt-get update && \
 # Set working directory
 WORKDIR /app
 
-# Copy project files
-COPY pyproject.toml ./
+# Copy all files
+COPY . .
 
-# Install Python package
+# Install package
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -e .
-
-# Copy the rest of the files
-COPY README.md LICENSE ./
-COPY replay_cdxj_indexing_tools/ ./replay_cdxj_indexing_tools/
 
 # Create directories for input/output
 RUN mkdir -p /data/input /data/output
