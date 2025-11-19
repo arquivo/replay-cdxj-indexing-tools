@@ -60,8 +60,4 @@ jobs:
     
     - name: Test script syntax
       run: |
-        bash -n process-collection.sh
-        bash -n apply_blacklist.sh
-        bash -n cdxj-incremental-indexing.sh
-        bash -n filter-excessive-urls.sh
-        bash -n find-excessive-urls.sh
+        bash -n replay_cdxj_indexing_tools/cdxj-index-collection.sh
