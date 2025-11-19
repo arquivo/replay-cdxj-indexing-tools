@@ -164,7 +164,7 @@ Used in production at [Arquivo.pt](https://arquivo.pt) (Portuguese Web Archive) 
 
 ## License
 
-MIT License - See [LICENSE](LICENSE) file
+GPL-3.0 License - See [LICENSE](LICENSE) file
 
 ## Support
 
