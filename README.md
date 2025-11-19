@@ -95,6 +95,29 @@ merge-cdxj - *.cdxj | \
     cdxj-to-zipnum -o indexes/ -i - --compress
 ```
 
+### Docker Usage
+
+```bash
+# Process CDXJ files with Docker
+docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
+    merge-cdxj /data/output/merged.cdxj /data/input/*.cdxj
+
+# Full pipeline with Docker
+docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
+    sh -c "merge-cdxj - /data/input/*.cdxj | \
+           filter-blocklist -i - -b /data/blocklist.txt | \
+           filter-excessive-urls auto -i - -n 1000 | \
+           cdxj-to-zipnum -o /data/output/ -i - --compress"
+
+# Convert to ZipNum
+docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
+    cdxj-to-zipnum -i /data/input/file.cdxj -o /data/output/ -s 100 -c 3000
+
+# Collection processing
+docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools \
+    cdxj-index-collection COLLECTION-2024-11 --incremental
+```
+
 ## Processing Pipeline
 
 ```
@@ -112,6 +135,8 @@ Each stage is optimized for throughput and memory efficiency.
 
 ## Installation
 
+### Local Installation
+
 ```bash
 # System dependencies (Ubuntu/Debian)
 sudo apt-get install python3-dev parallel
@@ -122,6 +147,19 @@ cd cdxj-incremental-indexing
 python3 -m venv venv
 source venv/bin/activate
 pip install -e .
+```
+
+### Docker Installation
+
+```bash
+# Pull from Docker Hub
+docker pull arquivo/replay-cdxj-indexing-tools:latest
+
+# Or build locally
+docker build -t arquivo/replay-cdxj-indexing-tools .
+
+# Run with volume mount
+docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools merge-cdxj --help
 ```
 
 See [Installation Guide](docs/installation.md) for other platforms.

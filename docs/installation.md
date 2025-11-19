@@ -2,11 +2,63 @@
 
 ## Requirements
 
-- Python 3.12 or higher
+- Python 3.8 or higher
 - pip package manager
 - Virtual environment (recommended)
+- Docker (optional, for containerized deployment)
 
-## Option 1: Install from Source (Development)
+## Option 1: Docker (Recommended for Production)
+
+The easiest way to use the tools without managing Python dependencies:
+
+```bash
+# Pull the latest image from Docker Hub
+docker pull arquivo/replay-cdxj-indexing-tools:latest
+
+# Verify installation
+docker run arquivo/replay-cdxj-indexing-tools:latest
+
+# Run a command
+docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools:latest \
+    merge-cdxj --help
+```
+
+### Docker Usage Examples
+
+```bash
+# Merge CDXJ files
+docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
+    merge-cdxj /data/output/merged.cdxj /data/input/*.cdxj
+
+# Convert to ZipNum
+docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
+    cdxj-to-zipnum -i /data/input/file.cdxj -o /data/output/
+
+# Full pipeline
+docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
+    sh -c "merge-cdxj - /data/input/*.cdxj | \
+           filter-blocklist -i - -b /data/blocklist.txt | \
+           filter-excessive-urls auto -i - -n 1000 | \
+           cdxj-to-zipnum -o /data/output/ -i -"
+
+# Process a collection
+docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools:latest \
+    cdxj-index-collection COLLECTION-2024-11 --incremental
+```
+
+### Building Docker Image Locally
+
+```bash
+# Clone and build
+git clone https://github.com/arquivo/replay-cdxj-indexing-tools.git
+cd replay-cdxj-indexing-tools
+docker build -t arquivo/replay-cdxj-indexing-tools:local .
+
+# Run locally built image
+docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:local merge-cdxj --help
+```
+
+## Option 2: Install from Source (Development)
 
 Recommended for development and contributing to the project.
 
@@ -26,7 +78,7 @@ pip install -e .
 pip install -e ".[dev]"
 ```
 
-## Option 2: Install from Git
+## Option 3: Install from Git
 
 Install directly from GitHub:
 
@@ -34,7 +86,7 @@ Install directly from GitHub:
 pip install git+https://github.com/arquivo/replay-cdxj-indexing-tools.git
 ```
 
-## Option 3: Install from PyPI
+## Option 4: Install from PyPI
 
 (When/if published to PyPI)
 
