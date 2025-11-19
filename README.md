@@ -174,7 +174,7 @@ MIT License - See [LICENSE](LICENSE) file
 
 ## Authors
 
-Arquivo.pt Team - [arquivo@fccn.pt](mailto:arquivo@fccn.pt)
+Arquivo.pt Team - [contacto@arquivo.pt](mailto:contacto@arquivo.pt)
 
 ---
 
