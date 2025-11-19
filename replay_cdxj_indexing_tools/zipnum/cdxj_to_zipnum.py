@@ -127,12 +127,12 @@ from argparse import ArgumentParser
 import os
 import gzip
 import sys
-from typing import List, BinaryIO, Iterable, Tuple
+from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 from concurrent.futures import ThreadPoolExecutor
 from collections import deque
 
 
-def open_input_path(path: str) -> BinaryIO:
+def open_input_path(path: str) -> Union[BinaryIO, gzip.GzipFile]:
     """Open input for binary reading. Supports '-' (stdin) and .gz files."""
     if path == "-":
         return sys.stdin.buffer
@@ -187,9 +187,9 @@ def cdxj_to_zipnum(
     input_path: str,
     shard_size_mb: int = 100,
     chunk_size: int = 3000,
-    base: str = None,
-    idx_name: str = None,
-    loc_name: str = None,
+    base: Optional[str] = None,
+    idx_name: Optional[str] = None,
+    loc_name: Optional[str] = None,
     compress_level: int = 6,
     workers: int = 4,
 ):
@@ -247,7 +247,7 @@ def cdxj_to_zipnum(
     # Set up parallel compression with thread pool
     with ThreadPoolExecutor(max_workers=workers) as executor:
         # Use deque to maintain order of compressed chunks
-        compression_queue = deque()
+        compression_queue: deque = deque()
         max_queue_size = workers * 2  # Keep reasonable memory usage
 
         with open(idx_name, "w", encoding="utf-8", buffering=65536) as idxf:
