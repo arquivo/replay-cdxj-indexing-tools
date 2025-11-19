@@ -6,8 +6,8 @@
 
 ```bash
 # Clone the repository
-git clone git@github.com:arquivo/cdxj-incremental-indexing.git
-cd cdxj-incremental-indexing
+git clone git@github.com:arquivo/replay-cdxj-indexing-tools.git
+cd replay-cdxj-indexing-tools
 
 # Create virtual environment
 python3 -m venv venv
@@ -20,7 +20,7 @@ pip install -e ".[dev]"
 ### Option 2: Install from Git
 
 ```bash
-pip install git+https://github.com/arquivo/cdxj-incremental-indexing.git
+pip install git+https://github.com/arquivo/replay-cdxj-indexing-tools.git
 ```
 
 ## Usage Examples
@@ -67,7 +67,7 @@ merge-cdxj - *.cdxj | gzip > merged.cdxj.gz
 
 ```bash
 # Run full incremental indexing pipeline
-./scripts/cdxj-incremental-indexing.sh \
+./scripts/replay-cdxj-indexing-tools.sh \
   -w /data/warcs/collection \
   -x /data/incremental/collection \
   -o /data/final_index.cdxj \
@@ -94,7 +94,7 @@ pytest -v -s
 
 1. **Use parallel processing** for large collections:
    ```bash
-   ./scripts/cdxj-incremental-indexing.sh -w /data/warcs -x /tmp/incremental -o output.cdxj -P
+   ./scripts/replay-cdxj-indexing-tools.sh -w /data/warcs -x /tmp/incremental -o output.cdxj -P
    ```
 
 2. **Adjust buffer size** for very large files:

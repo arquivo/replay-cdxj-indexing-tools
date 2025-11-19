@@ -276,7 +276,7 @@ pip install -e .
 
 **Solution:** Run tests from repository root:
 ```bash
-cd /path/to/cdxj-incremental-indexing
+cd /path/to/replay-cdxj-indexing-tools
 bash tests/test_process_collection_simple.sh
 ```
 

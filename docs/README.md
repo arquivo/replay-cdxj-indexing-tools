@@ -142,7 +142,7 @@ merge-cdxj - *.cdxj | \
 
 ## Support
 
-- **Issues:** [GitHub Issues](https://github.com/arquivo/cdxj-incremental-indexing/issues)
+- **Issues:** [GitHub Issues](https://github.com/arquivo/replay-cdxj-indexing-tools/issues)
 - **Troubleshooting:** [Troubleshooting Guide](troubleshooting.md)
 - **Questions:** Open a discussion on GitHub
 

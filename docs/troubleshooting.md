@@ -41,7 +41,7 @@ ModuleNotFoundError: No module named 'replay_cdxj_indexing_tools'
 
 1. **Install in development mode:**
    ```bash
-   cd /path/to/cdxj-incremental-indexing
+   cd /path/to/replay-cdxj-indexing-tools
    pip install -e .
    ```
 
@@ -512,7 +512,7 @@ JSONDecodeError: Expecting value
    # Set PATH and activate venv in script:
    #!/bin/bash
    export PATH="/usr/local/bin:/usr/bin:/bin"
-   source /opt/cdxj-incremental-indexing/venv/bin/activate
+   source /opt/replay-cdxj-indexing-tools/venv/bin/activate
    ```
 
 ### pywb not finding indexes

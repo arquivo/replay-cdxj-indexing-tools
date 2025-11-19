@@ -393,7 +393,7 @@ LOG_FILE="/var/log/cdxj/daily-$(date +%Y%m%d).log"
 
 echo "Starting daily update for $COLLECTION" | tee -a "$LOG_FILE"
 
-/opt/cdxj-incremental-indexing/cdxj-index-collection \
+/opt/replay-cdxj-indexing-tools/cdxj-index-collection \
     "$COLLECTION" \
     --incremental \
     --jobs 32 \

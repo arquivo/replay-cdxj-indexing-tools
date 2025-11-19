@@ -111,7 +111,7 @@ Automated daily processing:
 # /etc/cron.daily/arquivo-indexing
 
 COLLECTION="COLLECTION-2024-11"
-SCRIPT_DIR="/opt/cdxj-incremental-indexing"
+SCRIPT_DIR="/opt/replay-cdxj-indexing-tools"
 LOG_DIR="/var/log/arquivo/indexing"
 DATE=$(date +%Y%m%d)
 

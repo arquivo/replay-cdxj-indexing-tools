@@ -6,8 +6,8 @@ Get started with CDXJ indexing tools in 5 minutes.
 
 ```bash
 # Clone repository
-git clone https://github.com/arquivo/cdxj-incremental-indexing.git
-cd cdxj-incremental-indexing
+git clone https://github.com/arquivo/replay-cdxj-indexing-tools.git
+cd replay-cdxj-indexing-tools
 
 # Create virtual environment
 python3 -m venv venv

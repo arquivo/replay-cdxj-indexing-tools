@@ -1,7 +1,7 @@
 # CDXJ Incremental Indexing Tools
 
-[![Tests](https://github.com/arquivo/cdxj-incremental-indexing/workflows/Tests/badge.svg)](https://github.com/arquivo/cdxj-incremental-indexing/actions)
-[![Python 3.7+](https://img.shields.io/badge/python-3.7+-blue.svg)](https://www.python.org/downloads/)
+[![Tests](https://github.com/arquivo/replay-cdxj-indexing-tools/actions/workflows/tests.yml/badge.svg)](https://github.com/arquivo/replay-cdxj-indexing-tools/actions/workflows/tests.yml)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Production-ready tools for processing web archive CDXJ indexes at scale. Features parallel indexing, efficient merging, content filtering, and ZipNum conversion for pywb.
@@ -21,8 +21,8 @@ Production-ready tools for processing web archive CDXJ indexes at scale. Feature
 
 ```bash
 # Clone and install
-git clone https://github.com/arquivo/cdxj-incremental-indexing.git
-cd cdxj-incremental-indexing
+git clone https://github.com/arquivo/replay-cdxj-indexing-tools.git
+cd replay-cdxj-indexing-tools
 python3 -m venv venv && source venv/bin/activate
 pip install -e .
 
@@ -142,8 +142,8 @@ Each stage is optimized for throughput and memory efficiency.
 sudo apt-get install python3-dev parallel
 
 # Python package
-git clone https://github.com/arquivo/cdxj-incremental-indexing.git
-cd cdxj-incremental-indexing
+git clone https://github.com/arquivo/replay-cdxj-indexing-tools.git
+cd replay-cdxj-indexing-tools
 python3 -m venv venv
 source venv/bin/activate
 pip install -e .
@@ -207,7 +207,7 @@ GPL-3.0 License - See [LICENSE](LICENSE) file
 ## Support
 
 - **Documentation:** [docs/](docs/)
-- **Issues:** [GitHub Issues](https://github.com/arquivo/cdxj-incremental-indexing/issues)
+- **Issues:** [GitHub Issues](https://github.com/arquivo/replay-cdxj-indexing-tools/issues)
 - **Troubleshooting:** [Troubleshooting Guide](docs/troubleshooting.md)
 
 ## Authors
