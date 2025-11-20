@@ -14,7 +14,7 @@ version = "1.0.0"
 description = "Tools for web archive replay CDXJ indexing like parallel indexing, merging large CDXJ files, and converting to ZipNum format"
 readme = "README.md"
 requires-python = ">=3.6"
-license = {text = "MIT"}
+license = {text = "GPL-3.0-or-later"}
 authors = [
     {name = "Arquivo.pt Team", email = "arquivo@fccn.pt"}
 ]
@@ -24,7 +24,7 @@ classifiers = [
     "Intended Audience :: Developers",
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: System :: Archiving",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Programming Language :: Python :: 3",
 ]
 
