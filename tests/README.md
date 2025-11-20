@@ -4,39 +4,53 @@ This directory contains comprehensive test suites for both Python tools and shel
 
 ## Test Organization
 
+This folder has multiple files, each one tests a particular functionality.
+
 ### Python Tests (pytest)
 
 Test coverage for Python CLI tools:
 
-- **`test_filter_blocklist.py`** (18 tests) - Blocklist filtering functionality
+- **`test_filter_blocklist.py`** - Blocklist filtering functionality
   - Pattern matching (regex, exact, wildcards)
   - Comment handling
   - Edge cases (empty files, malformed patterns)
   - CLI argument validation
   - Verbose logging output
 
-- **`test_filter_excessive_urls.py`** (26 tests) - Excessive URL detection and filtering
+- **`test_filter_excessive_urls.py`** - Excessive URL detection and filtering
   - SURT key extraction
   - Threshold-based detection
   - URL filtering (find/remove/auto modes)
   - Performance with large files
   - Unicode and edge cases
 
-- **`test_cdxj_to_zipnum.py`** (22 tests) - ZipNum conversion
+- **`test_cdxj_to_zipnum.py`** - ZipNum conversion
   - Sharding logic
   - CDX summary generation
   - Compression handling
   - Large file processing
   - Edge cases
 
-- **`test_merge_sorted_files.py`** (25 tests) - CDXJ merging
+- **`test_merge_sorted_files.py`** - CDXJ merging
   - K-way merge algorithm
   - Multiple file handling
   - CDXJ format preservation
   - Buffer management
   - Edge cases
 
-**Total: 91 Python tests**
+- **`test_path_index_to_redis.py`** - Redis path index submission
+  - Path index parsing
+  - Redis connection handling
+  - Batch operations
+  - Error handling
+  - Entry validation
+
+- **`test_cdxj_search.py`** - Binary search in CDXJ/ZipNum files
+  - Binary search algorithm
+  - SURT key matching
+  - ZipNum index navigation
+  - Compressed file handling
+  - Edge cases and boundary conditions
 
 ### Shell Script Tests
 
@@ -94,16 +108,16 @@ bash tests/test_process_collection_simple.sh
 Run everything:
 ```bash
 # Python tests
-pytest tests/ -v
+make test-python
 
 # Shell tests (simple)
-bash tests/test_process_collection_simple.sh
+make test-shell
 
 # Full CI suite (tests + coverage + lint)
 make ci
 ```
 
-### Multi-Version Testing with Docker
+### Multi-Version Testing locally with Docker
 
 Test against multiple Python versions using Docker containers:
 
@@ -116,97 +130,17 @@ make ci-py311  # Python 3.11
 make ci-py312  # Python 3.12
 
 # Test on all Python versions
-make ci-all-python-versions
+make ci-all
 
 # Run all versions in parallel (faster)
-make --jobs 10 ci-all-python-versions
+make --jobs 10 ci-all
 ```
 
 Each Docker-based CI target runs the full test suite (tests with coverage, flake8, pylint, and mypy) in an isolated container for that Python version. This ensures compatibility without needing to install multiple Python versions locally.
 
 ### CI/CD Pipeline
 
-Example `.github/workflows/test.yml`:
-```yaml
-name: Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v2
-    
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.12'
-    
-    - name: Install dependencies
-      run: |
-        pip install -e .
-        pip install pytest pytest-cov
-    
-    - name: Run Python tests
-      run: pytest tests/ --cov=replay_cdxj_indexing_tools -v
-    
-    - name: Run shell script tests
-      run: bash tests/test_process_collection_simple.sh
-```
-
-## Test Coverage Summary
-
-| Component | Tests | Coverage |
-|-----------|-------|----------|
-| filter-blocklist | 18 | Comprehensive |
-| filter-excessive-urls | 26 | Comprehensive |
-| cdxj-to-zipnum | 22 | Comprehensive |
-| merge-cdxj | 25 | Comprehensive |
-| cdxj-index-collection | 15 | Argument parsing & error handling |
-| **Total** | **106** | **Full pipeline coverage** |
-
-## Writing New Tests
-
-### Python Tests (pytest)
-
-```python
-# tests/test_new_feature.py
-import pytest
-from replay_cdxj_indexing_tools.module import function
-
-class TestNewFeature:
-    def test_basic_case(self):
-        result = function("input")
-        assert result == "expected"
-    
-    def test_edge_case(self, tmp_path):
-        # Use pytest fixtures for temp files
-        test_file = tmp_path / "test.txt"
-        test_file.write_text("content")
-        result = function(str(test_file))
-        assert result is not None
-```
-
-### Shell Tests (simple bash)
-
-```bash
-# Add to tests/test_process_collection_simple.sh
-
-test_new_feature() {
-    setup_test_env
-    
-    local output=$(bash "$SCRIPT" TEST --new-flag 2>&1 || true)
-    
-    assert_contains "$output" "expected text" "Test description"
-    
-    cleanup_test_env
-}
-
-# Add to main() function:
-run_test "New feature description" test_new_feature
-```
+This repository uses Github Actions for quality testing for multi Python versions.
 
 ## Test Maintenance
 
