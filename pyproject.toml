@@ -16,7 +16,7 @@ readme = "README.md"
 requires-python = ">=3.6"
 license = {text = "GPL-3.0-or-later"}
 authors = [
-    {name = "Arquivo.pt Team", email = "arquivo@fccn.pt"}
+    {name = "Arquivo.pt Team", email = "contacto@arquivo.pt"}
 ]
 keywords = ["cdxj", "web-archive", "indexing", "pywb", "warc"]
 classifiers = [

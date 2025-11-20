@@ -3,7 +3,7 @@
 
 FROM python:3.11-slim
 
-LABEL maintainer="arquivo@fccn.pt"
+LABEL maintainer="contacto@arquivo.pt"
 LABEL description="Tools for web archive replay CDXJ indexing"
 LABEL version="1.0.0"
 
