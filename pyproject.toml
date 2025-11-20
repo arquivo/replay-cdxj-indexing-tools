@@ -30,6 +30,7 @@ classifiers = [
 
 dependencies = [
     "pywb>=2.9.1",
+    "surt>=0.3.1",
 ]
 
 [project.optional-dependencies]
@@ -55,6 +56,7 @@ filter-excessive-urls = "replay_cdxj_indexing_tools.filter.excessive_urls:main"
 filter-blocklist = "replay_cdxj_indexing_tools.filter.blocklist:main"
 cdxj-index-collection = "replay_cdxj_indexing_tools.process_collection_wrapper:main"
 path-index-to-redis = "replay_cdxj_indexing_tools.redis.path_index_to_redis:main"
+cdxj-search = "replay_cdxj_indexing_tools.search.cdxj_search:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
