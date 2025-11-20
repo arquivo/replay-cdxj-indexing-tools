@@ -13,7 +13,7 @@ name = "replay-cdxj-indexing-tools"
 version = "1.0.0"
 description = "Tools for web archive replay CDXJ indexing like parallel indexing, merging large CDXJ files, and converting to ZipNum format"
 readme = "README.md"
-requires-python = ">=3.6"
+requires-python = ">=3.8"
 license = {text = "GPL-3.0-or-later"}
 authors = [
     {name = "Arquivo.pt Team", email = "contacto@arquivo.pt"}
