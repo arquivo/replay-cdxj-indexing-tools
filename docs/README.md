@@ -18,6 +18,7 @@ Welcome to the CDXJ Indexing Tools documentation. This guide covers everything f
 - **[Architecture](architecture.md)** - System design and pipeline overview
 - **[Reference Implementation](reference-implementation.md)** - `cdxj-index-collection` complete guide
 - **[Incremental Workflow](incremental-workflow.md)** - Daily/incremental updates
+- **[Redis Integration](redis-integration.md)** - Path index to Redis setup guide
 - **[Pipeline Examples](pipeline-examples.md)** - Real-world workflows
 - **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
 
@@ -31,6 +32,8 @@ Individual tool documentation:
 - **[flat-cdxj-to-zipnum](tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
 - **[zipnum-to-flat-cdxj](tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
 - **[cdxj-search](tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
+- **[arclist-to-path-index](tools/arclist-to-path-index.md)** - Convert arclist to path index format
+- **[arclist-index-to-redis](tools/arclist-index-to-redis.md)** - Complete arclist to Redis pipeline
 
 ## Documentation by Use Case
 
@@ -121,15 +124,25 @@ zipnum-to-flat-cdxj -i indexes/index.idx > output.cdxj
 
 # Search indexes
 cdxj-search --url http://example.com/page index.cdxj
+
+# Convert arclist to path index
+arclist-to-path-index -d /data/arclists > pathindex.txt
+
+# Load arclist directly to Redis
+arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 ```
 
 ### Unix Pipe Workflow
 
 ```bash
+# CDXJ pipeline
 merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
     flat-cdxj-to-zipnum -o indexes/ -i - --compress
+
+# Arclist to Redis pipeline
+arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 ```
 
 ## Available Tools
@@ -142,6 +155,8 @@ merge-flat-cdxj - *.cdxj | \
 | `flat-cdxj-to-zipnum` | Convert flat CDXJ to ZipNum format | [docs](tools/flat-cdxj-to-zipnum.md) |
 | `zipnum-to-flat-cdxj` | Convert ZipNum back to flat CDXJ | [docs](tools/zipnum-to-flat-cdxj.md) |
 | `cdxj-search` | Binary search indexes | [docs](tools/cdxj-search.md) |
+| `arclist-to-path-index` | Convert arclist to path index | [docs](tools/arclist-to-path-index.md) |
+| `arclist-index-to-redis` | Arclist to Redis pipeline | [docs](tools/arclist-index-to-redis.md) |
 | `cdxj-index-collection` | Complete pipeline script | [docs](reference-implementation.md) |
 
 ## Development

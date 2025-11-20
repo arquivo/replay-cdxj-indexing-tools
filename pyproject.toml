@@ -66,6 +66,7 @@ filter-blocklist = "replay_cdxj_indexing_tools.filter.blocklist:main"
 cdxj-index-collection = "replay_cdxj_indexing_tools.process_collection_wrapper:main"
 arclist-to-path-index = "replay_cdxj_indexing_tools.arclist_to_path_index:main"
 path-index-to-redis = "replay_cdxj_indexing_tools.redis.path_index_to_redis:main"
+arclist-index-to-redis = "replay_cdxj_indexing_tools.arclist_index_to_redis:main"
 cdxj-search = "replay_cdxj_indexing_tools.search.cdxj_search:main"
 
 [tool.pytest.ini_options]
