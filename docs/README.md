@@ -25,10 +25,10 @@ Welcome to the CDXJ Indexing Tools documentation. This guide covers everything f
 
 Individual tool documentation:
 
-- **[merge-cdxj](tools/merge-cdxj.md)** - K-way merge of sorted CDXJ files
+- **[merge-flat-cdxj](tools/merge-flat-cdxj.md)** - K-way merge of sorted flat CDXJ files
 - **[filter-blocklist](tools/filter-blocklist.md)** - Filter by blocklist patterns
 - **[filter-excessive-urls](tools/filter-excessive-urls.md)** - Remove crawler traps
-- **[cdxj-to-zipnum](tools/cdxj-to-zipnum.md)** - Convert to ZipNum format
+- **[flat-cdxj-to-zipnum](tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
 - **[zipnum-to-flat-cdxj](tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
 - **[cdxj-search](tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 
@@ -68,7 +68,7 @@ Individual tool documentation:
        │
        ▼
 ┌─────────────────────┐
-│   Merge Indexes     │ ← merge-cdxj
+│   Merge Indexes     │ ← merge-flat-cdxj
 └──────┬──────────────┘
        │
        ▼
@@ -83,7 +83,7 @@ Individual tool documentation:
        │
        ▼
 ┌─────────────────────┐
-│ ZipNum Conversion   │ ← cdxj-to-zipnum
+│ ZipNum Conversion   │ ← flat-cdxj-to-zipnum
 └──────┬──────────────┘
        │
        ▼
@@ -105,7 +105,7 @@ cdxj-index-collection COLLECTION-2024-11
 
 ```bash
 # Merge CDXJ files
-merge-cdxj output.cdxj input1.cdxj input2.cdxj
+merge-flat-cdxj output.cdxj input1.cdxj input2.cdxj
 
 # Filter blocklist
 filter-blocklist -i input.cdxj -b blocklist.txt -o output.cdxj
@@ -114,7 +114,7 @@ filter-blocklist -i input.cdxj -b blocklist.txt -o output.cdxj
 filter-excessive-urls auto -i input.cdxj -o output.cdxj -n 1000
 
 # Convert to ZipNum
-cdxj-to-zipnum -o indexes/ -i input.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o indexes/ -i input.cdxj -n 3000 --compress
 
 # Convert ZipNum back to flat CDXJ
 zipnum-to-flat-cdxj -i indexes/index.idx > output.cdxj
@@ -126,20 +126,20 @@ cdxj-search --url http://example.com/page index.cdxj
 ### Unix Pipe Workflow
 
 ```bash
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
-    cdxj-to-zipnum -o indexes/ -i - --compress
+    flat-cdxj-to-zipnum -o indexes/ -i - --compress
 ```
 
 ## Available Tools
 
 | Tool | Purpose | Documentation |
 |------|---------|---------------|
-| `merge-cdxj` | Merge multiple sorted CDXJ files | [docs](tools/merge-cdxj.md) |
+| `merge-flat-cdxj` | Merge multiple sorted flat CDXJ files | [docs](tools/merge-flat-cdxj.md) |
 | `filter-blocklist` | Remove blocked content | [docs](tools/filter-blocklist.md) |
 | `filter-excessive-urls` | Remove crawler traps | [docs](tools/filter-excessive-urls.md) |
-| `cdxj-to-zipnum` | Convert to ZipNum format | [docs](tools/cdxj-to-zipnum.md) |
+| `flat-cdxj-to-zipnum` | Convert flat CDXJ to ZipNum format | [docs](tools/flat-cdxj-to-zipnum.md) |
 | `zipnum-to-flat-cdxj` | Convert ZipNum back to flat CDXJ | [docs](tools/zipnum-to-flat-cdxj.md) |
 | `cdxj-search` | Binary search indexes | [docs](tools/cdxj-search.md) |
 | `cdxj-index-collection` | Complete pipeline script | [docs](reference-implementation.md) |

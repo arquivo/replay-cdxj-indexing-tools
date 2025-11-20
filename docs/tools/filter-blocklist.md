@@ -29,10 +29,10 @@ cat input.cdxj | filter-blocklist -i - -b blocklist.txt > output.cdxj
 
 **In complete pipeline:**
 ```bash
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls remove -i - -b excessive.txt | \
-    cdxj-to-zipnum -o indexes -i -
+    flat-cdxj-to-zipnum -o indexes -i -
 ```
 
 ### Options
@@ -386,6 +386,6 @@ filter-blocklist -i input.cdxj -b blacklist_patterns.txt -o output.cdxj
 ## See Also
 
 - [filter-excessive-urls.md](filter-excessive-urls.md) - Remove crawler traps
-- [merge-cdxj.md](merge-cdxj.md) - Previous step: merge files
-- [cdxj-to-zipnum.md](cdxj-to-zipnum.md) - Next step: convert to ZipNum
+- [merge-flat-cdxj.md](merge-flat-cdxj.md) - Previous step: merge files
+- [flat-cdxj-to-zipnum.md](flat-cdxj-to-zipnum.md) - Next step: convert to ZipNum
 - [pipeline-examples.md](pipeline-examples.md) - Complete workflows

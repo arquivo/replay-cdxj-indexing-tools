@@ -121,7 +121,7 @@ fi
 
 **Command:**
 ```bash
-merge-cdxj merged.cdxj indexes/*.cdxj
+merge-flat-cdxj merged.cdxj indexes/*.cdxj
 ```
 
 **Output:** Single `merged.cdxj` file, sorted by SURT
@@ -154,7 +154,7 @@ filter-excessive-urls auto \
 
 **Command:**
 ```bash
-cdxj-to-zipnum \
+flat-cdxj-to-zipnum \
     -o /data/zipnum/COLLECTION-2024-11/ \
     -i filtered-excessive.cdxj \
     -n 3000 \
@@ -429,7 +429,7 @@ fi
 # Verify dependencies
 which parallel
 which cdx-indexer
-which merge-cdxj
+which merge-flat-cdxj
 
 # Check permissions
 ls -la cdxj-index-collection

@@ -1,6 +1,6 @@
 # zipnum-to-flat-cdxj - ZipNum to Flat CDXJ Converter
 
-Convert ZipNum format indexes back to flat CDXJ - decompress and merge sharded indexes into a single CDXJ stream. Enables round-trip conversion, data recovery, and pipeline reprocessing.
+Convert ZipNum format indexes back to flat CDXJ - decompress and merge sharded indexes into a single flat CDXJ stream. Enables round-trip conversion, data recovery, and pipeline reprocessing.
 
 ## Command-Line Usage
 
@@ -155,7 +155,7 @@ Convert between formats for different tools:
 
 ```bash
 # Flat → ZipNum (for pywb)
-cdxj-to-zipnum -o zipnum_indexes -i arquivo.cdxj --compress
+flat-cdxj-to-zipnum -o zipnum_indexes -i arquivo.cdxj --compress
 
 # ZipNum → Flat (for reprocessing)
 zipnum-to-flat-cdxj -i zipnum_indexes/index.idx > arquivo.cdxj
@@ -173,7 +173,7 @@ Reprocess archived data through new filters:
 zipnum-to-flat-cdxj -i old_indexes/index.idx | \
     filter-blocklist -i - -b new_blocklist.txt | \
     filter-excessive-urls auto -i - -n 500 | \
-    cdxj-to-zipnum -o new_indexes -i - --compress
+    flat-cdxj-to-zipnum -o new_indexes -i - --compress
 ```
 
 ### 4. Merge Multiple ZipNum Indexes
@@ -187,8 +187,8 @@ zipnum-to-flat-cdxj -i archive2/index.idx > archive2.cdxj
 zipnum-to-flat-cdxj -i archive3/index.idx > archive3.cdxj
 
 # Merge and rebuild
-merge-cdxj merged.cdxj archive1.cdxj archive2.cdxj archive3.cdxj
-cdxj-to-zipnum -o combined_indexes -i merged.cdxj --compress
+merge-flat-cdxj merged.cdxj archive1.cdxj archive2.cdxj archive3.cdxj
+flat-cdxj-to-zipnum -o combined_indexes -i merged.cdxj --compress
 ```
 
 ### 5. Extract Subsets
@@ -336,7 +336,7 @@ filter-excessive-urls auto -i temp_filtered.cdxj -o temp_clean.cdxj -n 1000
 
 # 4. Rebuild ZipNum
 echo "Building new ZipNum indexes..."
-cdxj-to-zipnum -o $OUTPUT_DIR -i temp_clean.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o $OUTPUT_DIR -i temp_clean.cdxj -n 3000 --compress
 
 # 5. Cleanup
 rm temp_flat.cdxj temp_filtered.cdxj temp_clean.cdxj
@@ -360,11 +360,11 @@ zipnum-to-flat-cdxj -i $OLD_INDEX --workers 8 > old_flat.cdxj
 
 # 2. Merge old and new
 echo "Merging indexes..."
-merge-cdxj merged.cdxj old_flat.cdxj $NEW_CDXJ
+merge-flat-cdxj merged.cdxj old_flat.cdxj $NEW_CDXJ
 
 # 3. Build new ZipNum
 echo "Building merged ZipNum..."
-cdxj-to-zipnum -o $OUTPUT_DIR -i merged.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o $OUTPUT_DIR -i merged.cdxj -n 3000 --compress
 
 # 4. Cleanup
 rm old_flat.cdxj merged.cdxj
@@ -417,7 +417,7 @@ sort -c output.cdxj && echo "✓ Properly sorted" || echo "✗ Not sorted"
 
 ```bash
 # Original → ZipNum → Flat
-cdxj-to-zipnum -o temp_zipnum -i original.cdxj --compress
+flat-cdxj-to-zipnum -o temp_zipnum -i original.cdxj --compress
 zipnum-to-flat-cdxj -i temp_zipnum/index.idx > restored.cdxj
 
 # Compare (should be identical after sorting)
@@ -565,8 +565,8 @@ pytest --cov=replay_cdxj_indexing_tools.zipnum tests/test_zipnum_to_flat_cdxj.py
 
 ## See Also
 
-- [cdxj-to-zipnum.md](cdxj-to-zipnum.md) - Reverse operation: flat to ZipNum
-- [merge-cdxj.md](merge-cdxj.md) - Merge multiple CDXJ files
+- [flat-cdxj-to-zipnum.md](flat-cdxj-to-zipnum.md) - Reverse operation: flat to ZipNum
+- [merge-flat-cdxj.md](merge-flat-cdxj.md) - Merge multiple CDXJ files
 - [filter-blocklist.md](filter-blocklist.md) - Filter content
 - [filter-excessive-urls.md](filter-excessive-urls.md) - Remove crawler traps
 - [pipeline-examples.md](../pipeline-examples.md) - Complete workflows

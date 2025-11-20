@@ -121,37 +121,37 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
     """
     Read .idx file and return list of (key, shard_name, offset, length, shard_num).
     Supports idx_path == '-' for stdin.
-    
+
     Returns entries grouped by shard in order they appear.
     """
     entries = []
-    
+
     if idx_path == "-":
         fh = sys.stdin
     else:
         fh = open(idx_path, "r", encoding="utf-8")
-    
+
     try:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            
+
             parts = line.split("\t")
             if len(parts) < 5:
                 continue
-            
+
             key = parts[0]
             shard_name = parts[1]
             offset = int(parts[2])
             length = int(parts[3])
             shard_num = int(parts[4])
-            
+
             entries.append((key, shard_name, offset, length, shard_num))
     finally:
         if idx_path != "-":
             fh.close()
-    
+
     return entries
 
 
@@ -160,21 +160,21 @@ def read_loc_file(loc_path: str) -> dict:
     Read .loc file and return dict mapping shard_name -> filepath.
     """
     loc_map = {}
-    
+
     with open(loc_path, "r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
                 continue
-            
+
             parts = line.split("\t")
             if len(parts) < 2:
                 continue
-            
+
             shard_name = parts[0]
             filepath = parts[1]
             loc_map[shard_name] = filepath
-    
+
     return loc_map
 
 
@@ -185,21 +185,21 @@ def find_loc_file(idx_path: str) -> Optional[str]:
     """
     if idx_path == "-":
         return None
-    
+
     # Try replacing .idx with .loc
     base = idx_path.replace(".idx", "")
     loc_path = f"{base}.loc"
-    
+
     if os.path.exists(loc_path):
         return loc_path
-    
+
     return None
 
 
 def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] = None) -> str:
     """
     Resolve the full path to a shard file.
-    
+
     1. If loc_map provided, use it to find filepath
     2. Otherwise, construct path as: base_dir/shard_name.cdx.gz
     """
@@ -210,7 +210,7 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
         if not os.path.isabs(loc_path):
             return os.path.join(base_dir, loc_path)
         return loc_path
-    
+
     # Default: shard_name.cdx.gz in base_dir
     return os.path.join(base_dir, f"{shard_name}.cdx.gz")
 
@@ -233,7 +233,7 @@ def decompress_shard_chunk_worker(shard_path: str, offset: int, length: int) -> 
     with open(shard_path, "rb") as fh:
         fh.seek(offset)
         compressed_data = fh.read(length)
-    
+
     return gzip.decompress(compressed_data)
 
 
@@ -252,18 +252,18 @@ def zipnum_to_flat_cdxj(
     """
     # Read idx file
     entries = read_idx_file(idx_path)
-    
+
     if not entries:
         print("Error: No entries found in idx file", file=sys.stderr)
         sys.exit(1)
-    
+
     # Determine base directory for shard files
     if base_dir is None:
         if idx_path == "-":
             base_dir = "."
         else:
             base_dir = os.path.dirname(os.path.abspath(idx_path))
-    
+
     # Try to find and read .loc file
     loc_map = None
     if loc_file:
@@ -274,29 +274,29 @@ def zipnum_to_flat_cdxj(
         auto_loc = find_loc_file(idx_path)
         if auto_loc:
             loc_map = read_loc_file(auto_loc)
-    
+
     # Group entries by shard (maintain order)
-    shard_groups = OrderedDict()
-    for key, shard_name, offset, length, shard_num in entries:
+    shard_groups: "OrderedDict[str, List[Tuple[int, int]]]" = OrderedDict()
+    for _, shard_name, offset, length, _ in entries:
         if shard_name not in shard_groups:
             shard_groups[shard_name] = []
         shard_groups[shard_name].append((offset, length))
-    
+
     # Process each shard sequentially to maintain sort order
     # Use stdout.buffer for binary writes (better performance)
     output = sys.stdout.buffer
-    
+
     for shard_name in shard_groups:
         shard_path = resolve_shard_path(shard_name, base_dir, loc_map)
-        
+
         if not os.path.exists(shard_path):
             print(f"Warning: Shard file not found: {shard_path}", file=sys.stderr)
             continue
-        
+
         # For each shard, we can decompress the entire file at once
         # since ZipNum shards are already split appropriately
         # Using parallel workers to speed up decompression
-        
+
         if workers > 1:
             # Parallel decompression: decompress entire shard using thread pool
             with ThreadPoolExecutor(max_workers=workers) as executor:
@@ -312,7 +312,7 @@ def zipnum_to_flat_cdxj(
                     if not chunk:
                         break
                     output.write(chunk)
-    
+
     # Flush output
     output.flush()
 
@@ -321,7 +321,7 @@ def parse_args(argv=None):
     p = ArgumentParser(
         description="Convert ZipNum format back to flat CDXJ. Outputs to stdout."
     )
-    
+
     p.add_argument(
         "-i",
         "--input",
@@ -349,7 +349,7 @@ def parse_args(argv=None):
             "More workers can improve performance on multi-core systems."
         ),
     )
-    
+
     return p.parse_args(argv)
 
 
@@ -359,7 +359,7 @@ def main(argv=None):
     Parses arguments and calls zipnum_to_flat_cdxj.
     """
     args = parse_args(argv)
-    
+
     zipnum_to_flat_cdxj(
         idx_path=args.input,
         base_dir=args.base_dir,

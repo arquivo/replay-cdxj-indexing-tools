@@ -54,13 +54,13 @@ merge_sorted_files(all_files, 'complete_index.cdxj')
 
 ```bash
 # Simple merge
-merge-cdxj output.cdxj file1.cdxj file2.cdxj
+merge-flat-cdxj output.cdxj file1.cdxj file2.cdxj
 
 # Merge with directories
-merge-cdxj merged.cdxj /path/to/dir1 /path/to/dir2 file3.cdxj
+merge-flat-cdxj merged.cdxj /path/to/dir1 /path/to/dir2 file3.cdxj
 
 # Pipe to compression
-merge-cdxj - *.cdxj | gzip > merged.cdxj.gz
+merge-flat-cdxj - *.cdxj | gzip > merged.cdxj.gz
 ```
 
 ### 4. Using Shell Scripts
@@ -104,5 +104,5 @@ pytest -v -s
 
 3. **Stream to compression** to save disk space:
    ```bash
-   merge-cdxj - *.cdxj | gzip -9 > final.cdxj.gz
+   merge-flat-cdxj - *.cdxj | gzip -9 > final.cdxj.gz
    ```

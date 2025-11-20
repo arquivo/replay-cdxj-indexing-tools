@@ -17,7 +17,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
        │
        ▼
 ┌─────────────────────┐
-│   Merge Indexes     │  (merge-cdxj)
+│   Merge Indexes     │  (merge-flat-cdxj)
 │   K-way merge       │
 └──────┬──────────────┘
        │
@@ -35,7 +35,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
        │
        ▼
 ┌─────────────────────┐
-│ ZipNum Conversion   │  (cdxj-to-zipnum)
+│ ZipNum Conversion   │  (flat-cdxj-to-zipnum)
 │ Compressed shards   │
 └──────┬──────────────┘
        │
@@ -67,7 +67,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 
 **Purpose:** Combine multiple sorted CDXJ files into one
 
-**Tool:** `merge-cdxj`
+**Tool:** `merge-flat-cdxj`
 
 **Algorithm:** K-way merge using priority queue (heapq)
 
@@ -119,7 +119,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 
 **Purpose:** Create compressed, sharded indexes for pywb
 
-**Tool:** `cdxj-to-zipnum`
+**Tool:** `flat-cdxj-to-zipnum`
 
 **Output Structure:**
 ```
@@ -206,10 +206,10 @@ Process only new/modified WARCs:
 
 Stream data through entire pipeline:
 ```bash
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
-    cdxj-to-zipnum -o indexes/ -i - --compress
+    flat-cdxj-to-zipnum -o indexes/ -i - --compress
 ```
 
 **Benefits:**
@@ -324,7 +324,7 @@ Extend `cdxj-index-collection`:
 custom-filter -i input.cdxj -o output.cdxj
 
 # Insert in pipeline
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     custom-filter -i - | \
     filter-blocklist -i - -b blocklist.txt
 ```

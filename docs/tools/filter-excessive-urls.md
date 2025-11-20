@@ -52,9 +52,9 @@ filter-excessive-urls remove -i input.cdxj -b excessive.txt -o output.cdxj
 cat input.cdxj | filter-excessive-urls remove -i - -b excessive.txt > output.cdxj
 
 # In complete pipeline
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     filter-excessive-urls remove -i - -b excessive.txt | \
-    cdxj-to-zipnum -o indexes -i -
+    flat-cdxj-to-zipnum -o indexes -i -
 ```
 
 ### 3. Auto Mode - Find and Filter in One Pass
@@ -246,10 +246,10 @@ Clean indexes before ZipNum conversion:
 
 ```bash
 # Complete cleanup pipeline
-merge-cdxj - /data/*.cdxj | \
+merge-flat-cdxj - /data/*.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls remove -i - -b excessive.txt | \
-    cdxj-to-zipnum -o indexes -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o indexes -i - -n 3000 --compress
 ```
 
 ## Threshold Selection
@@ -308,7 +308,7 @@ done
 
 2. **Pipeline mode avoids disk I/O:**
    ```bash
-   merge-cdxj - *.cdxj | filter-excessive-urls remove -i - -b excessive.txt | ...
+   merge-flat-cdxj - *.cdxj | filter-excessive-urls remove -i - -b excessive.txt | ...
    ```
 
 3. **Reuse excessive URL lists:**
@@ -415,5 +415,5 @@ filter-excessive-urls auto -i input.cdxj -n 1000 > output.cdxj
 ## See Also
 
 - [filter-blocklist.md](filter-blocklist.md) - Previous step: filter blocked content
-- [cdxj-to-zipnum.md](cdxj-to-zipnum.md) - Next step: convert to ZipNum
+- [flat-cdxj-to-zipnum.md](flat-cdxj-to-zipnum.md) - Next step: convert to ZipNum
 - [pipeline-examples.md](pipeline-examples.md) - Complete workflows

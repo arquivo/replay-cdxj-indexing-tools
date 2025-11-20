@@ -493,7 +493,7 @@ For multi-GB indexes, ZipNum is faster:
 
 ```bash
 # Convert to ZipNum first
-cdxj-to-zipnum -i large.cdxj -o indexes/large
+flat-cdxj-to-zipnum -i large.cdxj -o indexes/large
 
 # Then search
 cdxj-search --url http://example.com indexes/large.idx
@@ -763,7 +763,7 @@ pytest --cov=replay_cdxj_indexing_tools.search tests/test_cdxj_search.py
 
 ## See Also
 
-- [merge-cdxj.md](merge-cdxj.md) - Merge multiple CDXJ files
-- [cdxj-to-zipnum.md](cdxj-to-zipnum.md) - Convert to compressed format
+- [merge-flat-cdxj.md](merge-flat-cdxj.md) - Merge multiple CDXJ files
+- [flat-cdxj-to-zipnum.md](flat-cdxj-to-zipnum.md) - Convert to compressed format
 - [usage.md](../usage.md) - General tool usage
 - [pipeline-examples.md](../pipeline-examples.md) - Complete workflows

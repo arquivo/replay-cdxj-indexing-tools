@@ -1,4 +1,4 @@
-"""ZipNum module - Tools for converting CDXJ to ZipNum format."""
+"""ZipNum module - Tools for converting flat CDXJ to ZipNum format and vice versa."""
 
 from typing import List
 

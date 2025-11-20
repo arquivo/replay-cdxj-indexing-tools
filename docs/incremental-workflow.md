@@ -253,7 +253,7 @@ rm -rf /data/cdxj_incremental/COLLECTION-2024-11/indexes/
 ls -lh /tmp/cdxj-processing/COLLECTION-2024-11/indexes/
 
 # Manually run failed stage
-merge-cdxj test.cdxj /tmp/cdxj-processing/COLLECTION-2024-11/indexes/*.cdxj
+merge-flat-cdxj test.cdxj /tmp/cdxj-processing/COLLECTION-2024-11/indexes/*.cdxj
 ```
 
 ## Monitoring
@@ -304,4 +304,4 @@ du -sh /data/zipnum/COLLECTION-2024-11/
 - [pipeline-examples.md](pipeline-examples.md) - Complete pipeline examples
 - [filter-blocklist.md](filter-blocklist.md) - Blocklist filtering
 - [filter-excessive-urls.md](filter-excessive-urls.md) - Excessive URL filtering
-- [cdxj-to-zipnum.md](cdxj-to-zipnum.md) - ZipNum conversion
+- [flat-cdxj-to-zipnum.md](flat-cdxj-to-zipnum.md) - ZipNum conversion

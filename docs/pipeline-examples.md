@@ -35,10 +35,10 @@ echo ""
 
 # Complete pipeline using Unix pipes
 # merge → filter blocklist → filter excessive URLs → convert to ZipNum
-merge-cdxj - $CDXJ_FILES | \
+merge-flat-cdxj - $CDXJ_FILES | \
     filter-blocklist -i - -b "$BLOCKLIST" -v | \
     filter-excessive-urls auto -i - -n $EXCESSIVE_THRESHOLD -v | \
-    cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
 
 echo ""
 echo "Pipeline complete!"
@@ -53,10 +53,10 @@ echo "Shards: $(ls $OUTPUT_DIR/index.cdxj/*.gz 2>/dev/null | wc -l)"
 - Simple and readable
 
 **How it works:**
-1. `merge-cdxj - $CDXJ_FILES` - Merges all CDXJ files and outputs to stdout
+1. `merge-flat-cdxj - $CDXJ_FILES` - Merges all CDXJ files and outputs to stdout
 2. `filter-blocklist -i - -b blocklist.txt -v` - Reads from stdin, filters, outputs to stdout (with verbose stats)
 3. `filter-excessive-urls auto -i - -n 1000 -v` - Reads from stdin, auto-finds and removes excessive URLs, outputs to stdout
-4. `cdxj-to-zipnum -o dir -i - -n 3000` - Reads from stdin, converts to ZipNum format
+4. `flat-cdxj-to-zipnum -o dir -i - -n 3000` - Reads from stdin, converts to ZipNum format
 
 ### Real-World Arquivo.pt Example
 
@@ -85,13 +85,13 @@ echo "  Created $(ls $INDEXES_DIR/*.cdxj | wc -l) index files"
 
 # Step 2: Process through complete pipeline using pipes
 echo "Step 2: Processing pipeline (merge→filter→filter→zipnum)..."
-merge-cdxj - "$INDEXES_DIR"/*.cdxj | \
+merge-flat-cdxj - "$INDEXES_DIR"/*.cdxj | \
     tee >(wc -l | xargs echo "  After merge:") | \
     filter-blocklist -i - -b "$BLOCKLIST" | \
     tee >(wc -l | xargs echo "  After blocklist:") | \
     filter-excessive-urls auto -i - -n 1000 | \
     tee >(wc -l | xargs echo "  After excessive filter:") | \
-    cdxj-to-zipnum -o "$OUTPUT" -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o "$OUTPUT" -i - -n 3000 --compress
 
 # Cleanup
 echo "Step 3: Cleanup..."
@@ -119,13 +119,13 @@ echo "Processing $total_lines total lines..."
 echo ""
 
 # Pipeline with progress bar using pv
-merge-cdxj - $INPUT_FILES | \
+merge-flat-cdxj - $INPUT_FILES | \
     pv -l -s $total_lines -N "merge" | \
     filter-blocklist -i - -b "$BLOCKLIST" | \
     pv -l -N "blocklist" | \
     filter-excessive-urls auto -i - -n 1000 | \
     pv -l -N "excessive" | \
-    cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
 
 echo "Done!"
 ```
@@ -159,10 +159,10 @@ trap 'echo "ERROR: Pipeline failed at line $LINENO"; exit 1' ERR
 echo "Starting pipeline..."
 
 # Run pipeline
-if merge-cdxj - "$INPUT_DIR"/*.cdxj | \
+if merge-flat-cdxj - "$INPUT_DIR"/*.cdxj | \
    filter-blocklist -i - -b "$BLOCKLIST" | \
    filter-excessive-urls auto -i - -n 1000 | \
-   cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress; then
+   flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress; then
     echo "SUCCESS: Pipeline completed"
     exit 0
 else
@@ -182,13 +182,13 @@ TEMP_DIR="/data/temp"
 mkdir -p "$TEMP_DIR"
 
 # Pipeline that saves intermediate results
-merge-cdxj - /data/indexes/*.cdxj | \
+merge-flat-cdxj - /data/indexes/*.cdxj | \
     tee "$TEMP_DIR/01-merged.cdxj" | \
     filter-blocklist -i - -b blocklist.txt | \
     tee "$TEMP_DIR/02-after-blocklist.cdxj" | \
     filter-excessive-urls auto -i - -n 1000 | \
     tee "$TEMP_DIR/03-after-excessive.cdxj" | \
-    cdxj-to-zipnum -o /data/zipnum -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o /data/zipnum -i - -n 3000 --compress
 
 echo "Intermediate files saved in $TEMP_DIR/"
 ```
@@ -208,13 +208,13 @@ echo "Started: $(date)" | tee -a "$STATS_FILE"
 echo "" | tee -a "$STATS_FILE"
 
 # Pipeline with statistics collection
-merge-cdxj - /data/indexes/*.cdxj | \
+merge-flat-cdxj - /data/indexes/*.cdxj | \
     tee >(wc -l | xargs printf "Lines after merge: %d\n" | tee -a "$STATS_FILE") | \
     filter-blocklist -i - -b blocklist.txt -v 2>&1 | \
     tee >(grep "blocked" | tee -a "$STATS_FILE") | \
     filter-excessive-urls auto -i - -n 1000 -v 2>&1 | \
     tee >(grep "Removed" | tee -a "$STATS_FILE") | \
-    cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
 
 echo "" | tee -a "$STATS_FILE"
 echo "Finished: $(date)" | tee -a "$STATS_FILE"
@@ -248,10 +248,10 @@ Process a few CDXJ files:
 #!/bin/bash
 
 # Merge files
-merge-cdxj merged.cdxj file1.cdxj file2.cdxj file3.cdxj
+merge-flat-cdxj merged.cdxj file1.cdxj file2.cdxj file3.cdxj
 
 # Convert to ZipNum
-cdxj-to-zipnum -o indexes -i merged.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o indexes -i merged.cdxj -n 3000 --compress
 
 echo "Done! Indexes in indexes/"
 ```
@@ -261,7 +261,7 @@ echo "Done! Indexes in indexes/"
 Using stdin/stdout to avoid intermediate files:
 
 ```bash
-merge-cdxj - *.cdxj | cdxj-to-zipnum -o indexes -i - -n 3000 --compress
+merge-flat-cdxj - *.cdxj | flat-cdxj-to-zipnum -o indexes -i - -n 3000 --compress
 ```
 
 ## Production Pipeline
@@ -294,7 +294,7 @@ find "$WARCS_DIR" -name "*.warc.gz" | \
 # Step 2: Merge all indexes
 echo ""
 echo "Step 2: Merging indexes..."
-merge-cdxj "$TEMP_DIR/merged.cdxj" "$WARCS_DIR"/*.cdxj
+merge-flat-cdxj "$TEMP_DIR/merged.cdxj" "$WARCS_DIR"/*.cdxj
 
 echo "  Merged $(wc -l < $TEMP_DIR/merged.cdxj) lines"
 
@@ -330,7 +330,7 @@ echo "  Final: $(wc -l < $TEMP_DIR/clean2.cdxj) lines"
 # Step 6: Convert to ZipNum
 echo ""
 echo "Step 6: Converting to ZipNum..."
-cdxj-to-zipnum \
+flat-cdxj-to-zipnum \
     -o "$OUTPUT_DIR" \
     -i "$TEMP_DIR/clean2.cdxj" \
     -n 3000 \
@@ -367,7 +367,7 @@ echo "=== Streaming Pipeline ==="
 
 # Pre-generate excessive URLs list (can't do this in pipeline)
 echo "Finding excessive URLs..."
-merge-cdxj - "$WARCS_DIR"/*.cdxj | \
+merge-flat-cdxj - "$WARCS_DIR"/*.cdxj | \
     filter-blocklist -i - -b "$BLOCKLIST" | \
     filter-excessive-urls find -i - -n 1000 > "$EXCESSIVE_LIST"
 
@@ -375,10 +375,10 @@ echo "Found $(grep -v '^#' $EXCESSIVE_LIST | wc -l) excessive URLs"
 
 # Stream through entire pipeline
 echo "Processing pipeline..."
-merge-cdxj - "$WARCS_DIR"/*.cdxj | \
+merge-flat-cdxj - "$WARCS_DIR"/*.cdxj | \
     filter-blocklist -i - -b "$BLOCKLIST" | \
     filter-excessive-urls remove -i - -b "$EXCESSIVE_LIST" | \
-    cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
 
 echo "Done! Output in $OUTPUT_DIR"
 ```
@@ -434,7 +434,7 @@ find "$WARCS_DIR" -name "*.warc.gz" | \
 
 # Merge all indexes
 echo "Merging $(ls $INDEXES_DIR/*.cdxj | wc -l) indexes..."
-merge-cdxj "$OUTPUT" "$INDEXES_DIR"/*.cdxj
+merge-flat-cdxj "$OUTPUT" "$INDEXES_DIR"/*.cdxj
 
 echo "Done! Merged index: $OUTPUT"
 ```
@@ -509,10 +509,10 @@ for year in 2020 2021 2022 2023; do
         echo "Processing $year..."
         
         # Pipeline for this year
-        merge-cdxj - "$COLLECTIONS_DIR/$year"/*.cdxj | \
+        merge-flat-cdxj - "$COLLECTIONS_DIR/$year"/*.cdxj | \
             filter-blocklist -i - -b blocklist.txt | \
             filter-excessive-urls auto -i - -n 1000 | \
-            cdxj-to-zipnum -o "$OUTPUT_DIR/$year" -i - -n 3000 --compress
+            flat-cdxj-to-zipnum -o "$OUTPUT_DIR/$year" -i - -n 3000 --compress
         
         echo "Completed $year"
     } &
@@ -539,10 +539,10 @@ UPDATED_INDEX="/data/indexes/collection_updated.cdxj"
 ZIPNUM_DIR="/data/zipnum/collection"
 
 echo "Merging old index with new captures..."
-merge-cdxj "$UPDATED_INDEX" "$OLD_INDEX" "$NEW_CAPTURES"
+merge-flat-cdxj "$UPDATED_INDEX" "$OLD_INDEX" "$NEW_CAPTURES"
 
 echo "Converting to ZipNum..."
-cdxj-to-zipnum -o "$ZIPNUM_DIR" -i "$UPDATED_INDEX" -n 3000 --compress
+flat-cdxj-to-zipnum -o "$ZIPNUM_DIR" -i "$UPDATED_INDEX" -n 3000 --compress
 
 # Update symbolic link for pywb
 ln -sf "$ZIPNUM_DIR" /data/current_index
@@ -566,7 +566,7 @@ year_month="2024-11"
 echo "Processing $year_month..."
 filter-blocklist -i "$NEW_CAPTURES" -b blocklist.txt -o clean.cdxj
 filter-excessive-urls auto -i clean.cdxj -o final.cdxj -n 1000
-cdxj-to-zipnum -o "$ZIPNUM_BASE/$year_month" -i final.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o "$ZIPNUM_BASE/$year_month" -i final.cdxj -n 3000 --compress
 
 # Update pywb config to include all months
 cat > /data/pywb/config.yaml <<EOF
@@ -619,7 +619,7 @@ echo "  Ended with: $final lines"
 echo "  Removed: $total_removed lines ($pct%)"
 
 # Convert
-cdxj-to-zipnum -o /data/zipnum -i "$TEMP_DIR/final.cdxj" -n 3000 --compress
+flat-cdxj-to-zipnum -o /data/zipnum -i "$TEMP_DIR/final.cdxj" -n 3000 --compress
 echo "  Shards: $(ls /data/zipnum/index.cdxj/ | wc -l)"
 ```
 
@@ -658,7 +658,7 @@ validate_cdxj() {
 }
 
 # Pipeline with validation
-merge-cdxj merged.cdxj /data/*.cdxj
+merge-flat-cdxj merged.cdxj /data/*.cdxj
 validate_cdxj merged.cdxj "merged"
 
 filter-blocklist -i merged.cdxj -b blocklist.txt -o clean1.cdxj
@@ -667,7 +667,7 @@ validate_cdxj clean1.cdxj "after blocklist"
 filter-excessive-urls auto -i clean1.cdxj -o clean2.cdxj -n 1000
 validate_cdxj clean2.cdxj "after excessive filtering"
 
-cdxj-to-zipnum -o indexes -i clean2.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o indexes -i clean2.cdxj -n 3000 --compress
 echo "ZipNum conversion complete"
 ```
 
@@ -692,7 +692,7 @@ export BUFFER_SIZE=$((10 * 1024 * 1024))  # 10MB
 
 # Step 1: Merge with progress
 echo "Merging..."
-pv "$COLLECTION"/*.cdxj | merge-cdxj "$TEMP/merged.cdxj" -
+pv "$COLLECTION"/*.cdxj | merge-flat-cdxj "$TEMP/merged.cdxj" -
 
 # Step 2: Filter (using two-pass for memory efficiency)
 echo "Finding excessive URLs..."
@@ -705,7 +705,7 @@ filter-blocklist -i "$TEMP/merged.cdxj" -b blocklist.txt | \
 
 # Step 3: Convert with larger shards
 echo "Converting to ZipNum (large shards)..."
-cdxj-to-zipnum -o "$OUTPUT" -i "$TEMP/clean.cdxj" -n 10000 --compress
+flat-cdxj-to-zipnum -o "$OUTPUT" -i "$TEMP/clean.cdxj" -n 10000 --compress
 
 echo "Processing complete!"
 echo "  Input: $(wc -l < $TEMP/merged.cdxj) lines"
@@ -746,7 +746,7 @@ for warc in "${worker_warcs[@]}"; do
 done
 
 # Merge this worker's indexes
-merge-cdxj "$OUTPUT_DIR/part_$WORKER_ID.cdxj" "$TEMP_DIR"/*.cdxj
+merge-flat-cdxj "$OUTPUT_DIR/part_$WORKER_ID.cdxj" "$TEMP_DIR"/*.cdxj
 
 echo "Worker $WORKER_ID complete: $OUTPUT_DIR/part_$WORKER_ID.cdxj"
 ```
@@ -758,12 +758,12 @@ Then on main machine:
 # Collect from all workers and final processing
 
 echo "Collecting from all workers..."
-merge-cdxj /data/final/merged.cdxj /data/indexes/worker_*/*.cdxj
+merge-flat-cdxj /data/final/merged.cdxj /data/indexes/worker_*/*.cdxj
 
 echo "Final processing..."
 filter-blocklist -i /data/final/merged.cdxj -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
-    cdxj-to-zipnum -o /data/zipnum/final -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o /data/zipnum/final -i - -n 3000 --compress
 
 echo "All workers complete!"
 ```
@@ -792,10 +792,10 @@ OUTPUT_DIR="/data/zipnum"
 MONITOR_PID=$!
 
 # Run pipeline
-merge-cdxj - /data/*.cdxj | \
+merge-flat-cdxj - /data/*.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
-    cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n 3000 --compress
 
 # Stop monitoring
 kill $MONITOR_PID
@@ -805,7 +805,7 @@ echo "Pipeline complete!"
 
 ## See Also
 
-- [merge-cdxj.md](merge-cdxj.md) - Merge tool documentation
+- [merge-flat-cdxj.md](merge-flat-cdxj.md) - Merge tool documentation
 - [filter-blocklist.md](filter-blocklist.md) - Blocklist filter documentation  
 - [filter-excessive-urls.md](filter-excessive-urls.md) - Excessive URL filter documentation
-- [cdxj-to-zipnum.md](cdxj-to-zipnum.md) - ZipNum converter documentation
+- [flat-cdxj-to-zipnum.md](flat-cdxj-to-zipnum.md) - ZipNum converter documentation

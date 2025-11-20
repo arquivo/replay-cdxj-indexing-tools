@@ -214,7 +214,7 @@ import os
 import gzip
 
 # Import the module under test
-from replay_cdxj_indexing_tools.zipnum.cdxj_to_zipnum import (
+from replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum import (
     extract_prejson,
     open_input_path,
     stream_chunks_from_input,

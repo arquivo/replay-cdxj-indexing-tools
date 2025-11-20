@@ -46,10 +46,11 @@ cdxj-index-collection COLLECTION-2024-11
 
 ### Tool Reference
 
-- **[merge-cdxj](docs/tools/merge-cdxj.md)** - Merge sorted CDXJ files
+- **[merge-flat-cdxj](docs/tools/merge-flat-cdxj.md)** - Merge sorted flat CDXJ files
 - **[filter-blocklist](docs/tools/filter-blocklist.md)** - Content filtering
 - **[filter-excessive-urls](docs/tools/filter-excessive-urls.md)** - Crawler trap removal
-- **[cdxj-to-zipnum](docs/tools/cdxj-to-zipnum.md)** - ZipNum conversion
+- **[flat-cdxj-to-zipnum](docs/tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
+- **[zipnum-to-flat-cdxj](docs/tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
 
 ## Usage Examples
 
@@ -73,7 +74,7 @@ cdxj-index-collection COLLECTION-2024-11 \
 
 ```bash
 # Merge CDXJ files
-merge-cdxj merged.cdxj file1.cdxj file2.cdxj file3.cdxj
+merge-flat-cdxj merged.cdxj file1.cdxj file2.cdxj file3.cdxj
 
 # Filter blocklist
 filter-blocklist -i input.cdxj -b blocklist.txt -o filtered.cdxj
@@ -82,17 +83,17 @@ filter-blocklist -i input.cdxj -b blocklist.txt -o filtered.cdxj
 filter-excessive-urls auto -i input.cdxj -o clean.cdxj -n 1000
 
 # Convert to ZipNum
-cdxj-to-zipnum -o indexes/ -i clean.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o indexes/ -i clean.cdxj -n 3000 --compress
 ```
 
 ### Unix Pipe Workflow
 
 ```bash
 # Process everything in one pipeline
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
-    cdxj-to-zipnum -o indexes/ -i - --compress
+    flat-cdxj-to-zipnum -o indexes/ -i - --compress
 ```
 
 ### Docker Usage
@@ -100,18 +101,18 @@ merge-cdxj - *.cdxj | \
 ```bash
 # Process CDXJ files with Docker
 docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
-    merge-cdxj /data/output/merged.cdxj /data/input/*.cdxj
+    merge-flat-cdxj /data/output/merged.cdxj /data/input/*.cdxj
 
 # Full pipeline with Docker
 docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
-    sh -c "merge-cdxj - /data/input/*.cdxj | \
+    sh -c "merge-flat-cdxj - /data/input/*.cdxj | \
            filter-blocklist -i - -b /data/blocklist.txt | \
            filter-excessive-urls auto -i - -n 1000 | \
-           cdxj-to-zipnum -o /data/output/ -i - --compress"
+           flat-cdxj-to-zipnum -o /data/output/ -i - --compress"
 
 # Convert to ZipNum
 docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
-    cdxj-to-zipnum -i /data/input/file.cdxj -o /data/output/ -s 100 -c 3000
+    flat-cdxj-to-zipnum -i /data/input/file.cdxj -o /data/output/ -s 100 -c 3000
 
 # Collection processing
 docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools \
@@ -159,7 +160,7 @@ docker pull arquivo/replay-cdxj-indexing-tools:latest
 docker build -t arquivo/replay-cdxj-indexing-tools .
 
 # Run with volume mount
-docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools merge-cdxj --help
+docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools merge-flat-cdxj --help
 ```
 
 See [Installation Guide](docs/installation.md) for other platforms.

@@ -52,10 +52,10 @@ install: venv ## Install package in development mode
 ifneq ($(SKIP_VENV),1)
 	@echo ""
 	@echo "Available commands:"
-	@echo "  $(VENV_BIN)/merge-cdxj"
+	@echo "  $(VENV_BIN)/merge-flat-cdxj"
 	@echo "  $(VENV_BIN)/filter-blocklist"
 	@echo "  $(VENV_BIN)/filter-excessive-urls"
-	@echo "  $(VENV_BIN)/cdxj-to-zipnum"
+	@echo "  $(VENV_BIN)/flat-cdxj-to-zipnum"
 	@echo "  $(VENV_BIN)/cdxj-index-collection"
 endif
 .PHONY: install
