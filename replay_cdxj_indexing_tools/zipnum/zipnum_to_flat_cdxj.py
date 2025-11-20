@@ -108,13 +108,13 @@ Author: Ivo Branco / GitHub Copilot
 Date: November 2025
 """
 
-from argparse import ArgumentParser
-import os
 import gzip
+import os
 import sys
-from typing import List, Optional, Tuple
-from concurrent.futures import ThreadPoolExecutor
+from argparse import ArgumentParser
 from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor
+from typing import List, Optional, Tuple
 
 
 def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
@@ -318,9 +318,7 @@ def zipnum_to_flat_cdxj(
 
 
 def parse_args(argv=None):
-    p = ArgumentParser(
-        description="Convert ZipNum format back to flat CDXJ. Outputs to stdout."
-    )
+    p = ArgumentParser(description="Convert ZipNum format back to flat CDXJ. Outputs to stdout.")
 
     p.add_argument(
         "-i",

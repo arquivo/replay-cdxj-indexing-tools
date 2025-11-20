@@ -6,18 +6,18 @@ test_zipnum_to_flat_cdxj.py - Test suite for zipnum_to_flat_cdxj
 Tests ZipNum to flat CDXJ conversion functionality.
 """
 
-import os
 import gzip
+import os
 
 import pytest
 
 from replay_cdxj_indexing_tools.zipnum.zipnum_to_flat_cdxj import (
+    find_loc_file,
+    main,
     read_idx_file,
     read_loc_file,
-    find_loc_file,
     resolve_shard_path,
     zipnum_to_flat_cdxj,
-    main,
 )
 
 
@@ -97,10 +97,7 @@ class TestReadLocFile:
     def test_read_loc_basic(self, tmp_path):
         """Test reading a basic loc file."""
         loc_file = tmp_path / "test.loc"
-        loc_file.write_text(
-            "test-01\ttest-01.cdx.gz\n"
-            "test-02\ttest-02.cdx.gz\n"
-        )
+        loc_file.write_text("test-01\ttest-01.cdx.gz\n" "test-02\ttest-02.cdx.gz\n")
 
         loc_map = read_loc_file(str(loc_file))
         assert len(loc_map) == 2
@@ -111,8 +108,7 @@ class TestReadLocFile:
         """Test reading loc file with full paths."""
         loc_file = tmp_path / "test.loc"
         loc_file.write_text(
-            "test-01\t/data/shards/test-01.cdx.gz\n"
-            "test-02\t/data/shards/test-02.cdx.gz\n"
+            "test-01\t/data/shards/test-01.cdx.gz\n" "test-02\t/data/shards/test-02.cdx.gz\n"
         )
 
         loc_map = read_loc_file(str(loc_file))
@@ -123,9 +119,7 @@ class TestReadLocFile:
         """Test reading loc file with comments."""
         loc_file = tmp_path / "test.loc"
         loc_file.write_text(
-            "# Comment line\n"
-            "test-01\ttest-01.cdx.gz\n"
-            "test-02\ttest-02.cdx.gz\n"
+            "# Comment line\n" "test-01\ttest-01.cdx.gz\n" "test-02\ttest-02.cdx.gz\n"
         )
 
         loc_map = read_loc_file(str(loc_file))
@@ -205,11 +199,10 @@ class TestZipnumToFlatCdxj:
 
         # Create CDXJ data for each shard
         cdxj_lines = [
-            b'com,example)/ 20230101000000 '
-            b'{"url":"http://example.com/","status":"200"}\n',
-            b'com,example)/page1 20230101010000 '
+            b"com,example)/ 20230101000000 " b'{"url":"http://example.com/","status":"200"}\n',
+            b"com,example)/page1 20230101010000 "
             b'{"url":"http://example.com/page1","status":"200"}\n',
-            b'com,example)/page2 20230101020000 '
+            b"com,example)/page2 20230101020000 "
             b'{"url":"http://example.com/page2","status":"200"}\n',
         ]
 

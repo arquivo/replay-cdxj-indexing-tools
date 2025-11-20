@@ -3,7 +3,7 @@ Binary search implementation for flat CDXJ files.
 """
 
 import sys
-from typing import List, BinaryIO
+from typing import BinaryIO, List
 
 
 def binary_search_file(

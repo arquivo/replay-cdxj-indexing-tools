@@ -55,10 +55,10 @@ Author: Ivo Branco / GitHub Copilot
 Date: November 2025
 """
 
-import sys
 import argparse
-from typing import Dict, Set, Tuple
+import sys
 from collections import defaultdict
+from typing import Dict, Set, Tuple
 
 
 def extract_surt_key(line: str) -> str:

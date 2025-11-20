@@ -6,8 +6,8 @@ This provides a Python entry point for the bash reference implementation script.
 """
 
 import os
-import sys
 import subprocess
+import sys
 
 
 def main():

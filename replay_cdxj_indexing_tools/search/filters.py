@@ -2,9 +2,9 @@
 Filter utilities for CDXJ search results.
 """
 
-import re
 import json
-from typing import Dict, Any, List, Optional
+import re
+from typing import Any, Dict, List, Optional
 
 
 def normalize_timestamp(timestamp: str) -> str:

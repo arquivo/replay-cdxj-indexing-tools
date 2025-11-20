@@ -27,9 +27,9 @@ TEST COVERAGE SUMMARY
 5. TestCDXJSearch - End-to-end integration tests
 """
 
+import gzip
 import os
 import sys
-import gzip
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,23 +37,19 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
+from replay_cdxj_indexing_tools.search.binary_search import search_cdxj_file  # noqa: E402
+from replay_cdxj_indexing_tools.search.cdxj_search import apply_match_type  # noqa: E402
 from replay_cdxj_indexing_tools.search.file_discovery import (  # noqa: E402
-    discover_files,
     detect_file_type,
+    discover_files,
     find_zipnum_data_file,
     find_zipnum_index_file,
 )
 from replay_cdxj_indexing_tools.search.filters import (  # noqa: E402
-    normalize_timestamp,
     CDXJFilter,
-    sort_lines,
     deduplicate_lines,
-)
-from replay_cdxj_indexing_tools.search.binary_search import (  # noqa: E402
-    search_cdxj_file,
-)
-from replay_cdxj_indexing_tools.search.cdxj_search import (  # noqa: E402
-    apply_match_type,
+    normalize_timestamp,
+    sort_lines,
 )
 
 

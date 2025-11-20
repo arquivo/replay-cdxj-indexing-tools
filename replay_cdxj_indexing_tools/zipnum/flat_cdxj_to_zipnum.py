@@ -123,13 +123,13 @@ in pywb configuration.
 Author: Ivo Branco / GitHub Copilot
 """
 
-from argparse import ArgumentParser
-import os
 import gzip
+import os
 import sys
-from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
-from concurrent.futures import ThreadPoolExecutor
+from argparse import ArgumentParser
 from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 
 
 def open_input_path(path: str) -> Union[BinaryIO, gzip.GzipFile]:
@@ -399,8 +399,7 @@ def parse_args(argv=None):
         "--single-shard",
         action="store_true",
         help=(
-            "Create a single shard file regardless of size "
-            "(useful for small inputs or testing)"
+            "Create a single shard file regardless of size " "(useful for small inputs or testing)"
         ),
     )
     p.add_argument(

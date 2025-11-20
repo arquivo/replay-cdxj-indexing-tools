@@ -45,8 +45,8 @@ Performance:
 Author: Ivo Branco / Copilot
 """
 
-import heapq
 import argparse
+import heapq
 import os
 import sys
 
@@ -149,8 +149,7 @@ def main():
     # Set up command-line argument parsing
     parser = argparse.ArgumentParser(
         description=(
-            "Merge N sorted flat CDXJ files or directories "
-            "into one (optimized for large files)."
+            "Merge N sorted flat CDXJ files or directories " "into one (optimized for large files)."
         )
     )
     parser.add_argument("output", help="Output file name (use '-' for stdout)")
