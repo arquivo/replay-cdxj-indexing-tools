@@ -2,8 +2,8 @@
 File discovery utilities for finding CDXJ and ZipNum files.
 """
 
-import os
 import glob
+import os
 import sys
 from typing import List
 

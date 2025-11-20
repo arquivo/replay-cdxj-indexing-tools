@@ -2,20 +2,20 @@
 Main entry point for CDXJ/ZipNum search tool.
 """
 
-import sys
 import argparse
+import sys
 from typing import List
 
 import surt
 
+from replay_cdxj_indexing_tools.search.binary_search import search_cdxj_file
 from replay_cdxj_indexing_tools.search.file_discovery import (
-    discover_files,
     detect_file_type,
+    discover_files,
     find_zipnum_data_file,
 )
-from replay_cdxj_indexing_tools.search.binary_search import search_cdxj_file
+from replay_cdxj_indexing_tools.search.filters import CDXJFilter, deduplicate_lines, sort_lines
 from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
-from replay_cdxj_indexing_tools.search.filters import CDXJFilter, sort_lines, deduplicate_lines
 
 
 def apply_match_type(search_key: str, match_type: str) -> tuple:
@@ -102,9 +102,7 @@ def search_file(
             # For .cdxj.gz files, we need to find the index first
             # This is less efficient, but we'll support it
             # pylint: disable=import-outside-toplevel
-            from replay_cdxj_indexing_tools.search.file_discovery import (
-                find_zipnum_index_file,
-            )
+            from replay_cdxj_indexing_tools.search.file_discovery import find_zipnum_index_file
 
             idx_file = find_zipnum_index_file(filepath)
             return search_zipnum_file(idx_file, filepath, modified_key, use_prefix, verbose)
@@ -171,7 +169,7 @@ Examples:
         choices=["exact", "prefix", "host", "domain"],
         default="exact",
         help="Match type: exact (default), prefix (path prefix), "
-             "host (all paths for host), domain (host + subdomains)",
+        "host (all paths for host), domain (host + subdomains)",
     )
 
     # Filtering options

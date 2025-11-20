@@ -208,17 +208,17 @@ NOTES
 - Compression and decompression are tested to ensure data integrity
 """
 
-import unittest
-import tempfile
-import os
 import gzip
+import os
+import tempfile
+import unittest
 
 # Import the module under test
 from replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum import (
+    cdxj_to_zipnum,
     extract_prejson,
     open_input_path,
     stream_chunks_from_input,
-    cdxj_to_zipnum,
 )
 
 
@@ -604,7 +604,7 @@ class TestCdxjToZipnum(unittest.TestCase):
                 )
             )
             line = (
-                f'org,example)/{i:06d} 20200101{i:06d} '
+                f"org,example)/{i:06d} 20200101{i:06d} "
                 f'{{"status": "200", "data": "{random_data}"}}\n'
             )
             lines.append(line.encode())

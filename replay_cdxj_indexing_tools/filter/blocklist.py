@@ -66,10 +66,10 @@ Author: Ivo Branco / GitHub Copilot
 Date: November 2025
 """
 
-import sys
-import re
 import argparse
-from typing import List, Pattern, Tuple, Set, Union
+import re
+import sys
+from typing import List, Pattern, Set, Tuple, Union
 
 
 class BlocklistMatcher:

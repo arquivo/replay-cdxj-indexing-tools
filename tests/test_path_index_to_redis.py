@@ -77,11 +77,11 @@ Author: GitHub Copilot
 Date: November 2025
 """
 
-import unittest
-import tempfile
 import os
-from unittest.mock import patch, MagicMock
+import tempfile
+import unittest
 from io import StringIO
+from unittest.mock import MagicMock, patch
 
 # Import the module under test
 from replay_cdxj_indexing_tools.redis.path_index_to_redis import (
@@ -343,7 +343,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         mock_redis_module = MagicMock()
         mock_redis_module.Redis.return_value = mock_redis
 
-        with patch.dict('sys.modules', {'redis': mock_redis_module}):
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
 
             # Submit to Redis
             submitted, errors = submit_index_to_redis(
@@ -393,7 +393,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         mock_redis_module = MagicMock()
         mock_redis_module.Redis.return_value = mock_redis
 
-        with patch.dict('sys.modules', {'redis': mock_redis_module}):
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
             # Submit to Redis
             submitted, errors = submit_index_to_redis(
                 input_paths=files,
@@ -433,7 +433,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         mock_redis_module = MagicMock()
         mock_redis_module.Redis.return_value = mock_redis
 
-        with patch.dict('sys.modules', {'redis': mock_redis_module}):
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
             # Submit with small batch size
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],
@@ -472,7 +472,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         mock_redis_module = MagicMock()
         mock_redis_module.Redis.return_value = mock_redis
 
-        with patch.dict('sys.modules', {'redis': mock_redis_module}):
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
             # Submit with clear=True
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],
@@ -542,7 +542,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         mock_redis_module = MagicMock()
         mock_redis_module.Redis.return_value = mock_redis
 
-        with patch.dict('sys.modules', {'redis': mock_redis_module}):
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
             # Submit with key prefix
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],

@@ -24,15 +24,12 @@ Author: Ivo Branco / GitHub Copilot
 Date: November 2025
 """
 
-import unittest
-import tempfile
 import os
 import re
+import tempfile
+import unittest
 
-from replay_cdxj_indexing_tools.filter.blocklist import (
-    load_blocklist,
-    filter_cdxj_by_blocklist,
-)
+from replay_cdxj_indexing_tools.filter.blocklist import filter_cdxj_by_blocklist, load_blocklist
 
 
 class TestLoadBlocklist(unittest.TestCase):
@@ -453,36 +450,36 @@ class TestRealisticScenarios(unittest.TestCase):
         cdxj_lines = [
             # Good content
             (
-                'pt,governo,www)/page 20230615120000 '
+                "pt,governo,www)/page 20230615120000 "
                 '{"url": "...", "mime": "text/html", "status": "200"}\n'
             ),
             (
-                'pt,sapo,www)/news 20230615120000 '
+                "pt,sapo,www)/news 20230615120000 "
                 '{"url": "...", "mime": "text/html", "status": "200"}\n'
             ),
             # Spam domain
             (
-                'pt,spam,www)/page 20230615120000 '
+                "pt,spam,www)/page 20230615120000 "
                 '{"url": "...", "mime": "text/html", "status": "200"}\n'
             ),
             # Good domain but blocked path (ads)
             (
-                'pt,publico,www)/ads/banner 20230615120000 '
+                "pt,publico,www)/ads/banner 20230615120000 "
                 '{"url": "...", "mime": "image/jpeg", "status": "200"}\n'
             ),
             # Good domain but blocked MIME (Flash)
             (
-                'pt,rtp,www)/video 20230615120000 '
+                "pt,rtp,www)/video 20230615120000 "
                 '{"url": "...", "mime": "application/x-shockwave-flash", "status": "200"}\n'
             ),
             # Good domain but 404
             (
-                'pt,cm-lisboa,www)/missing 20230615120000 '
+                "pt,cm-lisboa,www)/missing 20230615120000 "
                 '{"url": "...", "mime": "text/html", "status": "404"}\n'
             ),
             # More good content
             (
-                'pt,dn,www)/article 20230615120000 '
+                "pt,dn,www)/article 20230615120000 "
                 '{"url": "...", "mime": "text/html", "status": "200"}\n'
             ),
         ]

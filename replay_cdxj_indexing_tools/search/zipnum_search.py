@@ -2,8 +2,8 @@
 Binary search implementation for ZipNum format files.
 """
 
-import sys
 import gzip
+import sys
 from typing import List, Tuple
 
 

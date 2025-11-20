@@ -17,6 +17,8 @@ ifeq ($(SKIP_VENV),1)
     PYLINT = pylint
     MYPY = mypy
     BLACK = black
+    ISORT = isort
+    AUTOFLAKE = autoflake
 else
     VENV_BIN = $(VENV_DIR)/bin
     PIP = $(VENV_BIN)/pip
@@ -25,6 +27,8 @@ else
     PYLINT = $(VENV_BIN)/pylint
     MYPY = $(VENV_BIN)/mypy
     BLACK = $(VENV_BIN)/black
+    ISORT = $(VENV_BIN)/isort
+    AUTOFLAKE = $(VENV_BIN)/autoflake
 endif
 
 help: ## Show this help message
@@ -91,8 +95,14 @@ test-coverage: ## Run tests with HTML coverage report
 	@echo "Coverage report generated in htmlcov/index.html"
 .PHONY: test-coverage
 
-lint: ## Run code quality checks (flake8, pylint, mypy)
+lint: ## Run code quality checks (isort, autoflake, flake8, pylint, mypy, black)
 	@echo "Running code quality checks..."
+	@echo "→ isort (check only)..."
+	$(ISORT) replay_cdxj_indexing_tools/ tests/ --profile black --line-length=100 --check-only --diff
+	@echo "→ autoflake (check only)..."
+	$(AUTOFLAKE) --check --remove-all-unused-imports --remove-unused-variables --recursive replay_cdxj_indexing_tools/ tests/
+	@echo "→ black (check only)..."
+	$(BLACK) replay_cdxj_indexing_tools/ tests/ --line-length=100 --check --diff
 	@echo "→ flake8..."
 	$(FLAKE8) replay_cdxj_indexing_tools/ tests/
 	@echo "→ pylint..."
@@ -107,6 +117,17 @@ format: ## Format code with black
 	$(BLACK) replay_cdxj_indexing_tools/ tests/ --line-length=100
 	@echo "✓ Code formatted"
 .PHONY: format
+
+lint-fix: ## Automatically fix linting issues (format, sort imports, remove unused imports)
+	@echo "Automatically fixing linting issues..."
+	@echo "→ Removing unused imports with autoflake..."
+	$(AUTOFLAKE) --in-place --remove-all-unused-imports --remove-unused-variables --recursive replay_cdxj_indexing_tools/ tests/
+	@echo "→ Sorting imports with isort..."
+	$(ISORT) replay_cdxj_indexing_tools/ tests/ --profile black --line-length=100
+	@echo "→ Formatting code with black..."
+	$(BLACK) replay_cdxj_indexing_tools/ tests/ --line-length=100
+	@echo "✓ Linting issues fixed"
+.PHONY: lint-fix
 
 benchmark: ## Run performance benchmarks
 	@echo "Running performance benchmarks..."

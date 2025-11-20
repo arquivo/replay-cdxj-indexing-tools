@@ -26,14 +26,14 @@ Author: Ivo Branco / GitHub Copilot
 Date: November 2025
 """
 
-import unittest
-import tempfile
 import os
+import tempfile
+import unittest
 
 from replay_cdxj_indexing_tools.filter.excessive_urls import (
     extract_surt_key,
-    find_excessive_urls,
     filter_excessive_urls,
+    find_excessive_urls,
     process_pipeline,
 )
 

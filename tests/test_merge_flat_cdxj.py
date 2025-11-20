@@ -207,15 +207,15 @@ PERFORMANCE NOTES
     - test_merge_files_with_long_lines tests with 10KB lines
 """
 
-import unittest
-import tempfile
 import os
 import sys
+import tempfile
+import unittest
 from io import StringIO
 from pathlib import Path
 
 # Import the module under test
-from replay_cdxj_indexing_tools.merge.merge_flat_cdxj import merge_sorted_files, get_all_files
+from replay_cdxj_indexing_tools.merge.merge_flat_cdxj import get_all_files, merge_sorted_files
 
 
 class TestGetAllFiles(unittest.TestCase):

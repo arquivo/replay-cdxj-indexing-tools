@@ -189,11 +189,11 @@ Author: Ivo Branco / GitHub Copilot
 Date: November 2025
 """
 
-import sys
 import argparse
 import gzip
-from typing import List, Optional, Tuple, Dict, Iterator
+import sys
 import time
+from typing import Dict, Iterator, List, Optional, Tuple
 
 
 def parse_index_line(line: str) -> Optional[Dict[str, str]]:
@@ -363,9 +363,8 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             import redis  # pylint: disable=import-outside-toplevel
         except ImportError:
             print(
-                "Error: redis package not installed. "
-                "Install with: pip install redis",
-                file=sys.stderr
+                "Error: redis package not installed. Install with: pip install redis",
+                file=sys.stderr,
             )
             sys.exit(1)
 
@@ -379,9 +378,8 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 print(f"# Connecting to Redis Cluster: {redis_host}:{redis_port}", file=sys.stderr)
             else:
                 print(
-                    f"# Connecting to Redis: {redis_host}:{redis_port}/"
-                    f"{redis_db}",
-                    file=sys.stderr
+                    f"# Connecting to Redis: {redis_host}:{redis_port}/" f"{redis_db}",
+                    file=sys.stderr,
                 )
 
         try:
@@ -613,9 +611,7 @@ Redis connection examples:
 
     # Redis connection arguments
     redis_conn = parser.add_argument_group("Redis connection")
-    redis_conn.add_argument(
-        "--host", default="localhost", help="Redis host (default: localhost)"
-    )
+    redis_conn.add_argument("--host", default="localhost", help="Redis host (default: localhost)")
     redis_conn.add_argument("--port", type=int, default=6379, help="Redis port (default: 6379)")
     redis_conn.add_argument("--db", type=int, default=0, help="Redis database number (default: 0)")
     redis_conn.add_argument("--password", help="Redis password (optional)")
