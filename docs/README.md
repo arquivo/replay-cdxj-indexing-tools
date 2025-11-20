@@ -29,6 +29,7 @@ Individual tool documentation:
 - **[filter-blocklist](tools/filter-blocklist.md)** - Filter by blocklist patterns
 - **[filter-excessive-urls](tools/filter-excessive-urls.md)** - Remove crawler traps
 - **[cdxj-to-zipnum](tools/cdxj-to-zipnum.md)** - Convert to ZipNum format
+- **[zipnum-to-flat-cdxj](tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
 - **[cdxj-search](tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 
 ## Documentation by Use Case
@@ -115,6 +116,9 @@ filter-excessive-urls auto -i input.cdxj -o output.cdxj -n 1000
 # Convert to ZipNum
 cdxj-to-zipnum -o indexes/ -i input.cdxj -n 3000 --compress
 
+# Convert ZipNum back to flat CDXJ
+zipnum-to-flat-cdxj -i indexes/index.idx > output.cdxj
+
 # Search indexes
 cdxj-search --url http://example.com/page index.cdxj
 ```
@@ -136,6 +140,7 @@ merge-cdxj - *.cdxj | \
 | `filter-blocklist` | Remove blocked content | [docs](tools/filter-blocklist.md) |
 | `filter-excessive-urls` | Remove crawler traps | [docs](tools/filter-excessive-urls.md) |
 | `cdxj-to-zipnum` | Convert to ZipNum format | [docs](tools/cdxj-to-zipnum.md) |
+| `zipnum-to-flat-cdxj` | Convert ZipNum back to flat CDXJ | [docs](tools/zipnum-to-flat-cdxj.md) |
 | `cdxj-search` | Binary search indexes | [docs](tools/cdxj-search.md) |
 | `cdxj-index-collection` | Complete pipeline script | [docs](reference-implementation.md) |
 
