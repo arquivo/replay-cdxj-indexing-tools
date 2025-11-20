@@ -348,7 +348,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
             # Submit to Redis
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],
-                collection_key="test-collection",
+                redis_key="pathindex:test-collection",
                 redis_host="localhost",
                 redis_port=6379,
                 batch_size=100,
@@ -397,7 +397,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
             # Submit to Redis
             submitted, errors = submit_index_to_redis(
                 input_paths=files,
-                collection_key="test-collection",
+                redis_key="pathindex:test-collection",
                 redis_host="localhost",
                 redis_port=6379,
                 batch_size=100,
@@ -437,7 +437,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
             # Submit with small batch size
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],
-                collection_key="test-collection",
+                redis_key="pathindex:test-collection",
                 redis_host="localhost",
                 redis_port=6379,
                 batch_size=2,
@@ -476,7 +476,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
             # Submit with clear=True
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],
-                collection_key="test-collection",
+                redis_key="pathindex:test-collection",
                 redis_host="localhost",
                 redis_port=6379,
                 batch_size=100,
@@ -490,7 +490,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
 
             # Verify the key name
             delete_call_args = mock_redis.delete.call_args[0]
-            self.assertTrue("pathindex:test-collection" in delete_call_args[0])
+            self.assertEqual("pathindex:test-collection", delete_call_args[0])
 
     def test_dry_run(self):
         """
@@ -510,7 +510,7 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         # Submit in dry-run mode (no mocking needed - doesn't connect to Redis)
         submitted, errors = submit_index_to_redis(
             input_paths=[test_file],
-            collection_key="test-collection",
+            redis_key="pathindex:test-collection",
             redis_host="localhost",
             redis_port=6379,
             batch_size=100,
@@ -522,11 +522,11 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         self.assertEqual(submitted, 2)
         self.assertEqual(errors, 0)
 
-    def test_key_prefix(self):
+    def test_custom_redis_key(self):
         """
-        Test that key prefix is correctly applied.
+        Test that custom redis_key is used correctly.
 
-        With prefix="archive:", key should be "archive:pathindex:collection"
+        With redis_key="archive:pathindex:collection", key should be used as-is.
         """
         test_file = os.path.join(self.test_dir, "pathindex.txt")
         content = "file.warc.gz\t/mnt/storage/file.warc.gz\n"
@@ -543,25 +543,24 @@ class TestSubmitIndexToRedis(unittest.TestCase):
         mock_redis_module.Redis.return_value = mock_redis
 
         with patch.dict("sys.modules", {"redis": mock_redis_module}):
-            # Submit with key prefix
+            # Submit with custom redis key
             submitted, errors = submit_index_to_redis(
                 input_paths=[test_file],
-                collection_key="test-collection",
+                redis_key="archive:pathindex:test-collection",
                 redis_host="localhost",
                 redis_port=6379,
                 batch_size=100,
                 dry_run=False,
                 verbose=False,
-                key_prefix="archive:",
             )
 
-            # Verify HSET was called with prefixed key
+            # Verify HSET was called with custom key
             hset_calls = mock_pipeline.hset.call_args_list
             self.assertEqual(len(hset_calls), 1)
 
-            # First argument should be the key with prefix
+            # First argument should be the exact custom key
             redis_key = hset_calls[0][0][0]
-            self.assertTrue(redis_key.startswith("archive:pathindex:"))
+            self.assertEqual(redis_key, "archive:pathindex:test-collection")
 
 
 class TestCLIIntegration(unittest.TestCase):
@@ -600,7 +599,7 @@ class TestCLIIntegration(unittest.TestCase):
         # main() doesn't return a value, it calls sys.exit() on errors
         # No exception means success
         try:
-            main(["-i", test_file, "-k", "test-collection"])
+            main(["-i", test_file, "-k", "pathindex:test-collection"])
             success = True
         except SystemExit as e:
             success = e.code == 0
@@ -608,8 +607,7 @@ class TestCLIIntegration(unittest.TestCase):
         self.assertTrue(success)
         mock_submit.assert_called_once()
 
-    @patch("replay_cdxj_indexing_tools.redis.path_index_to_redis.submit_index_to_redis")
-    def test_cli_missing_required_args(self, mock_submit):
+    def test_cli_missing_required_args(self):
         """
         Test CLI with missing required arguments.
 
@@ -617,7 +615,7 @@ class TestCLIIntegration(unittest.TestCase):
         """
         from replay_cdxj_indexing_tools.redis.path_index_to_redis import main
 
-        # Missing -k/--collection-key argument
+        # Missing -k/--redis-key argument
         with self.assertRaises(SystemExit):
             main(["-i", "nonexistent.txt"])
 

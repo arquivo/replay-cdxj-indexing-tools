@@ -20,49 +20,51 @@ COMMAND-LINE USAGE
 Basic Examples:
 
     # Submit a path index file to Redis (default localhost:6379)
-    path-index-to-redis -i pathindex.txt -k arquivo-2024
+    path-index-to-redis -i pathindex.txt -k pathindex:branchA
 
     # Submit to specific Redis server
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --host redis.example.com --port 6380
+    path-index-to-redis -i pathindex.txt -k pathindex:branchB \\
+        --host redis.example.com --port 6380
 
     # Submit with authentication
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --password mypassword
+    path-index-to-redis -i pathindex.txt -k pathindex:branchA --password mypassword
 
     # Submit to specific database number
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --db 2
+    path-index-to-redis -i pathindex.txt -k pathindex:branchB --db 2
 
-    # Use a key prefix for namespace isolation
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --prefix "archive:"
+    # Use a custom key with namespace prefix
+    path-index-to-redis -i pathindex.txt -k archive:pathindex:branchA
 
     # Batch inserts for better performance
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --batch-size 1000
+    path-index-to-redis -i pathindex.txt -k pathindex:branchA --batch-size 1000
 
 Advanced Examples:
 
     # Multiple index files (will be processed sequentially)
-    path-index-to-redis -i index1.txt -i index2.txt -i index3.txt -k arquivo-2024
+    path-index-to-redis -i index1.txt -i index2.txt -i index3.txt -k pathindex:branchA
 
     # Read from stdin (useful for pipelines)
-    cat pathindex.txt | path-index-to-redis -i - -k arquivo-2024
+    cat pathindex.txt | path-index-to-redis -i - -k pathindex:branchB
 
     # Clear existing hash key before submission
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --clear
+    path-index-to-redis -i pathindex.txt -k pathindex:branchA --clear
 
     # Use Redis Cluster
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --cluster --host redis-cluster.local
+    path-index-to-redis -i pathindex.txt -k pathindex:branchB \\
+        --cluster --host redis-cluster.local
 
     # With connection pooling and custom timeout
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 --pool-size 20 --timeout 30
+    path-index-to-redis -i pathindex.txt -k pathindex:branchA --pool-size 20 --timeout 30
 
     # Verbose output with statistics
-    path-index-to-redis -i pathindex.txt -k arquivo-2024 -v
+    path-index-to-redis -i pathindex.txt -k pathindex:branchB -v
 
 REDIS DATA STRUCTURE
 ====================
 
 The tool uses Redis Hashes to store path index entries efficiently:
 
-    Key: {prefix}pathindex:{collection_key}
+    Key: <redis_key> (specified by user)
     Field: <filename>
     Value: <path1>[,<path2>,...]
 
@@ -70,7 +72,7 @@ Each Redis key represents a collection, and within that key, each filename
 maps to one or more paths (comma-separated if multiple).
 
 Example:
-    Key: "pathindex:arquivo-2024"
+    Key: "pathindex:branchA"
     Field: "AWP-arquivo-20240101120000-00001.warc.gz"
     Value: "/mnt/storage1/warcs/2024/01/AWP-arquivo-20240101120000-00001.warc.gz"
 
@@ -87,6 +89,7 @@ PARAMETERS
 Required:
     -i, --input FILE       Input .idx file(s), or '-' for stdin
                           Can be specified multiple times
+    -k, --redis-key KEY    Redis hash key (e.g., 'pathindex:branchA')
 
 Optional - Redis Connection:
     --host HOST           Redis host (default: localhost)
@@ -102,11 +105,9 @@ Optional - Performance:
     --batch-size N        Number of entries per batch (default: 500)
     --pool-size N         Connection pool size (default: 10)
     --timeout N           Connection timeout in seconds (default: 10)
-    --workers N           Parallel workers for large files (default: 1)
 
 Optional - Behavior:
-    --prefix PREFIX       Key prefix for namespace (default: "")
-    --clear               Clear existing keys with prefix before insert
+    --clear               Clear existing hash key before insert
     --dry-run             Parse and validate only, don't write to Redis
 
 Optional - Output:
@@ -138,25 +139,25 @@ INTEGRATION EXAMPLES
 
     # Generate index and submit to Redis in one pipeline
     cdxj-to-zipnum -o /data/zipnum -i merged.cdxj | \\
-        path-index-to-redis -i - --prefix "archive:2024-11:"
+        path-index-to-redis -i - -k "pathindex:branchA"
 
 2. Daily Updates:
 
     #!/bin/bash
-    DATE=$(date +%Y-%m-%d)
-    cdxj-index-collection COLLECTION-$DATE
+    BRANCH="branchA"
+    cdxj-index-collection COLLECTION-$BRANCH
     path-index-to-redis \\
-        -i /data/zipnum/COLLECTION-$DATE/*.idx \\
-        --prefix "archive:$DATE:" \\
+        -i /data/zipnum/COLLECTION-$BRANCH/*.idx \\
+        -k "pathindex:$BRANCH" \\
         --verbose
 
 3. Multi-Collection Setup:
 
-    # Submit multiple collections with different prefixes
-    for collection in 2024-01 2024-02 2024-03; do
+    # Submit multiple collections with different keys
+    for branch in branchA branchB branchC; do
         path-index-to-redis \\
-            -i /data/indexes/$collection/*.idx \\
-            --prefix "col:$collection:" \\
+            -i /data/indexes/$branch/*.idx \\
+            -k "pathindex:$branch" \\
             --batch-size 1000
     done
 
@@ -166,7 +167,7 @@ INTEGRATION EXAMPLES
         path-index-to-redis \\
         -i /data/indexes/index.idx \\
         --host redis \\
-        --prefix "archive:"
+        -k "pathindex:branchA"
 
 REDIS QUERY EXAMPLES
 ====================
@@ -174,19 +175,18 @@ REDIS QUERY EXAMPLES
 After submission, query Redis directly:
 
     # Get path for a specific WARC file
-    redis-cli HGET "pathindex:arquivo-2024" "AWP-arquivo-20240101120000-00001.warc.gz"
+    redis-cli HGET "pathindex:branchA" "AWP-arquivo-20240101120000-00001.warc.gz"
 
     # Get all files in the collection
-    redis-cli HKEYS "pathindex:arquivo-2024"
+    redis-cli HKEYS "pathindex:branchB"
 
     # Count total files in collection
-    redis-cli HLEN "pathindex:arquivo-2024"
+    redis-cli HLEN "pathindex:branchA"
 
     # Check memory usage
     redis-cli INFO memory
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
+Author: Ivo Branco
 """
 
 import argparse
@@ -294,7 +294,7 @@ def read_index_entries(input_path: str, verbose: bool = False) -> Iterator[Dict[
 
 def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     input_paths: List[str],
-    collection_key: str,
+    redis_key: str,
     redis_host: str = "localhost",
     redis_port: int = 6379,
     redis_db: int = 0,
@@ -303,7 +303,6 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     redis_socket: Optional[str] = None,
     use_ssl: bool = False,
     use_cluster: bool = False,
-    key_prefix: str = "",
     batch_size: int = 500,
     pool_size: int = 10,
     timeout: int = 10,
@@ -316,7 +315,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
 
     Args:
         input_paths: List of path index file paths (or '-' for stdin)
-        collection_key: Redis hash key for this collection (e.g., 'arquivo-2024')
+        redis_key: Redis hash key for storing path index (e.g., 'pathindex:branchA')
         redis_host: Redis server hostname
         redis_port: Redis server port
         redis_db: Redis database number
@@ -325,7 +324,6 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
         redis_socket: Unix socket path (alternative to host:port)
         use_ssl: Use SSL/TLS connection
         use_cluster: Connect to Redis Cluster
-        key_prefix: Prefix for all Redis keys (for namespacing)
         batch_size: Number of entries to submit in one pipeline
         pool_size: Redis connection pool size
         timeout: Connection timeout in seconds
@@ -343,9 +341,8 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     Example:
         >>> submitted, errors = submit_index_to_redis(
         ...     ['pathindex.txt'],
-        ...     collection_key='arquivo-2024',
+        ...     redis_key='pathindex:branchA',
         ...     redis_host='localhost',
-        ...     key_prefix='',
         ...     verbose=True
         ... )
         >>> print(f"Submitted {submitted} entries")
@@ -436,7 +433,6 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
 
         # Clear existing hash key if requested
         if clear_existing:
-            redis_key = f"{key_prefix}pathindex:{collection_key}"
             if verbose:
                 print(f"# Clearing existing hash key: {redis_key}", file=sys.stderr)
             try:
@@ -457,9 +453,6 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
         batch = []
 
         try:
-            # Build Redis hash key once for all entries
-            redis_key = f"{key_prefix}pathindex:{collection_key}"
-
             for entry in read_index_entries(input_path, verbose=verbose):
                 # Each entry is a field in the hash: filename -> path
                 batch.append((entry["filename"], entry["path"]))
@@ -558,38 +551,38 @@ def main(argv=None):
         epilog="""
 Examples:
   # Submit path index file to local Redis
-  %(prog)s -i pathindex.txt -k arquivo-2024
+  %(prog)s -i pathindex.txt -k pathindex:branchA
 
   # Submit to remote Redis with authentication
-  %(prog)s -i pathindex.txt -k arquivo-2024 --host redis.example.com --password secret
+  %(prog)s -i pathindex.txt -k pathindex:branchB --host redis.example.com --password secret
 
-  # Submit with key prefix for namespace isolation
-  %(prog)s -i pathindex.txt -k arquivo-2024 --prefix "archive:"
+  # Submit with custom key (with namespace prefix)
+  %(prog)s -i pathindex.txt -k archive:pathindex:branchA
 
   # Submit multiple files with batch processing
-  %(prog)s -i index1.txt -i index2.txt -i index3.txt -k arquivo-2024 --batch-size 1000
+  %(prog)s -i index1.txt -i index2.txt -i index3.txt -k pathindex:branchA --batch-size 1000
 
   # Read from stdin (pipeline mode)
-  cat pathindex.txt | %(prog)s -i - -k arquivo-2024 --verbose
+  cat pathindex.txt | %(prog)s -i - -k pathindex:branchB --verbose
 
   # Clear existing hash key before submission
-  %(prog)s -i pathindex.txt -k arquivo-2024 --clear
+  %(prog)s -i pathindex.txt -k pathindex:branchA --clear
 
   # Dry run to validate index file
-  %(prog)s -i pathindex.txt -k arquivo-2024 --dry-run --verbose
+  %(prog)s -i pathindex.txt -k pathindex:branchB --dry-run --verbose
 
 Redis connection examples:
   # Standard connection
-  %(prog)s -i pathindex.txt -k arquivo-2024 --host localhost --port 6379 --db 0
+  %(prog)s -i pathindex.txt -k pathindex:branchA --host localhost --port 6379 --db 0
 
   # Unix socket
-  %(prog)s -i pathindex.txt -k arquivo-2024 --socket /var/run/redis/redis.sock
+  %(prog)s -i pathindex.txt -k pathindex:branchB --socket /var/run/redis/redis.sock
 
   # SSL/TLS connection
-  %(prog)s -i pathindex.txt -k arquivo-2024 --host redis.example.com --ssl
+  %(prog)s -i pathindex.txt -k pathindex:branchA --host redis.example.com --ssl
 
   # Redis Cluster
-  %(prog)s -i pathindex.txt -k arquivo-2024 --cluster --host redis-cluster.local
+  %(prog)s -i pathindex.txt -k pathindex:branchB --cluster --host redis-cluster.local
         """,
     )
 
@@ -604,9 +597,9 @@ Redis connection examples:
     )
     parser.add_argument(
         "-k",
-        "--collection-key",
+        "--redis-key",
         required=True,
-        help="Redis hash key for this collection (e.g., 'arquivo-2024')",
+        help="Redis hash key for path index (e.g., 'pathindex:branchA')",
     )
 
     # Redis connection arguments
@@ -641,12 +634,9 @@ Redis connection examples:
     # Behavior arguments
     behavior_group = parser.add_argument_group("Behavior options")
     behavior_group.add_argument(
-        "--prefix", default="", help='Key prefix for namespace (default: "", no prefix)'
-    )
-    behavior_group.add_argument(
         "--clear",
         action="store_true",
-        help="Clear existing keys with prefix before inserting",
+        help="Clear existing hash key before inserting",
     )
     behavior_group.add_argument(
         "--dry-run",
@@ -672,7 +662,7 @@ Redis connection examples:
     try:
         _submitted, errors = submit_index_to_redis(
             input_paths=args.inputs,
-            collection_key=args.collection_key,
+            redis_key=args.redis_key,
             redis_host=args.host,
             redis_port=args.port,
             redis_db=args.db,
@@ -681,7 +671,6 @@ Redis connection examples:
             redis_socket=args.socket,
             use_ssl=args.ssl,
             use_cluster=args.cluster,
-            key_prefix=args.prefix,
             batch_size=args.batch_size,
             pool_size=args.pool_size,
             timeout=args.timeout,
