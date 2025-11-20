@@ -98,7 +98,31 @@ pytest tests/ -v
 
 # Shell tests (simple)
 bash tests/test_process_collection_simple.sh
+
+# Full CI suite (tests + coverage + lint)
+make ci
 ```
+
+### Multi-Version Testing with Docker
+
+Test against multiple Python versions using Docker containers:
+
+```bash
+# Test on specific Python version
+make ci-py38   # Python 3.8
+make ci-py39   # Python 3.9
+make ci-py310  # Python 3.10
+make ci-py311  # Python 3.11
+make ci-py312  # Python 3.12
+
+# Test on all Python versions
+make ci-all-python-versions
+
+# Run all versions in parallel (faster)
+make --jobs 10 ci-all-python-versions
+```
+
+Each Docker-based CI target runs the full test suite (tests with coverage, flake8, pylint, and mypy) in an isolated container for that Python version. This ensures compatibility without needing to install multiple Python versions locally.
 
 ### CI/CD Pipeline
 

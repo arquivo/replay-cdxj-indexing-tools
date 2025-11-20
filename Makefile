@@ -4,26 +4,52 @@
 # Default Python version
 PYTHON ?= python3
 VENV_DIR ?= venv
-VENV_BIN = $(VENV_DIR)/bin
+SKIP_VENV ?= 0
+
+# Export SKIP_VENV so it's available in sub-make calls
+export SKIP_VENV
+
+ifeq ($(SKIP_VENV),1)
+    VENV_BIN =
+    PIP = pip
+    PYTEST = pytest
+    FLAKE8 = flake8
+    PYLINT = pylint
+    MYPY = mypy
+    BLACK = black
+else
+    VENV_BIN = $(VENV_DIR)/bin
+    PIP = $(VENV_BIN)/pip
+    PYTEST = $(VENV_BIN)/pytest
+    FLAKE8 = $(VENV_BIN)/flake8
+    PYLINT = $(VENV_BIN)/pylint
+    MYPY = $(VENV_BIN)/mypy
+    BLACK = $(VENV_BIN)/black
+endif
 
 help: ## Show this help message
 	@grep -E '^[a-zA-Z0-9_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
 .PHONY: help
 
 venv: ## Create virtual environment
+ifneq ($(SKIP_VENV),1)
 	@echo "Creating virtual environment with $(PYTHON)..."
 	$(PYTHON) -m venv $(VENV_DIR)
 	@echo "✓ Virtual environment created at $(VENV_DIR)"
 	@echo ""
 	@echo "To activate:"
 	@echo "  source $(VENV_BIN)/activate"
+else
+	@echo "Skipping virtual environment creation (SKIP_VENV=1)"
+endif
 .PHONY: venv
 
 install: venv ## Install package in development mode
 	@echo "Installing package in development mode..."
-	$(VENV_BIN)/pip install --upgrade pip
-	$(VENV_BIN)/pip install -e .
+	$(PIP) install --upgrade pip
+	$(PIP) install -e .
 	@echo "✓ Package installed"
+ifneq ($(SKIP_VENV),1)
 	@echo ""
 	@echo "Available commands:"
 	@echo "  $(VENV_BIN)/merge-cdxj"
@@ -31,13 +57,13 @@ install: venv ## Install package in development mode
 	@echo "  $(VENV_BIN)/filter-excessive-urls"
 	@echo "  $(VENV_BIN)/cdxj-to-zipnum"
 	@echo "  $(VENV_BIN)/cdxj-index-collection"
+endif
 .PHONY: install
 
 install-dev: venv ## Install package with development dependencies
 	@echo "Installing package with development dependencies..."
-	$(VENV_BIN)/pip install --upgrade pip
-	$(VENV_BIN)/pip install -e .
-	$(VENV_BIN)/pip install pytest pytest-cov pylint flake8 black mypy
+	$(PIP) install --upgrade pip
+	$(PIP) install -e ".[dev]"
 	@echo "✓ Development environment ready"
 .PHONY: install-dev
 
@@ -50,7 +76,7 @@ test: test-python test-shell ## Run all tests (Python + shell)
 
 test-python: ## Run Python tests only
 	@echo "Running Python tests..."
-	$(VENV_BIN)/pytest tests/ -v
+	$(PYTEST) tests/ -v
 .PHONY: test-python
 
 test-shell: ## Run shell script tests only
@@ -60,7 +86,7 @@ test-shell: ## Run shell script tests only
 
 test-coverage: ## Run tests with HTML coverage report
 	@echo "Running tests with coverage..."
-	$(VENV_BIN)/pytest tests/ --cov=replay_cdxj_indexing_tools --cov-report=html --cov-report=term -v
+	$(PYTEST) tests/ --cov=replay_cdxj_indexing_tools --cov-report=html --cov-report=term -v
 	@echo ""
 	@echo "Coverage report generated in htmlcov/index.html"
 .PHONY: test-coverage
@@ -68,17 +94,17 @@ test-coverage: ## Run tests with HTML coverage report
 lint: ## Run code quality checks (flake8, pylint, mypy)
 	@echo "Running code quality checks..."
 	@echo "→ flake8..."
-	$(VENV_BIN)/flake8 replay_cdxj_indexing_tools/ tests/
+	$(FLAKE8) replay_cdxj_indexing_tools/ tests/
 	@echo "→ pylint..."
-	$(VENV_BIN)/pylint replay_cdxj_indexing_tools/
+	$(PYLINT) replay_cdxj_indexing_tools/
 	@echo "→ mypy..."
-	$(VENV_BIN)/mypy
+	$(MYPY)
 	@echo "✓ Lint checks complete"
 .PHONY: lint
 
 format: ## Format code with black
 	@echo "Formatting code with black..."
-	$(VENV_BIN)/black replay_cdxj_indexing_tools/ tests/ --line-length=100
+	$(BLACK) replay_cdxj_indexing_tools/ tests/ --line-length=100
 	@echo "✓ Code formatted"
 .PHONY: format
 
@@ -130,3 +156,49 @@ ci: install-dev test-coverage lint ## Simulate CI checks
 	@echo ""
 	@echo "✓ CI checks complete"
 .PHONY: ci
+
+# Docker-based multi-version testing
+DOCKER_RUN = docker run --rm -v $(PWD):/app -w /app
+
+# Helper function to run CI on a specific Python version
+define run_ci_version
+	@echo "Running CI checks with Python $(1)..."
+	@LOG=$$(mktemp); \
+	if $(DOCKER_RUN) python:$(1) bash -c "make ci SKIP_VENV=1" > $$LOG 2>&1; then \
+		echo "✓ CI checks complete (Python $(1))"; \
+		rm -f $$LOG; \
+	else \
+		echo "✗ CI checks failed (Python $(1))"; \
+		echo "Log output:"; \
+		cat $$LOG; \
+		rm -f $$LOG; \
+		exit 1; \
+	fi
+endef
+
+ci-py38: ## Run full CI checks in Python 3.8 container
+	$(call run_ci_version,3.8)
+.PHONY: ci-py38
+
+ci-py39: ## Run full CI checks in Python 3.9 container
+	$(call run_ci_version,3.9)
+.PHONY: ci-py39
+
+ci-py310: ## Run full CI checks in Python 3.10 container
+	$(call run_ci_version,3.10)
+.PHONY: ci-py310
+
+ci-py311: ## Run full CI checks in Python 3.11 container
+	$(call run_ci_version,3.11)
+.PHONY: ci-py311
+
+ci-py312: ## Run full CI checks in Python 3.12 container
+	$(call run_ci_version,3.12)
+.PHONY: ci-py312
+
+ci-all: ci-py38 ci-py39 ci-py310 ci-py311 ci-py312 ## Run full CI checks on all Python versions
+	@echo ""
+	@echo "=========================================="
+	@echo "✓ All Python versions passed CI checks!"
+	@echo "=========================================="
+.PHONY: ci-all

@@ -136,9 +136,22 @@ merge-cdxj - *.cdxj | \
 
 ## Development
 
-- **[Testing Guide](../tests/README.md)** - Running and writing tests
+- **[Testing Guide](../tests/README.md)** - Running and writing tests, multi-version testing with Docker
 - **Contributing** - How to contribute (coming soon)
 - **API Reference** - Python API docs (coming soon)
+
+### Quick Development Commands
+
+```bash
+# Run full CI suite locally
+make ci
+
+# Test on specific Python version (Docker)
+make ci-py38
+
+# Test all Python versions in parallel
+make --jobs 10 ci-all-python-versions
+```
 
 ## Support
 
