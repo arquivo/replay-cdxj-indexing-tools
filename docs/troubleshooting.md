@@ -8,8 +8,8 @@ Common issues and solutions for CDXJ indexing tools.
 
 **Symptom:**
 ```bash
-$ merge-cdxj
--bash: merge-cdxj: command not found
+$ merge-flat-cdxj
+-bash: merge-flat-cdxj: command not found
 ```
 
 **Solutions:**
@@ -367,12 +367,12 @@ gzip: invalid compressed data
    # Merge in groups of 1000
    for i in {0..10}; do
        start=$((i * 1000))
-       merge-cdxj batch-$i.cdxj indexes/*.cdxj | \
+       merge-flat-cdxj batch-$i.cdxj indexes/*.cdxj | \
            head -n $((start + 1000)) | tail -n 1000
    done
    
    # Final merge of batches
-   merge-cdxj final.cdxj batch-*.cdxj
+   merge-flat-cdxj final.cdxj batch-*.cdxj
    ```
 
 3. **Increase buffer size:**
@@ -448,8 +448,8 @@ AssertionError: CDXJ not in SURT order
 
 2. **During merge:**
    ```bash
-   # merge-cdxj automatically handles duplicates
-   merge-cdxj output.cdxj input1.cdxj input2.cdxj
+   # merge-flat-cdxj automatically handles duplicates
+   merge-flat-cdxj output.cdxj input1.cdxj input2.cdxj
    ```
 
 ### Invalid JSON in CDXJ
@@ -542,7 +542,7 @@ JSONDecodeError: Expecting value
 
 4. **Rebuild ZipNum:**
    ```bash
-   cdxj-to-zipnum -o /data/zipnum/COLLECTION-2024-11/ \
+   flat-cdxj-to-zipnum -o /data/zipnum/COLLECTION-2024-11/ \
        -i final.cdxj -n 3000 --compress
    ```
 
@@ -619,7 +619,7 @@ free -h
 # Check dependencies
 which parallel
 which cdx-indexer
-merge-cdxj --version
+merge-flat-cdxj --version
 
 # Test configuration
 ./cdxj-index-collection --help

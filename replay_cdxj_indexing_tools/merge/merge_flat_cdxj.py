@@ -1,33 +1,33 @@
 #!/usr/bin/env python3
 """
-Merge Sorted Files - Efficient k-way merge for large sorted files
+Merge Flat CDXJ Files - Efficient k-way merge for large sorted flat CDXJ files
 
-This script merges multiple sorted files into a single sorted output file using
+This script merges multiple sorted flat CDXJ files into a single sorted output file using
 a min-heap based k-way merge algorithm. It's optimized for handling large files
 with minimal memory usage by reading files line-by-line rather than loading them
 entirely into memory.
 
 Usage Examples:
     # Merge two sorted files to output file
-    python merge_sorted_files.py output.txt file1.txt file2.txt
+    merge-flat-cdxj output.cdxj file1.cdxj file2.cdxj
 
     # Merge multiple sorted files
-    python merge_sorted_files.py merged.cdxj sorted1.cdxj sorted2.cdxj sorted3.cdxj
+    merge-flat-cdxj merged.cdxj sorted1.cdxj sorted2.cdxj sorted3.cdxj
 
     # Merge all files from directories (recursively)
-    python merge_sorted_files.py output.txt /path/to/dir1 /path/to/dir2
+    merge-flat-cdxj output.cdxj /path/to/dir1 /path/to/dir2
 
     # Mix files and directories
-    python merge_sorted_files.py output.txt file1.txt /path/to/directory file2.txt
+    merge-flat-cdxj output.cdxj file1.cdxj /path/to/directory file2.cdxj
 
     # Output to stdout (use '-' as output filename)
-    python merge_sorted_files.py - file1.txt file2.txt
+    merge-flat-cdxj - file1.cdxj file2.cdxj
 
     # Pipe to other processes
-    python merge_sorted_files.py - *.cdxj | gzip > merged.cdxj.gz
-    python merge_sorted_files.py - dir1/ dir2/ | grep "pattern" > filtered.txt
-    python merge_sorted_files.py - sorted*.cdxj | wc -l
-    python merge_sorted_files.py - /data/indexes_cdx/*.cdxj | head -n 1000 > top1000.txt
+    merge-flat-cdxj - *.cdxj | gzip > merged.cdxj.gz
+    merge-flat-cdxj - dir1/ dir2/ | grep "pattern" > filtered.cdxj
+    merge-flat-cdxj - sorted*.cdxj | wc -l
+    merge-flat-cdxj - /data/indexes_cdx/*.cdxj | head -n 1000 > top1000.cdxj
 
     # Redirect stderr to a file, pipe stdout to another command
     python merge_sorted_files.py - file1.cdxj file2.cdxj 2> errors.log | gzip > merged.gz
@@ -144,10 +144,14 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024):
         fh.close()
 
 
-if __name__ == "__main__":
+def main():
+    """Main entry point for command-line usage."""
     # Set up command-line argument parsing
     parser = argparse.ArgumentParser(
-        description="Merge N sorted files or directories into one (optimized for large files)."
+        description=(
+            "Merge N sorted flat CDXJ files or directories "
+            "into one (optimized for large files)."
+        )
     )
     parser.add_argument("output", help="Output file name (use '-' for stdout)")
     parser.add_argument("paths", nargs="+", help="List of sorted input files or directories")
@@ -158,3 +162,7 @@ if __name__ == "__main__":
 
     # Perform the k-way merge operation
     merge_sorted_files(files, args.output)
+
+
+if __name__ == "__main__":
+    main()

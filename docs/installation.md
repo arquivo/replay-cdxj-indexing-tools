@@ -20,7 +20,7 @@ docker run arquivo/replay-cdxj-indexing-tools:latest
 
 # Run a command
 docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools:latest \
-    merge-cdxj --help
+    merge-flat-cdxj --help
 ```
 
 ### Docker Usage Examples
@@ -28,18 +28,18 @@ docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools:latest \
 ```bash
 # Merge CDXJ files
 docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
-    merge-cdxj /data/output/merged.cdxj /data/input/*.cdxj
+    merge-flat-cdxj /data/output/merged.cdxj /data/input/*.cdxj
 
 # Convert to ZipNum
 docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
-    cdxj-to-zipnum -i /data/input/file.cdxj -o /data/output/
+    flat-cdxj-to-zipnum -i /data/input/file.cdxj -o /data/output/
 
 # Full pipeline
 docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
-    sh -c "merge-cdxj - /data/input/*.cdxj | \
+    sh -c "merge-flat-cdxj - /data/input/*.cdxj | \
            filter-blocklist -i - -b /data/blocklist.txt | \
            filter-excessive-urls auto -i - -n 1000 | \
-           cdxj-to-zipnum -o /data/output/ -i -"
+           flat-cdxj-to-zipnum -o /data/output/ -i -"
 
 # Process a collection
 docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools:latest \
@@ -55,7 +55,7 @@ cd replay-cdxj-indexing-tools
 docker build -t arquivo/replay-cdxj-indexing-tools:local .
 
 # Run locally built image
-docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:local merge-cdxj --help
+docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:local merge-flat-cdxj --help
 ```
 
 ## Option 2: Install from Source (Development)
@@ -100,14 +100,14 @@ Check that all commands are available:
 
 ```bash
 # Check merge command
-merge-cdxj --help
+merge-flat-cdxj --help
 
 # Check filter commands
 filter-blocklist --help
 filter-excessive-urls --help
 
 # Check zipnum command
-cdxj-to-zipnum --help
+flat-cdxj-to-zipnum --help
 ```
 
 ## Development Setup

@@ -35,12 +35,12 @@ WORKDIR /data
 
 # Default command shows available tools
 CMD ["sh", "-c", "echo 'Available commands:' && \
-     echo '  merge-cdxj' && \
-     echo '  cdxj-to-zipnum' && \
+     echo '  merge-flat-cdxj' && \
+     echo '  flat-cdxj-to-zipnum' && \
      echo '  filter-excessive-urls' && \
      echo '  filter-blocklist' && \
      echo '  cdxj-index-collection' && \
      echo '' && \
      echo 'Example usage:' && \
-     echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools merge-cdxj --help' && \
-     echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools cdxj-to-zipnum -i input/file.cdxj -o output/'"]
+     echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools merge-flat-cdxj --help' && \
+     echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools flat-cdxj-to-zipnum -i input/file.cdxj -o output/'"]

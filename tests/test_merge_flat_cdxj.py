@@ -215,7 +215,7 @@ from io import StringIO
 from pathlib import Path
 
 # Import the module under test
-from replay_cdxj_indexing_tools.merge.merge_sorted_files import merge_sorted_files, get_all_files
+from replay_cdxj_indexing_tools.merge.merge_flat_cdxj import merge_sorted_files, get_all_files
 
 
 class TestGetAllFiles(unittest.TestCase):

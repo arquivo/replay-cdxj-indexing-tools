@@ -56,8 +56,8 @@ Repository = "https://github.com/arquivo/replay-cdxj-indexing-tools"
 Issues = "https://github.com/arquivo/replay-cdxj-indexing-tools/issues"
 
 [project.scripts]
-merge-cdxj = "replay_cdxj_indexing_tools.merge.merge_sorted_files:main"
-cdxj-to-zipnum = "replay_cdxj_indexing_tools.zipnum.cdxj_to_zipnum:main"
+merge-flat-cdxj = "replay_cdxj_indexing_tools.merge.merge_flat_cdxj:main"
+flat-cdxj-to-zipnum = "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum:main"
 zipnum-to-flat-cdxj = "replay_cdxj_indexing_tools.zipnum.zipnum_to_flat_cdxj:main"
 filter-excessive-urls = "replay_cdxj_indexing_tools.filter.excessive_urls:main"
 filter-blocklist = "replay_cdxj_indexing_tools.filter.blocklist:main"

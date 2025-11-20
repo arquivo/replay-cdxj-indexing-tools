@@ -1,40 +1,40 @@
-# merge-cdxj - K-Way Merge Tool
+# merge-flat-cdxj - K-Way Merge Tool for Flat CDXJ Files
 
-Efficiently merges multiple sorted CDXJ files into a single sorted output using a k-way merge algorithm.
+Efficiently merges multiple sorted flat CDXJ files into a single sorted output using a k-way merge algorithm.
 
 ## Command-Line Usage
 
 ### Basic Syntax
 
 ```bash
-merge-cdxj OUTPUT INPUT1 [INPUT2 INPUT3 ...]
+merge-flat-cdxj OUTPUT INPUT1 [INPUT2 INPUT3 ...]
 ```
 
 ### Examples
 
 **Merge specific files:**
 ```bash
-merge-cdxj merged.cdxj file1.cdxj file2.cdxj file3.cdxj
+merge-flat-cdxj merged.cdxj file1.cdxj file2.cdxj file3.cdxj
 ```
 
 **Merge all files from directories:**
 ```bash
-merge-cdxj output.cdxj /data/indexes/2023/ /data/indexes/2024/
+merge-flat-cdxj output.cdxj /data/indexes/2023/ /data/indexes/2024/
 ```
 
 **Mix files and directories:**
 ```bash
-merge-cdxj merged.cdxj /data/old/ file1.cdxj file2.cdxj /data/new/
+merge-flat-cdxj merged.cdxj /data/old/ file1.cdxj file2.cdxj /data/new/
 ```
 
 **Output to stdout (for piping):**
 ```bash
-merge-cdxj - file1.cdxj file2.cdxj | gzip > merged.cdxj.gz
+merge-flat-cdxj - file1.cdxj file2.cdxj | gzip > merged.cdxj.gz
 ```
 
 **Pipeline to next tool:**
 ```bash
-merge-cdxj - *.cdxj | filter-blocklist -i - -b blocklist.txt -o clean.cdxj
+merge-flat-cdxj - *.cdxj | filter-blocklist -i - -b blocklist.txt -o clean.cdxj
 ```
 
 ### Options
@@ -42,7 +42,7 @@ merge-cdxj - *.cdxj | filter-blocklist -i - -b blocklist.txt -o clean.cdxj
 - **OUTPUT**: Output file path, or `-` for stdout
 - **INPUT**: Input CDXJ files or directories (will recursively find .cdxj files)
 
-Use `merge-cdxj --help` for full help.
+Use `merge-flat-cdxj --help` for full help.
 
 ## Python API
 
@@ -153,7 +153,7 @@ After parallel indexing of WARC files:
 # ...
 
 # Merge all parts
-merge-cdxj final_index.cdxj /tmp/index_part_*.cdxj
+merge-flat-cdxj final_index.cdxj /tmp/index_part_*.cdxj
 ```
 
 ### 2. Incremental Index Updates
@@ -162,7 +162,7 @@ Merge new indexes with existing ones:
 
 ```bash
 # Merge old index with new captures
-merge-cdxj updated.cdxj old_index.cdxj new_captures.cdxj
+merge-flat-cdxj updated.cdxj old_index.cdxj new_captures.cdxj
 ```
 
 ### 3. Multi-Collection Merging
@@ -170,7 +170,7 @@ merge-cdxj updated.cdxj old_index.cdxj new_captures.cdxj
 Combine indexes from different collections:
 
 ```bash
-merge-cdxj all_collections.cdxj \
+merge-flat-cdxj all_collections.cdxj \
     /data/collection1/index.cdxj \
     /data/collection2/index.cdxj \
     /data/collection3/index.cdxj
@@ -182,10 +182,10 @@ As first step in processing pipeline:
 
 ```bash
 # Merge → Filter → Convert
-merge-cdxj - /data/parts/*.cdxj | \
+merge-flat-cdxj - /data/parts/*.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls remove -i - -b excessive.txt | \
-    cdxj-to-zipnum -o indexes -i -
+    flat-cdxj-to-zipnum -o indexes -i -
 ```
 
 ## Error Handling
@@ -222,7 +222,7 @@ If merging hundreds of files:
 ulimit -n 4096
 
 # Then run merge
-merge-cdxj output.cdxj /data/parts/*.cdxj
+merge-flat-cdxj output.cdxj /data/parts/*.cdxj
 ```
 
 ## Performance Tips
@@ -239,7 +239,7 @@ Merge performance is I/O bound. Use SSD for best performance:
 Save disk space by compressing output:
 
 ```bash
-merge-cdxj - *.cdxj | gzip -9 > merged.cdxj.gz
+merge-flat-cdxj - *.cdxj | gzip -9 > merged.cdxj.gz
 ```
 
 ### 3. Parallel Compression
@@ -247,7 +247,7 @@ merge-cdxj - *.cdxj | gzip -9 > merged.cdxj.gz
 Use pigz for parallel compression:
 
 ```bash
-merge-cdxj - *.cdxj | pigz -9 > merged.cdxj.gz
+merge-flat-cdxj - *.cdxj | pigz -9 > merged.cdxj.gz
 ```
 
 ### 4. Avoid Network Filesystems
@@ -256,11 +256,11 @@ Don't merge files on NFS or slow network storage. Copy locally first:
 
 ```bash
 # Bad: slow network I/O
-merge-cdxj output.cdxj /nfs/data/*.cdxj
+merge-flat-cdxj output.cdxj /nfs/data/*.cdxj
 
 # Good: local processing
 cp /nfs/data/*.cdxj /tmp/
-merge-cdxj output.cdxj /tmp/*.cdxj
+merge-flat-cdxj output.cdxj /tmp/*.cdxj
 mv output.cdxj /nfs/data/
 ```
 

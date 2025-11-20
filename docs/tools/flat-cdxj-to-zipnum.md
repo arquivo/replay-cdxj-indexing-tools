@@ -1,43 +1,43 @@
-# cdxj-to-zipnum - ZipNum Format Converter
+# flat-cdxj-to-zipnum - Flat CDXJ to ZipNum Format Converter
 
-Convert CDXJ files to ZipNum format - compressed, sharded indexes optimized for fast binary search in pywb web archive replay systems.
+Convert flat CDXJ files to ZipNum format - compressed, sharded indexes optimized for fast binary search in pywb web archive replay systems.
 
 ## Command-Line Usage
 
 ### Basic Syntax
 
 ```bash
-cdxj-to-zipnum -o OUTPUT_DIR -i INPUT [-n LINES_PER_BLOCK] [--compress]
+flat-cdxj-to-zipnum -o OUTPUT_DIR -i INPUT [-n LINES_PER_BLOCK] [--compress]
 ```
 
 ### Examples
 
 **Basic conversion:**
 ```bash
-cdxj-to-zipnum -o indexes -i arquivo.cdxj
+flat-cdxj-to-zipnum -o indexes -i arquivo.cdxj
 ```
 
 **With custom shard size:**
 ```bash
-cdxj-to-zipnum -o indexes -i arquivo.cdxj -n 5000
+flat-cdxj-to-zipnum -o indexes -i arquivo.cdxj -n 5000
 ```
 
 **With compression (recommended):**
 ```bash
-cdxj-to-zipnum -o indexes -i arquivo.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o indexes -i arquivo.cdxj -n 3000 --compress
 ```
 
 **Read from stdin (pipeline mode):**
 ```bash
-cat arquivo.cdxj | cdxj-to-zipnum -o indexes -i -
+cat arquivo.cdxj | flat-cdxj-to-zipnum -o indexes -i -
 ```
 
 **Complete pipeline:**
 ```bash
-merge-cdxj - *.cdxj | \
+merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls remove -i - -b excessive.txt | \
-    cdxj-to-zipnum -o indexes -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o indexes -i - -n 3000 --compress
 ```
 
 ### Options
@@ -157,7 +157,7 @@ Choose `lines-per-block` based on your data:
 # Test different shard sizes
 for n in 1000 3000 5000 10000; do
     echo "Testing $n lines per shard..."
-    time cdxj-to-zipnum -o test_$n -i arquivo.cdxj -n $n --compress
+    time flat-cdxj-to-zipnum -o test_$n -i arquivo.cdxj -n $n --compress
     
     shards=$(ls test_$n/index.cdxj/ | wc -l)
     size=$(du -sh test_$n | cut -f1)
@@ -196,12 +196,12 @@ For huge archives (>100M URLs):
 
 ```bash
 # Use larger shards
-cdxj-to-zipnum -o indexes -i huge_archive.cdxj -n 10000 --compress
+flat-cdxj-to-zipnum -o indexes -i huge_archive.cdxj -n 10000 --compress
 
 # Or process in stages
 for file in /data/years/202?/*.cdxj; do
     year=$(basename $(dirname $file))
-    cdxj-to-zipnum -o /data/zipnum/$year -i $file -n 5000 --compress
+    flat-cdxj-to-zipnum -o /data/zipnum/$year -i $file -n 5000 --compress
 done
 ```
 
@@ -211,7 +211,7 @@ Create new ZipNum indexes for increments:
 
 ```bash
 # Convert new captures
-cdxj-to-zipnum -o indexes_new -i new_captures.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o indexes_new -i new_captures.cdxj -n 3000 --compress
 
 # Configure pywb to use multiple indexes
 # config.yaml:
@@ -232,7 +232,7 @@ find /data/warcs -name "*.warc.gz" | \
     parallel -j8 "cdx-indexer --postappend --cdxj {} -o {}.cdxj"
 
 # 2. Merge indexes
-merge-cdxj merged.cdxj /data/warcs/*.cdxj
+merge-flat-cdxj merged.cdxj /data/warcs/*.cdxj
 
 # 3. Filter unwanted content
 filter-blocklist -i merged.cdxj -b blocklist.txt -o clean1.cdxj
@@ -241,7 +241,7 @@ filter-blocklist -i merged.cdxj -b blocklist.txt -o clean1.cdxj
 filter-excessive-urls auto -i clean1.cdxj -o clean2.cdxj -n 1000
 
 # 5. Convert to ZipNum
-cdxj-to-zipnum -o /data/zipnum_final -i clean2.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o /data/zipnum_final -i clean2.cdxj -n 3000 --compress
 
 echo "Done! ZipNum indexes in /data/zipnum_final"
 ```
@@ -261,7 +261,7 @@ echo "Done! ZipNum indexes in /data/zipnum_final"
 
 1. **Enable compression for production:**
    ```bash
-   cdxj-to-zipnum -o indexes -i arquivo.cdxj --compress
+   flat-cdxj-to-zipnum -o indexes -i arquivo.cdxj --compress
    ```
    - Saves 70-80% disk space
    - pywb handles decompression automatically
@@ -270,7 +270,7 @@ echo "Done! ZipNum indexes in /data/zipnum_final"
 2. **Use appropriate shard size:**
    ```bash
    # For large files (>10M lines), use larger shards
-   cdxj-to-zipnum -o indexes -i huge.cdxj -n 5000 --compress
+   flat-cdxj-to-zipnum -o indexes -i huge.cdxj -n 5000 --compress
    ```
 
 3. **Process on SSD:**
@@ -280,7 +280,7 @@ echo "Done! ZipNum indexes in /data/zipnum_final"
 4. **Pipeline mode saves disk:**
    ```bash
    # No intermediate files
-   merge-cdxj - *.cdxj | ... | cdxj-to-zipnum -o indexes -i -
+   merge-flat-cdxj - *.cdxj | ... | flat-cdxj-to-zipnum -o indexes -i -
    ```
 
 ## Compression
@@ -288,7 +288,7 @@ echo "Done! ZipNum indexes in /data/zipnum_final"
 ### Without Compression
 
 ```bash
-cdxj-to-zipnum -o indexes -i arquivo.cdxj
+flat-cdxj-to-zipnum -o indexes -i arquivo.cdxj
 # Output: indexes/index.cdxj.gz and indexes/index.cdxj/part-*.cdxj
 ```
 
@@ -303,7 +303,7 @@ cdxj-to-zipnum -o indexes -i arquivo.cdxj
 ### With Compression (Recommended)
 
 ```bash
-cdxj-to-zipnum -o indexes -i arquivo.cdxj --compress
+flat-cdxj-to-zipnum -o indexes -i arquivo.cdxj --compress
 # Output: indexes/index.cdxj.gz and indexes/index.cdxj/part-*.cdxj.gz
 ```
 
@@ -413,7 +413,7 @@ pytest --cov=replay_cdxj_indexing_tools.zipnum tests/test_cdxj_to_zipnum.py
 
 ## See Also
 
-- [merge-cdxj.md](merge-cdxj.md) - Previous step: merge files
+- [merge-flat-cdxj.md](merge-flat-cdxj.md) - Previous step: merge files
 - [filter-blocklist.md](filter-blocklist.md) - Previous step: filter blocklist
 - [filter-excessive-urls.md](filter-excessive-urls.md) - Previous step: filter excessive
 - [pipeline-examples.md](pipeline-examples.md) - Complete workflows

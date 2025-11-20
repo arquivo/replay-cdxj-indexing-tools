@@ -45,7 +45,7 @@ Process step-by-step for custom workflows:
 cdx-indexer collection/*.warc.gz > indexes/index.cdxj
 
 # 2. Merge multiple indexes
-merge-cdxj merged.cdxj indexes/*.cdxj
+merge-flat-cdxj merged.cdxj indexes/*.cdxj
 
 # 3. Filter blocklist
 filter-blocklist -i merged.cdxj -b blocklist.txt -o filtered.cdxj
@@ -54,7 +54,7 @@ filter-blocklist -i merged.cdxj -b blocklist.txt -o filtered.cdxj
 filter-excessive-urls auto -i filtered.cdxj -o clean.cdxj -n 1000
 
 # 5. Convert to ZipNum
-cdxj-to-zipnum -o zipnum/ -i clean.cdxj -n 3000 --compress
+flat-cdxj-to-zipnum -o zipnum/ -i clean.cdxj -n 3000 --compress
 ```
 
 ### Option 3: Unix Pipe Workflow (Most Efficient)
@@ -62,10 +62,10 @@ cdxj-to-zipnum -o zipnum/ -i clean.cdxj -n 3000 --compress
 Process everything in a single pipeline:
 
 ```bash
-merge-cdxj - indexes/*.cdxj | \
+merge-flat-cdxj - indexes/*.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
-    cdxj-to-zipnum -o zipnum/ -i - -n 3000 --compress
+    flat-cdxj-to-zipnum -o zipnum/ -i - -n 3000 --compress
 ```
 
 ## Verify Installation
@@ -73,10 +73,10 @@ merge-cdxj - indexes/*.cdxj | \
 Check that all tools are available:
 
 ```bash
-merge-cdxj --version
+merge-flat-cdxj --version
 filter-blocklist --version
 filter-excessive-urls --version
-cdxj-to-zipnum --version
+flat-cdxj-to-zipnum --version
 ```
 
 ## Next Steps

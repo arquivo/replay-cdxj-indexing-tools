@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-cdxj_to_zipnum.py - Convert CDXJ to ZipNum Compressed Sharded Indexes
-======================================================================
+flat_cdxj_to_zipnum.py - Convert Flat CDXJ to ZipNum Compressed Sharded Indexes
+================================================================================
 
-Build local ZipNum-style index files and .loc entries from CDX/CDXJ input
+Build local ZipNum-style index files and .loc entries from flat CDXJ input
 (file or stdin), without Hadoop/MRJob dependencies. ZipNum is a compressed
 indexing format used by web archive replay systems like pywb for efficient
 binary search over large CDXJ indexes.
@@ -12,29 +12,29 @@ COMMAND-LINE USAGE
 ==================
 
 After installing: pip install -e .
-The command 'cdxj-to-zipnum' becomes available globally.
+The command 'flat-cdxj-to-zipnum' becomes available globally.
 
 Basic Examples:
 
-    # Convert CDXJ file with default settings (100MB shards, 3000 lines/chunk)
-    cdxj-to-zipnum -o output_dir -i input.cdxj
+    # Convert flat CDXJ file with default settings (100MB shards, 3000 lines/chunk)
+    flat-cdxj-to-zipnum -o output_dir -i input.cdxj
 
     # Read from stdin (useful for pipelines)
-    cat merged.cdxj | cdxj-to-zipnum -o output_dir -i -
+    cat merged.cdxj | flat-cdxj-to-zipnum -o output_dir -i -
 
     # Convert gzipped input
-    cdxj-to-zipnum -o output_dir -i input.cdxj.gz
+    flat-cdxj-to-zipnum -o output_dir -i input.cdxj.gz
 
     # Pipeline from merge to ZipNum
-    merge-cdxj /data/*.cdxj - | cdxj-to-zipnum -o indexes -i -
+    merge-flat-cdxj - /data/*.cdxj | flat-cdxj-to-zipnum -o indexes -i -
 
 Advanced Examples:
 
     # Custom shard size (200MB) and chunk size (5000 lines)
-    cdxj-to-zipnum -o output_dir -i input.cdxj -s 200 -c 5000
+    flat-cdxj-to-zipnum -o output_dir -i input.cdxj -s 200 -c 5000
 
     # Custom base name and index/location filenames
-    cdxj-to-zipnum -o output_dir -i input.cdxj \\
+    flat-cdxj-to-zipnum -o output_dir -i input.cdxj \\
         --base arquivo-2023 \\
         --idx-file index.idx \\
         --loc-file locations.loc

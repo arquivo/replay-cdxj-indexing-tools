@@ -14,6 +14,6 @@ Modules:
 __version__ = "1.0.0"
 __author__ = "Arquivo.pt Team"
 
-from .merge.merge_sorted_files import merge_sorted_files, get_all_files
+from .merge.merge_flat_cdxj import merge_sorted_files, get_all_files
 
 __all__ = ["merge_sorted_files", "get_all_files", "__version__"]

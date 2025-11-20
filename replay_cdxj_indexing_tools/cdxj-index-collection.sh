@@ -126,8 +126,8 @@ check_dependencies() {
         missing=1
     fi
     
-    if ! command -v merge-cdxj &> /dev/null; then
-        log_error "merge-cdxj not found. Install: pip install -e ."
+    if ! command -v merge-flat-cdxj &> /dev/null; then
+        log_error "merge-flat-cdxj not found. Install: pip install -e ."
         missing=1
     fi
     
@@ -141,8 +141,8 @@ check_dependencies() {
         missing=1
     fi
     
-    if ! command -v cdxj-to-zipnum &> /dev/null; then
-        log_error "cdxj-to-zipnum not found. Install: pip install -e ."
+    if ! command -v flat-cdxj-to-zipnum &> /dev/null; then
+        log_error "flat-cdxj-to-zipnum not found. Install: pip install -e ."
         missing=1
     fi
     
@@ -457,11 +457,11 @@ echo ""
 # Build pipeline command (using pre-filtered files if blocklist was applied)
 log_info "Pipeline: merge → excessive → zipnum"
 
-merge-cdxj - "$PROCESS_DIR"/*.cdxj | \
+merge-flat-cdxj - "$PROCESS_DIR"/*.cdxj | \
     tee >(wc -l | xargs -I {} echo -e "  ${BLUE}→${NC} After merge: {} lines" >&2) | \
     filter-excessive-urls auto -i - -n "$EXCESSIVE_THRESHOLD" -v 2>&1 | \
     tee >(grep "output" | sed "s/^/  ${BLUE}→${NC} /" >&2) | \
-    cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n "$SHARD_SIZE" $COMPRESS
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n "$SHARD_SIZE" $COMPRESS
 
 echo ""
 log_success "Pipeline processing complete"
