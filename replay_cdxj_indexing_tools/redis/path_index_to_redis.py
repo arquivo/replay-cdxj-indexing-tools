@@ -292,7 +292,7 @@ def read_index_entries(input_path: str, verbose: bool = False) -> Iterator[Dict[
         )
 
 
-def submit_index_to_redis(
+def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     input_paths: List[str],
     collection_key: str,
     redis_host: str = "localhost",
@@ -370,6 +370,7 @@ def submit_index_to_redis(
             sys.exit(1)
 
     # Create Redis connection
+    redis_client: object = None  # type: ignore[assignment]
     if not dry_run:
         if verbose:
             if redis_socket:
@@ -387,11 +388,11 @@ def submit_index_to_redis(
             if use_cluster:
                 # Redis Cluster connection
                 # pylint: disable=no-member,possibly-used-before-assignment
-                redis_client = redis.RedisCluster(
+                redis_client = redis.RedisCluster(  # type: ignore[assignment]
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
-                    username=redis_username,
+                    username=redis_username,  # pylint: disable=unexpected-keyword-arg
                     ssl=use_ssl,
                     socket_timeout=timeout,
                     socket_connect_timeout=timeout,
@@ -399,23 +400,24 @@ def submit_index_to_redis(
             elif redis_socket:
                 # Unix socket connection
                 # pylint: disable=unexpected-keyword-arg
-                redis_client = redis.Redis(
+                redis_client = redis.Redis(  # type: ignore[assignment]
                     unix_socket_path=redis_socket,
                     db=redis_db,
                     password=redis_password,
-                    username=redis_username,
+                    username=redis_username,  # pylint: disable=unexpected-keyword-arg
                     socket_timeout=timeout,
                     socket_connect_timeout=timeout,
                 )
             else:
                 # Standard TCP connection
+                # type: ignore[assignment]
                 # pylint: disable=unexpected-keyword-arg
-                redis_client = redis.Redis(  # pylint: disable=unexpected-keyword-arg
+                redis_client = redis.Redis(
                     host=redis_host,
                     port=redis_port,
                     db=redis_db,
                     password=redis_password,
-                    username=redis_username,
+                    username=redis_username,  # pylint: disable=unexpected-keyword-arg
                     ssl=use_ssl,
                     socket_timeout=timeout,
                     socket_connect_timeout=timeout,
@@ -423,7 +425,7 @@ def submit_index_to_redis(
                 )
 
             # Test connection
-            redis_client.ping()
+            redis_client.ping()  # type: ignore[attr-defined]
             if verbose:
                 print("# Redis connection successful", file=sys.stderr)
 
@@ -469,7 +471,7 @@ def submit_index_to_redis(
                     if not dry_run:
                         try:
                             # Use pipeline for atomic batch submission
-                            pipe = redis_client.pipeline()
+                            pipe = redis_client.pipeline()  # type: ignore[attr-defined]
                             for filename, path in batch:
                                 pipe.hset(redis_key, filename, path)
                             pipe.execute()
@@ -494,7 +496,7 @@ def submit_index_to_redis(
             if batch:
                 if not dry_run:
                     try:
-                        pipe = redis_client.pipeline()
+                        pipe = redis_client.pipeline()  # type: ignore[attr-defined]
                         for filename, path in batch:
                             pipe.hset(redis_key, filename, path)
                         pipe.execute()
@@ -527,7 +529,7 @@ def submit_index_to_redis(
     # Close Redis connection
     if not dry_run:
         try:
-            redis_client.close()
+            redis_client.close()  # type: ignore[attr-defined]
         except Exception:
             pass
 
