@@ -155,7 +155,7 @@ make ci
 make ci-py38
 
 # Test all Python versions in parallel
-make --jobs 10 ci-all-python-versions
+make --jobs 10 ci-all
 ```
 
 ## Support
