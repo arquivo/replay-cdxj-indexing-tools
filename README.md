@@ -51,6 +51,7 @@ cdxj-index-collection COLLECTION-2024-11
 - **[filter-excessive-urls](docs/tools/filter-excessive-urls.md)** - Crawler trap removal
 - **[flat-cdxj-to-zipnum](docs/tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
 - **[zipnum-to-flat-cdxj](docs/tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
+- **[arclist-to-path-index](docs/tools/arclist-to-path-index.md)** - Convert arclist files to path index format
 
 ## Usage Examples
 

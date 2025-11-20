@@ -4,7 +4,12 @@ Submit pywb path index files to Redis databases for distributed web archive syst
 
 ## Overview
 
-This module provides tools for loading pywb path index (`.idx`) files into Redis, enabling fast distributed lookups for web archive replay systems. It's designed for high-performance scenarios where index data needs to be accessed by multiple replay workers.
+This module provides tools for loading pywb path index files into Redis, enabling fast distributed lookups for web archive replay systems. It's designed for high-performance scenarios where index data needs to be accessed by multiple replay workers.
+
+### Available Tools
+
+- **[arclist-to-path-index](../../docs/tools/arclist-to-path-index.md)** - Convert Arquivo.pt arclist files to path index format
+- **[path-index-to-redis](#command-line-usage)** - Load path index files into Redis database
 
 ## Features
 

@@ -120,6 +120,8 @@ format: ## Format code with black
 
 lint-fix: ## Automatically fix linting issues (format, sort imports, remove unused imports)
 	@echo "Automatically fixing linting issues..."
+	@echo "→ Removing trailing whitespace..."
+	@find replay_cdxj_indexing_tools/ tests/ -name "*.py" -exec sed -i 's/[[:space:]]*$$//' {} +
 	@echo "→ Removing unused imports with autoflake..."
 	$(AUTOFLAKE) --in-place --remove-all-unused-imports --remove-unused-variables --recursive replay_cdxj_indexing_tools/ tests/
 	@echo "→ Sorting imports with isort..."
