@@ -368,6 +368,17 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     # Create Redis connection
     redis_client: object = None  # type: ignore[assignment]
     if not dry_run:
+        # Warn if username is provided but not supported in current redis version
+        if redis_username:
+            print(
+                "Warning: Redis ACL username parameter is not supported in redis 2.10.6",
+                file=sys.stderr,
+            )
+            print(
+                "Warning: Username will be ignored. Upgrade to redis-py >= 3.4.0 for ACL support",
+                file=sys.stderr,
+            )
+
         if verbose:
             if redis_socket:
                 print(f"# Connecting to Redis via socket: {redis_socket}", file=sys.stderr)
@@ -380,39 +391,37 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 )
 
         try:
+            # Note: username parameter only supported in redis-py >= 3.4.0
+            # Current version (2.10.6) doesn't support it, so we don't pass it
+
             if use_cluster:
                 # Redis Cluster connection
                 # pylint: disable=no-member,possibly-used-before-assignment
-                redis_client = redis.RedisCluster(  # type: ignore[assignment]
+                # type: ignore[assignment,arg-type,call-overload]
+                redis_client = redis.RedisCluster(
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
-                    username=redis_username,  # pylint: disable=unexpected-keyword-arg
                     ssl=use_ssl,
                     socket_timeout=timeout,
                     socket_connect_timeout=timeout,
                 )
             elif redis_socket:
                 # Unix socket connection
-                # pylint: disable=unexpected-keyword-arg
-                redis_client = redis.Redis(  # type: ignore[assignment]
+                redis_client = redis.Redis(  # type: ignore[assignment,call-overload]
                     unix_socket_path=redis_socket,
                     db=redis_db,
                     password=redis_password,
-                    username=redis_username,  # pylint: disable=unexpected-keyword-arg
                     socket_timeout=timeout,
                     socket_connect_timeout=timeout,
                 )
             else:
                 # Standard TCP connection
-                # type: ignore[assignment]
-                # pylint: disable=unexpected-keyword-arg
-                redis_client = redis.Redis(
+                redis_client = redis.Redis(  # type: ignore[assignment,call-overload]
                     host=redis_host,
                     port=redis_port,
                     db=redis_db,
                     password=redis_password,
-                    username=redis_username,  # pylint: disable=unexpected-keyword-arg
                     ssl=use_ssl,
                     socket_timeout=timeout,
                     socket_connect_timeout=timeout,
@@ -436,7 +445,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             if verbose:
                 print(f"# Clearing existing hash key: {redis_key}", file=sys.stderr)
             try:
-                deleted = redis_client.delete(redis_key)
+                deleted = redis_client.delete(redis_key)  # type: ignore[attr-defined]
                 if verbose and deleted:
                     print("# Deleted existing hash key", file=sys.stderr)
             except Exception as e:
