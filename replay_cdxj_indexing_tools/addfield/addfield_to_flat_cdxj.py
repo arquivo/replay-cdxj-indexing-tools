@@ -14,7 +14,7 @@ COMMAND-LINE USAGE
 Basic field addition:
 
     # Add custom fields from command line
-    addfield-to-flat-cdxj -i input.cdxj -o output.cdxj -f collection=COLLECTION-2024-11
+    addfield-to-flat-cdxj -i input.cdxj -o output.cdxj -f collection=AWP999
       -f source=arquivo
 
     # Read from stdin, write to stdout (pipeline mode)

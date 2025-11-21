@@ -37,10 +37,31 @@ merge-flat-cdxj - file1.cdxj file2.cdxj | gzip > merged.cdxj.gz
 merge-flat-cdxj - *.cdxj | filter-blocklist -i - -b blocklist.txt -o clean.cdxj
 ```
 
+**Exclude files matching patterns:**
+```bash
+# Exclude open collections still being crawled
+merge-flat-cdxj merged.cdxj /data/indexes/ --exclude '*-open.cdxj'
+
+# Exclude temporary and open files
+merge-flat-cdxj merged.cdxj /data/indexes/ --exclude '*-tmp.cdxj' --exclude '*-open.cdxj'
+```
+
+**Verbose progress reporting:**
+```bash
+# Show which files are included/excluded
+merge-flat-cdxj merged.cdxj /data/indexes/ --exclude '*-open.cdxj' --verbose
+
+# Combine with compression
+merge-flat-cdxj - /data/indexes/ --exclude '*-open.cdxj' -v | gzip > merged.cdxj.gz
+```
+
 ### Options
 
 - **OUTPUT**: Output file path, or `-` for stdout
 - **INPUT**: Input CDXJ files or directories (will recursively find .cdxj files)
+- **--exclude PATTERN**: Exclude files matching glob pattern (can be used multiple times)
+- **-v, --verbose**: Enable verbose output to stderr (progress, exclusions, statistics)
+- **-q, --quiet**: Suppress all stderr output (overrides --verbose)
 
 Use `merge-flat-cdxj --help` for full help.
 
@@ -139,6 +160,34 @@ pt,sapo,www)/ 20230615120000 {...}
 
 Performance is primarily I/O bound - limited by disk read/write speed.
 
+## Arquivo.pt Use Case: Excluding Open Collections
+
+At Arquivo.pt, some collections are still being crawled and have files marked as "open" (e.g., `collection-open.cdxj`). These should be excluded from merges to avoid including incomplete data:
+
+```bash
+# Exclude all open collections
+merge-flat-cdxj complete_index.cdxj /data/indexes/ \
+    --exclude '*-open.cdxj' \
+    --verbose
+
+# Example verbose output to stderr:
+# [DISCOVER] Scanning directory: /data/indexes/
+# [INCLUDE] collection1.cdxj
+# [INCLUDE] collection2.cdxj
+# [EXCLUDE] collection3-open.cdxj (matches: *-open.cdxj)
+# [INCLUDE] collection4.cdxj
+# [DISCOVER] Directory /data/indexes/: 4 found, 1 excluded, 3 included
+# [SUMMARY] Total: 4 found, 1 excluded, 3 included
+# [MERGE] Starting merge of 3 files...
+# [MERGE] Complete: 15234567 lines written
+```
+
+**Benefits:**
+- Only stable, complete collections are merged
+- Progress visibility shows what's included/excluded
+- Stdout remains clean for pipeline compatibility
+- Can combine multiple exclusion patterns
+
 ## Use Cases
 
 ### 1. Parallel Indexing Merge
@@ -186,6 +235,22 @@ merge-flat-cdxj - /data/parts/*.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls remove -i - -b excessive.txt | \
     flat-cdxj-to-zipnum -o indexes -i -
+```
+
+### 5. Selective Merging with Exclusions
+
+Merge only stable indexes, excluding temporary or incomplete files:
+
+```bash
+# Exclude temporary work files and open collections
+merge-flat-cdxj production.cdxj /data/indexes/ \
+    --exclude '*-tmp.cdxj' \
+    --exclude '*-temp.cdxj' \
+    --exclude '*-open.cdxj' \
+    --verbose 2> merge.log
+
+# Check the log to see what was excluded
+cat merge.log
 ```
 
 ## Error Handling

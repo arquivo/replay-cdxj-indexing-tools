@@ -38,9 +38,9 @@ RUNNING THE TESTS
 
 TEST COVERAGE SUMMARY
 =====================
-Total: 25 tests across 3 test classes
+Total: 39 tests across 3 test classes
 
-1. TestGetAllFiles (5 tests) - File Collection Utilities
+1. TestGetAllFiles - File Collection Utilities
    Tests for the get_all_files() helper function that recursively discovers
    files from various input types (files, directories, mixed paths).
 
@@ -49,8 +49,16 @@ Total: 25 tests across 3 test classes
    - test_get_directory_recursive: Directory path returns all contained files
    - test_get_mixed_paths: Mix of files and directories handled correctly
    - test_get_empty_directory: Empty directory returns empty list (no errors)
+   - test_get_files_with_single_exclude_pattern: Exclude files matching one glob pattern
+   - test_get_files_with_multiple_exclude_patterns: Exclude with multiple patterns
+   - test_get_files_exclude_all: Pattern that excludes all files
+   - test_get_files_exclude_none: Pattern that matches nothing
+   - test_get_files_exclude_specific_file: Exclude a specific filename
+   - test_get_files_exclude_with_wildcards: Complex wildcard patterns
+   - test_get_files_verbose_output: Verbose mode outputs to stderr
+   - test_get_files_verbose_directory: Verbose output when scanning directories
 
-2. TestMergeSortedFiles (18 tests) - Core K-Way Merge Algorithm
+2. TestMergeSortedFiles - Core K-Way Merge Algorithm
    Tests for the merge_sorted_files() function covering normal operation,
    edge cases, special content types, and CDXJ-specific scenarios.
 
@@ -85,12 +93,19 @@ Total: 25 tests across 3 test classes
    - test_merge_with_custom_buffer_size: Custom buffer_size parameter (8192 bytes)
    - test_merge_to_stdout: Special output_file='-' writes to stdout instead of file
 
-3. TestIntegration (2 tests) - End-to-End Workflow Validation
+   Verbose Mode & Progress Reporting:
+   - test_merge_with_verbose_output: Verbose mode outputs progress to stderr
+   - test_merge_verbose_no_output_to_stdout: Verbose doesn't pollute stdout
+   - test_merge_quiet_mode: Non-verbose produces no stderr output
+
+3. TestIntegration - End-to-End Workflow Validation
    Integration tests that combine get_all_files() and merge_sorted_files()
    to validate complete real-world usage patterns.
 
    - test_merge_from_directory: Pass directory path directly, merges all files within
    - test_merge_from_nested_directories: Deep directory structures with files at multiple levels
+   - test_merge_with_exclusions: End-to-end merge with file exclusion patterns
+   - test_merge_arquivo_pt_workflow: Realistic Arquivo.pt workflow excluding open collections
 
 TEST DESIGN PRINCIPLES
 ======================
@@ -228,17 +243,25 @@ class TestGetAllFiles(unittest.TestCase):
         # test_dir/
         #   ├── file1.txt
         #   ├── file2.txt
+        #   ├── file-open.txt
+        #   ├── temp-file.tmp
         #   └── subdir/
         #       ├── file3.txt
+        #       ├── file3-open.txt
         #       └── nested/
-        #           └── file4.txt
+        #           ├── file4.txt
+        #           └── file4-temp.txt
 
         (self.test_path / "file1.txt").write_text("content1")
         (self.test_path / "file2.txt").write_text("content2")
+        (self.test_path / "file-open.txt").write_text("open content")
+        (self.test_path / "temp-file.tmp").write_text("temp content")
         (self.test_path / "subdir").mkdir()
         (self.test_path / "subdir" / "file3.txt").write_text("content3")
+        (self.test_path / "subdir" / "file3-open.txt").write_text("open content3")
         (self.test_path / "subdir" / "nested").mkdir()
         (self.test_path / "subdir" / "nested" / "file4.txt").write_text("content4")
+        (self.test_path / "subdir" / "nested" / "file4-temp.txt").write_text("temp content4")
 
     def tearDown(self):
         """Clean up temporary directory"""
@@ -260,11 +283,23 @@ class TestGetAllFiles(unittest.TestCase):
     def test_get_directory_recursive(self):
         """Test recursively getting files from a directory"""
         files = list(get_all_files([str(self.test_path)]))
-        self.assertEqual(len(files), 4)
+        self.assertEqual(len(files), 8)
 
         # Check all expected files are present
         file_names = {os.path.basename(f) for f in files}
-        self.assertEqual(file_names, {"file1.txt", "file2.txt", "file3.txt", "file4.txt"})
+        self.assertEqual(
+            file_names,
+            {
+                "file1.txt",
+                "file2.txt",
+                "file-open.txt",
+                "temp-file.tmp",
+                "file3.txt",
+                "file3-open.txt",
+                "file4.txt",
+                "file4-temp.txt",
+            },
+        )
 
     def test_get_mixed_paths(self):
         """Test getting files from mixed file and directory paths"""
@@ -272,12 +307,14 @@ class TestGetAllFiles(unittest.TestCase):
         subdir = str(self.test_path / "subdir")
         files = list(get_all_files([file1, subdir]))
 
-        # Should get file1 + 2 files from subdir
-        self.assertEqual(len(files), 3)
+        # Should get file1 + 4 files from subdir
+        self.assertEqual(len(files), 5)
         file_names = {os.path.basename(f) for f in files}
         self.assertIn("file1.txt", file_names)
         self.assertIn("file3.txt", file_names)
+        self.assertIn("file3-open.txt", file_names)
         self.assertIn("file4.txt", file_names)
+        self.assertIn("file4-temp.txt", file_names)
 
     def test_get_empty_directory(self):
         """Test getting files from an empty directory"""
@@ -285,6 +322,120 @@ class TestGetAllFiles(unittest.TestCase):
         empty_dir.mkdir()
         files = list(get_all_files([str(empty_dir)]))
         self.assertEqual(files, [])
+
+    def test_get_files_with_single_exclude_pattern(self):
+        """Test excluding files with a single glob pattern"""
+        files = list(get_all_files([str(self.test_path)], exclude_patterns=["*-open.txt"]))
+
+        # Should get all files except those ending with -open.txt
+        file_names = {os.path.basename(f) for f in files}
+        self.assertIn("file1.txt", file_names)
+        self.assertIn("file2.txt", file_names)
+        self.assertNotIn("file-open.txt", file_names)
+        self.assertNotIn("file3-open.txt", file_names)
+        self.assertEqual(len(files), 6)  # 8 total - 2 open files
+
+    def test_get_files_with_multiple_exclude_patterns(self):
+        """Test excluding files with multiple glob patterns"""
+        files = list(get_all_files([str(self.test_path)], exclude_patterns=["*-open.txt", "*.tmp"]))
+
+        # Should exclude both *-open.txt and *.tmp files
+        file_names = {os.path.basename(f) for f in files}
+        self.assertIn("file1.txt", file_names)
+        self.assertIn("file2.txt", file_names)
+        self.assertNotIn("file-open.txt", file_names)
+        self.assertNotIn("file3-open.txt", file_names)
+        self.assertNotIn("temp-file.tmp", file_names)
+        self.assertEqual(len(files), 5)  # 8 total - 2 open - 1 tmp
+
+    def test_get_files_exclude_all(self):
+        """Test pattern that excludes all files"""
+        files = list(get_all_files([str(self.test_path)], exclude_patterns=["*.txt", "*.tmp"]))
+
+        # All files should be excluded
+        self.assertEqual(len(files), 0)
+
+    def test_get_files_exclude_none(self):
+        """Test pattern that matches nothing"""
+        files = list(get_all_files([str(self.test_path)], exclude_patterns=["*.nonexistent"]))
+
+        # All files should be included
+        self.assertEqual(len(files), 8)
+
+    def test_get_files_exclude_specific_file(self):
+        """Test excluding a specific filename"""
+        files = list(get_all_files([str(self.test_path)], exclude_patterns=["file1.txt"]))
+
+        file_names = {os.path.basename(f) for f in files}
+        self.assertNotIn("file1.txt", file_names)
+        self.assertIn("file2.txt", file_names)
+        self.assertEqual(len(files), 7)
+
+    def test_get_files_exclude_with_wildcards(self):
+        """Test excluding with complex wildcard patterns"""
+        files = list(
+            get_all_files([str(self.test_path)], exclude_patterns=["*-temp.*", "*-open.*"])
+        )
+
+        file_names = {os.path.basename(f) for f in files}
+        self.assertNotIn("file-open.txt", file_names)
+        self.assertNotIn("file3-open.txt", file_names)
+        self.assertNotIn("file4-temp.txt", file_names)
+        self.assertEqual(len(files), 5)
+
+    def test_get_files_verbose_output(self):
+        """Test that verbose mode outputs to stderr"""
+        # Capture stderr
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr = StringIO()
+
+        try:
+            files = list(
+                get_all_files(
+                    [str(self.test_path / "file1.txt"), str(self.test_path / "file-open.txt")],
+                    exclude_patterns=["*-open.txt"],
+                    verbose=True,
+                )
+            )
+            stderr_output = captured_stderr.getvalue()
+        finally:
+            sys.stderr = old_stderr
+
+        # Check that file1.txt was included and file-open.txt was excluded
+        self.assertEqual(len(files), 1)
+        self.assertIn("file1.txt", os.path.basename(files[0]))
+
+        # Check stderr contains progress messages
+        self.assertIn("[INCLUDE]", stderr_output)
+        self.assertIn("file1.txt", stderr_output)
+        self.assertIn("[EXCLUDE]", stderr_output)
+        self.assertIn("file-open.txt", stderr_output)
+        self.assertIn("*-open.txt", stderr_output)  # Pattern name
+        self.assertIn("[SUMMARY]", stderr_output)
+
+    def test_get_files_verbose_directory(self):
+        """Test verbose output when scanning directories"""
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr = StringIO()
+
+        try:
+            files = list(
+                get_all_files([str(self.test_path)], exclude_patterns=["*-open.txt"], verbose=True)
+            )
+            stderr_output = captured_stderr.getvalue()
+        finally:
+            sys.stderr = old_stderr
+
+        # Should have 6 files (8 - 2 open files)
+        self.assertEqual(len(files), 6)
+
+        # Check stderr contains directory discovery messages
+        self.assertIn("[DISCOVER]", stderr_output)
+        self.assertIn("Scanning directory", stderr_output)
+        self.assertIn("[SUMMARY]", stderr_output)
+        self.assertIn("found", stderr_output)
+        self.assertIn("excluded", stderr_output)
+        self.assertIn("included", stderr_output)
 
 
 class TestMergeSortedFiles(unittest.TestCase):
@@ -671,6 +822,78 @@ class TestMergeSortedFiles(unittest.TestCase):
         self.assertEqual(len(result[0]), 10000)
         self.assertEqual(len(result[1]), 10000)
 
+    def test_merge_with_verbose_output(self):
+        """Test that verbose mode outputs progress to stderr"""
+        file1 = self.create_test_file("file1.txt", ["apple", "cherry"])
+        file2 = self.create_test_file("file2.txt", ["banana", "date"])
+        output = str(self.test_path / "output.txt")
+
+        # Capture stderr
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr = StringIO()
+
+        try:
+            merge_sorted_files([file1, file2], output, verbose=True)
+            stderr_output = captured_stderr.getvalue()
+        finally:
+            sys.stderr = old_stderr
+
+        # Verify file was created correctly
+        result = Path(output).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(result, ["apple", "banana", "cherry", "date"])
+
+        # Verify stderr contains progress messages
+        self.assertIn("[MERGE]", stderr_output)
+        self.assertIn("Starting merge", stderr_output)
+        self.assertIn("2 files", stderr_output)
+        self.assertIn("Complete", stderr_output)
+        self.assertIn("4 lines written", stderr_output)
+
+    def test_merge_verbose_no_output_to_stdout(self):
+        """Test that verbose mode doesn't pollute stdout"""
+        file1 = self.create_test_file("file1.txt", ["apple"])
+        file2 = self.create_test_file("file2.txt", ["banana"])
+
+        # Capture both stdout and stderr
+        old_stdout = sys.stdout
+        old_stderr = sys.stderr
+        sys.stdout = captured_stdout = StringIO()
+        sys.stderr = captured_stderr = StringIO()
+
+        try:
+            merge_sorted_files([file1, file2], "-", verbose=True)
+            stdout_output = captured_stdout.getvalue()
+            stderr_output = captured_stderr.getvalue()
+        finally:
+            sys.stdout = old_stdout
+            sys.stderr = old_stderr
+
+        # Stdout should only contain the merged data
+        self.assertEqual(stdout_output, "apple\nbanana\n")
+
+        # Stderr should contain progress messages
+        self.assertIn("[MERGE]", stderr_output)
+        self.assertNotIn("[MERGE]", stdout_output)
+
+    def test_merge_quiet_mode(self):
+        """Test that non-verbose mode (default) produces no stderr output"""
+        file1 = self.create_test_file("file1.txt", ["apple"])
+        file2 = self.create_test_file("file2.txt", ["banana"])
+        output = str(self.test_path / "output.txt")
+
+        # Capture stderr
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr = StringIO()
+
+        try:
+            merge_sorted_files([file1, file2], output, verbose=False)
+            stderr_output = captured_stderr.getvalue()
+        finally:
+            sys.stderr = old_stderr
+
+        # Stderr should be empty in non-verbose mode
+        self.assertEqual(stderr_output, "")
+
 
 class TestIntegration(unittest.TestCase):
     """Integration tests combining get_all_files and merge_sorted_files"""
@@ -722,6 +945,103 @@ class TestIntegration(unittest.TestCase):
         result = Path(output).read_text(encoding="utf-8").splitlines()
         expected = ["a", "b", "c", "d"]
         self.assertEqual(result, expected)
+
+    def test_merge_with_exclusions(self):
+        """Test end-to-end merge with file exclusions"""
+        # Create directory with mixed files
+        input_dir = self.test_path / "indexes"
+        input_dir.mkdir()
+
+        (input_dir / "collection1.cdxj").write_text("apple\ncherry\n", encoding="utf-8")
+        (input_dir / "collection2.cdxj").write_text("banana\ndate\n", encoding="utf-8")
+        (input_dir / "collection3-open.cdxj").write_text("should\nbe\nexcluded\n", encoding="utf-8")
+        (input_dir / "temp-file.tmp").write_text("also\nexcluded\n", encoding="utf-8")
+
+        # Get files with exclusions
+        files = list(get_all_files([str(input_dir)], exclude_patterns=["*-open.cdxj", "*.tmp"]))
+        output = str(self.test_path / "merged.cdxj")
+
+        merge_sorted_files(files, output)
+
+        result = Path(output).read_text(encoding="utf-8").splitlines()
+        expected = ["apple", "banana", "cherry", "date"]
+        self.assertEqual(result, expected)
+
+        # Verify excluded content is not present
+        result_text = "\n".join(result)
+        self.assertNotIn("should", result_text)
+        self.assertNotIn("excluded", result_text)
+        self.assertNotIn("also", result_text)
+
+    def test_merge_arquivo_pt_workflow(self):
+        """Test realistic Arquivo.pt workflow with open collections excluded"""
+        # Simulate Arquivo.pt's directory structure
+        indexes_dir = self.test_path / "arquivo_indexes"
+        indexes_dir.mkdir()
+
+        # Create collection CDXJ files (Portuguese web archives)
+        (indexes_dir / "roteiro.cdxj").write_text(
+            'pt,aas)/health 19961013210146 {"status": "200", "url": "http://www.aas.pt/health/"}\n'
+            'pt,governo)/index 19970101000000 {"status": "200", "url": "http://www.governo.pt/index"}\n',
+            encoding="utf-8",
+        )
+
+        (indexes_dir / "publico.cdxj").write_text(
+            'pt,publico)/news 20200101000000 {"status": "200", "url": "http://www.publico.pt/news"}\n'
+            'pt,sapo)/portal 20200201000000 {"status": "200", "url": "http://www.sapo.pt/portal"}\n',
+            encoding="utf-8",
+        )
+
+        # Create an "open" collection still being crawled (should be excluded)
+        (indexes_dir / "current-open.cdxj").write_text(
+            'pt,test)/incomplete 20231101000000 {"status": "200", "url": "http://www.test.pt/incomplete"}\n',
+            encoding="utf-8",
+        )
+
+        # Capture stderr for verbose output
+        old_stderr = sys.stderr
+        sys.stderr = captured_stderr = StringIO()
+
+        try:
+            # Get files excluding open collections
+            files = list(
+                get_all_files([str(indexes_dir)], exclude_patterns=["*-open.cdxj"], verbose=True)
+            )
+            output = str(self.test_path / "complete_index.cdxj")
+            merge_sorted_files(files, output, verbose=True)
+            stderr_output = captured_stderr.getvalue()
+        finally:
+            sys.stderr = old_stderr
+
+        # Verify only stable collections are merged
+        result = Path(output).read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(result), 4)
+
+        # Verify proper SURT ordering
+        self.assertTrue(result[0].startswith("pt,aas)/health"))
+        self.assertTrue(result[1].startswith("pt,governo)/index"))
+        self.assertTrue(result[2].startswith("pt,publico)/news"))
+        self.assertTrue(result[3].startswith("pt,sapo)/portal"))
+
+        # Verify open collection is not included
+        result_text = "\n".join(result)
+        self.assertNotIn("current-open.cdxj", result_text)
+        self.assertNotIn("incomplete", result_text)
+        self.assertNotIn("test.pt", result_text)
+
+        # Verify verbose output shows exclusion
+        self.assertIn("[EXCLUDE]", stderr_output)
+        self.assertIn("current-open.cdxj", stderr_output)
+        self.assertIn("*-open.cdxj", stderr_output)
+        self.assertIn("[INCLUDE]", stderr_output)
+        self.assertIn("roteiro.cdxj", stderr_output)
+        self.assertIn("publico.cdxj", stderr_output)
+        self.assertIn("[SUMMARY]", stderr_output)
+        self.assertIn("3 found", stderr_output)  # Total files found
+        self.assertIn("1 excluded", stderr_output)  # Open file excluded
+        self.assertIn("2 included", stderr_output)  # Stable collections included
+        self.assertIn("[MERGE]", stderr_output)
+        self.assertIn("4 lines written", stderr_output)
 
 
 if __name__ == "__main__":
