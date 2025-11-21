@@ -182,8 +182,6 @@ Example test structure:
                 result = f.readlines()
             self.assertEqual(result, ["line1\\n", "line2\\n", "line3\\n", "line4\\n"])
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
         file2 = self.create_test_file("file2.txt", ["line3", "line4"])
         output = str(self.test_path / "output.txt")
 

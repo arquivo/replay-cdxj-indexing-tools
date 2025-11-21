@@ -26,6 +26,7 @@ Welcome to the CDXJ Indexing Tools documentation. This guide covers everything f
 
 Individual tool documentation:
 
+- **[addfield-to-flat-cdxj](tools/addfield-to-flat-cdxj.md)** - Add custom JSON fields to CDXJ records
 - **[merge-flat-cdxj](tools/merge-flat-cdxj.md)** - K-way merge of sorted flat CDXJ files
 - **[filter-blocklist](tools/filter-blocklist.md)** - Filter by blocklist patterns
 - **[filter-excessive-urls](tools/filter-excessive-urls.md)** - Remove crawler traps
@@ -71,6 +72,11 @@ Individual tool documentation:
        │
        ▼
 ┌─────────────────────┐
+│  Parallel Addfield  │ ← addfield-to-flat-cdxj (optional)
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
 │   Merge Indexes     │ ← merge-flat-cdxj
 └──────┬──────────────┘
        │
@@ -107,6 +113,9 @@ cdxj-index-collection COLLECTION-2024-11
 ### Individual Tools
 
 ```bash
+# Add fields to CDXJ
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj -f collection=COL-2024
+
 # Merge CDXJ files
 merge-flat-cdxj output.cdxj input1.cdxj input2.cdxj
 
@@ -135,7 +144,13 @@ arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 ### Unix Pipe Workflow
 
 ```bash
-# CDXJ pipeline
+# CDXJ pipeline with field addition
+addfield-to-flat-cdxj -i input.cdxj -f collection=COL-2024 | \
+    filter-blocklist -i - -b blocklist.txt | \
+    filter-excessive-urls auto -i - -n 1000 | \
+    flat-cdxj-to-zipnum -o indexes/ -i - --compress
+
+# CDXJ pipeline from merge
 merge-flat-cdxj - *.cdxj | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
@@ -149,6 +164,7 @@ arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 
 | Tool | Purpose | Documentation |
 |------|---------|---------------|
+| `addfield-to-flat-cdxj` | Add custom JSON fields to CDXJ records | [docs](tools/addfield-to-flat-cdxj.md) |
 | `merge-flat-cdxj` | Merge multiple sorted flat CDXJ files | [docs](tools/merge-flat-cdxj.md) |
 | `filter-blocklist` | Remove blocked content | [docs](tools/filter-blocklist.md) |
 | `filter-excessive-urls` | Remove crawler traps | [docs](tools/filter-excessive-urls.md) |

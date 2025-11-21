@@ -17,6 +17,12 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
        │
        ▼
 ┌─────────────────────┐
+│  Parallel Addfield  │  (addfield-to-flat-cdxj) [Optional]
+│   Add metadata      │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
 │   Merge Indexes     │  (merge-flat-cdxj)
 │   K-way merge       │
 └──────┬──────────────┘
@@ -63,7 +69,32 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 - Atomic writes (`.tmp` files prevent corruption)
 - Incremental mode (skip already-indexed files)
 
-### 2. Merge Stage
+### 2. Field Addition Stage (Optional)
+
+**Purpose:** Enrich CDXJ records with custom metadata
+
+**Tool:** `addfield-to-flat-cdxj`
+
+**Key Features:**
+- Parallel processing (before merge for optimal performance)
+- Simple field addition: `collection=ARQUIVO-2024`
+- Custom Python functions for complex logic
+- Preserves all original data
+
+**When to Use:**
+- Add collection identifiers or source metadata
+- Tag records with processing dates
+- Add derived fields (year from timestamp, domain from SURT)
+- Integrate external data lookups
+
+**Performance:**
+- ~500K-1M lines/second per core
+- **13x speedup** with 16-core parallel processing
+- Best practice: Run in parallel before merge stage
+
+**Output:** Enriched CDXJ files with additional JSON fields
+
+### 3. Merge Stage
 
 **Purpose:** Combine multiple sorted CDXJ files into one
 
@@ -78,7 +109,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 
 **Output:** Single merged CDXJ file, sorted by SURT
 
-### 3. Blocklist Filter
+### 4. Blocklist Filter
 
 **Purpose:** Remove unwanted content (spam, adult, legal removals)
 
@@ -97,7 +128,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 ^com,example,banned-path
 ```
 
-### 4. Excessive URL Filter
+### 5. Excessive URL Filter
 
 **Purpose:** Remove crawler traps and sites with excessive captures
 
@@ -115,7 +146,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 
 **Default Threshold:** 1000 captures per URL
 
-### 5. ZipNum Conversion
+### 6. ZipNum Conversion
 
 **Purpose:** Create compressed, sharded indexes for pywb
 

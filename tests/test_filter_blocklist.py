@@ -20,8 +20,6 @@ Real-World Data:
 Tests use authentic Portuguese domain patterns and realistic blocklist scenarios
 from Arquivo.pt web archive processing.
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 """
 
 import os

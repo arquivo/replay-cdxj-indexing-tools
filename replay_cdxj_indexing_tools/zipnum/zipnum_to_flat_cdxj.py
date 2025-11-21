@@ -104,8 +104,6 @@ zipnum-to-flat-cdxj -i base.idx | gzip -9 > recompressed.cdxj.gz
 zipnum-to-flat-cdxj -i base.idx > temp.cdxj
 merge-cdxj output.cdxj temp.cdxj other.cdxj
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 """
 
 import gzip

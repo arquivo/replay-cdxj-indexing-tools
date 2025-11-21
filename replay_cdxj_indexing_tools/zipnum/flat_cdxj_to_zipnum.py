@@ -120,7 +120,7 @@ pywb automatically uses the .loc file to locate shard files.
 By default pywb reads max 10 chunks/blocks. For more, increase max_blocks
 in pywb configuration.
 
-Author: Ivo Branco / GitHub Copilot
+
 """
 
 import gzip

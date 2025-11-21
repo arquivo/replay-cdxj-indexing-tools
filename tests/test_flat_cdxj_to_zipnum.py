@@ -194,8 +194,6 @@ Integration with pywb:
 
     # pywb automatically uses the .loc file to locate shard files
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 - **Integration Testing**: Tests the complete pipeline from input to output
 - **File Format Validation**: Verifies correct ZipNum format structure
 - **Error Handling**: Tests proper handling of edge cases and invalid inputs

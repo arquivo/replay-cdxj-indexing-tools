@@ -62,8 +62,6 @@ PYTHON API
 
     print(f"Kept: {kept}, Blocked: {blocked}")
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 """
 
 import argparse

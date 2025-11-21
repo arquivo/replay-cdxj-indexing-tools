@@ -25,7 +25,52 @@ pip install git+https://github.com/arquivo/replay-cdxj-indexing-tools.git
 
 ## Usage Examples
 
-### 1. Merge CDXJ Files as a Library
+### 1. Add Fields to CDXJ Records
+
+#### Command-Line
+
+```bash
+# Add simple fields
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
+    -f collection=ARQUIVO-2024 \
+    -f source=web
+
+# Use custom Python function
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
+    --function addfield_year.py
+
+# Parallel processing (recommended)
+parallel -j 16 \
+    'addfield-to-flat-cdxj -i {} -o {.}.enriched.cdxj -f collection=COL' \
+    ::: *.cdxj
+```
+
+#### Python API
+
+```python
+from replay_cdxj_indexing_tools.addfield.addfield_to_flat_cdxj import addfield_to_cdxj
+
+# Add simple fields
+processed, skipped = addfield_to_cdxj(
+    'input.cdxj',
+    'output.cdxj',
+    fields={'collection': 'ARQUIVO-2024', 'source': 'web'}
+)
+
+# Use custom function
+def my_addfield(surt_key, timestamp, json_data):
+    year = timestamp[:4]
+    json_data['year'] = year
+    return json_data
+
+processed, skipped = addfield_to_cdxj(
+    'input.cdxj',
+    'output.cdxj',
+    addfield_func=my_addfield
+)
+```
+
+### 2. Merge CDXJ Files as a Library
 
 ```python
 from cdxj_indexing import merge_sorted_files
@@ -35,7 +80,7 @@ files = ['index1.cdxj', 'index2.cdxj']
 merge_sorted_files(files, 'merged.cdxj')
 ```
 
-### 2. Merge Files from Directories
+### 3. Merge Files from Directories
 
 ```python
 from cdxj_indexing import get_all_files, merge_sorted_files
@@ -50,7 +95,7 @@ all_files = list(get_all_files([
 merge_sorted_files(all_files, 'complete_index.cdxj')
 ```
 
-### 3. Command-Line Usage
+### 4. Command-Line Usage
 
 ```bash
 # Simple merge
@@ -63,7 +108,7 @@ merge-flat-cdxj merged.cdxj /path/to/dir1 /path/to/dir2 file3.cdxj
 merge-flat-cdxj - *.cdxj | gzip > merged.cdxj.gz
 ```
 
-### 4. Using Shell Scripts
+### 5. Using Shell Scripts
 
 ```bash
 # Run full incremental indexing pipeline

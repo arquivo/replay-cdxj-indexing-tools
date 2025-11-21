@@ -51,8 +51,6 @@ PYTHON API
     # One-pass processing
     process_pipeline('input.cdxj', 'output.cdxj', threshold=1000)
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 """
 
 import argparse

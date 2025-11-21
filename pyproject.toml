@@ -63,6 +63,7 @@ flat-cdxj-to-zipnum = "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum:mai
 zipnum-to-flat-cdxj = "replay_cdxj_indexing_tools.zipnum.zipnum_to_flat_cdxj:main"
 filter-excessive-urls = "replay_cdxj_indexing_tools.filter.excessive_urls:main"
 filter-blocklist = "replay_cdxj_indexing_tools.filter.blocklist:main"
+addfield-to-flat-cdxj = "replay_cdxj_indexing_tools.addfield.addfield_to_flat_cdxj:main"
 cdxj-index-collection = "replay_cdxj_indexing_tools.process_collection_wrapper:main"
 arclist-to-path-index = "replay_cdxj_indexing_tools.arclist_to_path_index:main"
 path-index-to-redis = "replay_cdxj_indexing_tools.redis.path_index_to_redis:main"

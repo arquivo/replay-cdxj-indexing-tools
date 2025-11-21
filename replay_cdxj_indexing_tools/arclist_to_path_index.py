@@ -155,8 +155,6 @@ NOTES
 - Output is compatible with path-index-to-redis tool
 - For folder mode, all *.txt files in the folder are processed
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 """
 
 import argparse

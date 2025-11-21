@@ -22,8 +22,6 @@ Real-World Data:
 Tests use authentic Portuguese domain SURT keys and realistic scenarios
 from Arquivo.pt web archive processing.
 
-Author: Ivo Branco / GitHub Copilot
-Date: November 2025
 """
 
 import os
