@@ -319,7 +319,6 @@ file.warc.gz → file.cdxj.tmp → file.cdxj
 - **Python:** 3.7+ (tested: 3.7-3.12)
 - **GNU parallel:** For parallel indexing
 - **pywb:** CDX indexer (`cdx-indexer`)
-- **Disk space:** 2-3x input WARC size
 
 ### Python Packages
 
