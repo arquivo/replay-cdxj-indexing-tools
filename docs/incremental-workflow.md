@@ -22,12 +22,12 @@ The incremental indexing works by:
 Process the complete collection for the first time:
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 ```
 
 This creates:
-- `/tmp/cdxj-processing/COLLECTION-2024-11/indexes/*.cdxj` - Individual WARC indexes
-- `/data/zipnum/COLLECTION-2024-11/` - Final ZipNum output
+- `/tmp/cdxj-processing/AWP999/indexes/*.cdxj` - Individual WARC indexes
+- `/data/zipnum/AWP999/` - Final ZipNum output
 
 **Important:** Keep the indexes directory (`--keep-temp` or move it to persistent storage)
 
@@ -36,7 +36,7 @@ This creates:
 After your daily crawl adds new WARCs, run:
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 ```
 
 This will:
@@ -54,10 +54,10 @@ For daily runs where you regenerate everything:
 
 ```bash
 # Day 1: Full indexing
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 
 # Day 2+: Incremental (indexes in /tmp)
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 ```
 
 **Pros:** Simple, no storage management needed  
@@ -72,12 +72,12 @@ Keep indexes in persistent storage for faster recovery:
 PERSISTENT_INDEXES="/data/cdxj_indexes"
 
 # Day 1: Full indexing with persistent temp
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --temp-dir "$PERSISTENT_INDEXES" \
     --keep-temp
 
 # Day 2+: Incremental with same temp dir
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --temp-dir "$PERSISTENT_INDEXES" \
     --incremental \
     --keep-temp
@@ -92,11 +92,11 @@ Use dedicated directory structure per collection:
 
 ```bash
 # Setup directories
-mkdir -p /data/cdxj_incremental/COLLECTION-2024-11
-mkdir -p /data/zipnum/COLLECTION-2024-11
+mkdir -p /data/cdxj_incremental/AWP999
+mkdir -p /data/zipnum/AWP999
 
 # Daily run
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --temp-dir /data/cdxj_incremental \
     --incremental \
     --keep-temp
@@ -110,7 +110,7 @@ Automated daily processing:
 #!/bin/bash
 # /etc/cron.daily/arquivo-indexing
 
-COLLECTION="COLLECTION-2024-11"
+COLLECTION="AWP999"
 SCRIPT_DIR="/opt/replay-cdxj-indexing-tools"
 LOG_DIR="/var/log/arquivo/indexing"
 DATE=$(date +%Y%m%d)
@@ -190,7 +190,7 @@ Incremental mode dramatically reduces processing time:
 **Solution:** Use `--temp-dir` with persistent storage
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --temp-dir /data/cdxj_incremental \
     --keep-temp
 ```
@@ -211,7 +211,7 @@ The script uses **atomic writes** to prevent corrupted indexes:
 # Script will automatically:
 # 1. Detect and clean up .tmp files from interrupted run
 # 2. Re-index any WARCs that weren't completed
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 ```
 
 ### Some WARCs Not Being Indexed
@@ -221,10 +221,10 @@ The script uses **atomic writes** to prevent corrupted indexes:
 
 ```bash
 # Find and delete specific index
-rm /data/cdxj_incremental/COLLECTION-2024-11/indexes/problematic.warc.gz.cdxj
+rm /data/cdxj_incremental/AWP999/indexes/problematic.warc.gz.cdxj
 
 # Re-run incremental (will only index deleted ones)
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 ```
 
 ### Force Full Re-Index
@@ -234,10 +234,10 @@ rm /data/cdxj_incremental/COLLECTION-2024-11/indexes/problematic.warc.gz.cdxj
 
 ```bash
 # Delete all indexes
-rm -rf /data/cdxj_incremental/COLLECTION-2024-11/indexes/
+rm -rf /data/cdxj_incremental/AWP999/indexes/
 
 # Full re-index
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 ```
 
 ### Pipeline Stage Failed
@@ -247,13 +247,13 @@ rm -rf /data/cdxj_incremental/COLLECTION-2024-11/indexes/
 
 ```bash
 # Run with temp file preservation
-./cdxj-index-collection COLLECTION-2024-11 --incremental --keep-temp
+./cdxj-index-collection AWP999 --incremental --keep-temp
 
 # Check intermediate files
-ls -lh /tmp/cdxj-processing/COLLECTION-2024-11/indexes/
+ls -lh /tmp/cdxj-processing/AWP999/indexes/
 
 # Manually run failed stage
-merge-flat-cdxj test.cdxj /tmp/cdxj-processing/COLLECTION-2024-11/indexes/*.cdxj
+merge-flat-cdxj test.cdxj /tmp/cdxj-processing/AWP999/indexes/*.cdxj
 ```
 
 ## Monitoring
@@ -262,7 +262,7 @@ merge-flat-cdxj test.cdxj /tmp/cdxj-processing/COLLECTION-2024-11/indexes/*.cdxj
 
 ```bash
 # Count indexed vs total WARCs
-COLLECTION="COLLECTION-2024-11"
+COLLECTION="AWP999"
 TOTAL_WARCS=$(find /data/collections/$COLLECTION -name "*.warc.gz" | wc -l)
 INDEXED=$(ls /data/cdxj_incremental/$COLLECTION/indexes/*.cdxj 2>/dev/null | wc -l)
 
@@ -276,10 +276,10 @@ echo "Remaining: $((TOTAL_WARCS - INDEXED))"
 
 ```bash
 # WARCs added in last 24 hours
-find /data/collections/COLLECTION-2024-11 -name "*.warc.gz" -mtime -1
+find /data/collections/AWP999 -name "*.warc.gz" -mtime -1
 
 # Check if they're indexed
-for warc in $(find /data/collections/COLLECTION-2024-11 -name "*.warc.gz" -mtime -1); do
+for warc in $(find /data/collections/AWP999 -name "*.warc.gz" -mtime -1); do
     cdxj="${warc}.cdxj"
     if [ -f "$cdxj" ]; then
         echo "✓ $warc (indexed)"
@@ -293,10 +293,10 @@ done
 
 ```bash
 # Watch real-time progress
-watch -n 5 'ls /tmp/cdxj-processing/COLLECTION-2024-11/indexes/*.cdxj 2>/dev/null | wc -l'
+watch -n 5 'ls /tmp/cdxj-processing/AWP999/indexes/*.cdxj 2>/dev/null | wc -l'
 
 # Check output size
-du -sh /data/zipnum/COLLECTION-2024-11/
+du -sh /data/zipnum/AWP999/
 ```
 
 ## See Also

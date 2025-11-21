@@ -10,9 +10,9 @@
 #   ./process-collection.sh <collection_name> [options]
 #
 # Examples:
-#   ./process-collection.sh COLLECTION-2024-11
-#   ./process-collection.sh COLLECTION-2024-11 --blocklist /path/to/blocklist.txt
-#   ./process-collection.sh COLLECTION-2024-11 --threshold 5000 --jobs 16
+#   ./process-collection.sh AWP999
+#   ./process-collection.sh AWP999 --blocklist /path/to/blocklist.txt
+#   ./process-collection.sh AWP999 --threshold 5000 --jobs 16
 #
 # Requirements:
 #   - GNU parallel (sudo apt-get install parallel)
@@ -50,7 +50,7 @@ Usage: $0 <collection_name> [options]
 Process an Arquivo.pt web archive collection through the complete CDXJ pipeline.
 
 Arguments:
-  collection_name       Name of the collection (e.g., COLLECTION-2024-11)
+  collection_name       Name of the collection (e.g., AWP999)
 
 Options:
   --blocklist FILE      Path to blocklist file (default: $BLOCKLIST_DIR/$DEFAULT_BLOCKLIST)
@@ -69,19 +69,19 @@ Options:
 
 Examples:
   # Process collection with defaults
-  $0 COLLECTION-2024-11
+  $0 AWP999
 
   # Process with custom blocklist and threshold
-  $0 COLLECTION-2024-11 --blocklist /path/to/custom.txt --threshold 5000
+  $0 AWP999 --blocklist /path/to/custom.txt --threshold 5000
 
   # Process with more parallel jobs
-  $0 COLLECTION-2024-11 --jobs 32
+  $0 AWP999 --jobs 32
 
   # Process and keep intermediate files
-  $0 COLLECTION-2024-11 --keep-temp
+  $0 AWP999 --keep-temp
 
   # Daily incremental update (only index new WARCs)
-  $0 COLLECTION-2024-11 --incremental
+  $0 AWP999 --incremental
 
 Directory Structure:
   Input:  $COLLECTIONS_BASE/<collection_name>/*.warc.gz

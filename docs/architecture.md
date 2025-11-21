@@ -208,7 +208,7 @@ com,example)/ 20240101120000 {"url": "http://example.com/", "mime": "text/html",
 
 Process entire collection from scratch:
 ```bash
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 ```
 
 **Use when:**
@@ -220,7 +220,7 @@ Process entire collection from scratch:
 
 Process only new/modified WARCs:
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 ```
 
 **Use when:**

@@ -338,12 +338,12 @@ The `cdxj-index-collection.sh` script has built-in support:
 
 ```bash
 # Add fields to all indexed WARCs
-./cdxj-index-collection.sh COLLECTION-2024-11 \
+./cdxj-index-collection.sh AWP999 \
     --addfield collection=ARQUIVO-2024 \
     --addfield source=web
 
 # Or use custom function
-./cdxj-index-collection.sh COLLECTION-2024-11 \
+./cdxj-index-collection.sh AWP999 \
     --addfield-func my_addfield.py
 ```
 
@@ -674,9 +674,9 @@ def addfield(surt_key, timestamp, json_data):
 
 ```bash
 addfield-to-flat-cdxj \
-    -i collection-2024-11.cdxj \
+    -i AWP999.cdxj \
     -o enriched.cdxj \
-    -f collection=COLLECTION-2024-11
+    -f collection=AWP999
 ```
 
 ### Add Multiple Metadata Fields

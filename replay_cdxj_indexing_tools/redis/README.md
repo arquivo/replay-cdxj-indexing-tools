@@ -194,11 +194,11 @@ Generate index and submit to Redis in one workflow:
 
 ```bash
 # Process collection and submit to Redis
-cdxj-index-collection COLLECTION-2024-11
+cdxj-index-collection AWP999
 
 # Submit generated index
 path-index-to-redis \
-    -i /data/zipnum/COLLECTION-2024-11/*.idx \
+    -i /data/zipnum/AWP999/*.idx \
     --prefix "archive:2024-11:" \
     --verbose
 ```

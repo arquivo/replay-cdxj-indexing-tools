@@ -169,7 +169,7 @@ chmod +x *.sh
 
 1. **Check directory:**
    ```bash
-   ls /data/collections/COLLECTION-2024-11/
+   ls /data/collections/AWP999/
    ```
 
 2. **Verify WARC extension:**
@@ -181,7 +181,7 @@ chmod +x *.sh
 
 3. **Custom collections dir:**
    ```bash
-   ./cdxj-index-collection COLLECTION-2024-11 \
+   ./cdxj-index-collection AWP999 \
        --collections-dir /custom/path
    ```
 
@@ -206,14 +206,14 @@ No space left on device
 
 3. **Use different temp location:**
    ```bash
-   ./cdxj-index-collection COLLECTION-2024-11 \
+   ./cdxj-index-collection AWP999 \
        --temp-dir /mnt/large-disk/temp
    ```
 
 4. **Estimate space needed:**
    ```bash
    # WARC size
-   du -sh /data/collections/COLLECTION-2024-11/
+   du -sh /data/collections/AWP999/
    # Need 2-3x for processing
    ```
 
@@ -234,7 +234,7 @@ Killed
 
 2. **Reduce parallel jobs:**
    ```bash
-   ./cdxj-index-collection COLLECTION-2024-11 --jobs 8
+   ./cdxj-index-collection AWP999 --jobs 8
    ```
 
 3. **Increase swap:**
@@ -304,7 +304,7 @@ gzip: invalid compressed data
 
 2. **Use custom blocklist:**
    ```bash
-   ./cdxj-index-collection COLLECTION-2024-11 \
+   ./cdxj-index-collection AWP999 \
        --blocklist /path/to/your-blocklist.txt
    ```
 
@@ -313,7 +313,7 @@ gzip: invalid compressed data
    # Warning: This will process ALL content
    # Modify script or use empty blocklist
    touch /tmp/empty-blocklist.txt
-   ./cdxj-index-collection COLLECTION-2024-11 \
+   ./cdxj-index-collection AWP999 \
        --blocklist /tmp/empty-blocklist.txt
    ```
 
@@ -331,7 +331,7 @@ gzip: invalid compressed data
    nproc
    
    # Use more cores
-   ./cdxj-index-collection COLLECTION-2024-11 --jobs 32
+   ./cdxj-index-collection AWP999 --jobs 32
    ```
 
 2. **Check I/O bottleneck:**
@@ -340,7 +340,7 @@ gzip: invalid compressed data
    iostat -x 1
    
    # Use faster storage for temp files
-   ./cdxj-index-collection COLLECTION-2024-11 \
+   ./cdxj-index-collection AWP999 \
        --temp-dir /fast-ssd/temp
    ```
 
@@ -399,13 +399,13 @@ gzip: invalid compressed data
 2. **Limit parallel jobs:**
    ```bash
    # Reduce from default
-   ./cdxj-index-collection COLLECTION-2024-11 --jobs 8
+   ./cdxj-index-collection AWP999 --jobs 8
    ```
 
 3. **Use incremental mode:**
    ```bash
    # Process only new files
-   ./cdxj-index-collection COLLECTION-2024-11 --incremental
+   ./cdxj-index-collection AWP999 --incremental
    ```
 
 ## Data Issues
@@ -523,7 +523,7 @@ JSONDecodeError: Expecting value
 
 1. **Check ZipNum location:**
    ```bash
-   ls /data/zipnum/COLLECTION-2024-11/
+   ls /data/zipnum/AWP999/
    # Should have: cdx-*.gz and summary.idx
    ```
 
@@ -532,7 +532,7 @@ JSONDecodeError: Expecting value
    # config.yaml
    collections:
      collection-name:
-       index_paths: /data/zipnum/COLLECTION-2024-11/
+       index_paths: /data/zipnum/AWP999/
    ```
 
 3. **Test index directly:**
@@ -542,7 +542,7 @@ JSONDecodeError: Expecting value
 
 4. **Rebuild ZipNum:**
    ```bash
-   flat-cdxj-to-zipnum -o /data/zipnum/COLLECTION-2024-11/ \
+   flat-cdxj-to-zipnum -o /data/zipnum/AWP999/ \
        -i final.cdxj -n 3000 --compress
    ```
 
@@ -632,7 +632,7 @@ merge-flat-cdxj --version
 filter-blocklist -i input.cdxj -b blocklist.txt -o output.cdxj -v
 
 # Debug mode for script
-bash -x ./cdxj-index-collection COLLECTION-2024-11
+bash -x ./cdxj-index-collection AWP999
 ```
 
 ### Report issues
@@ -641,7 +641,7 @@ When reporting issues, include:
 
 1. **Command used:**
    ```bash
-   ./cdxj-index-collection COLLECTION-2024-11 --jobs 32
+   ./cdxj-index-collection AWP999 --jobs 32
    ```
 
 2. **Error message:**
@@ -658,7 +658,7 @@ When reporting issues, include:
 4. **Logs:**
    ```bash
    # Capture full output
-   ./cdxj-index-collection COLLECTION-2024-11 2>&1 | tee error.log
+   ./cdxj-index-collection AWP999 2>&1 | tee error.log
    ```
 
 ## See Also

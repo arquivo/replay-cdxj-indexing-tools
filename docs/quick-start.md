@@ -24,7 +24,7 @@ pip install -e .
 Process a full WARC collection automatically:
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 ```
 
 This single command:
@@ -34,7 +34,7 @@ This single command:
 4. Removes excessive URLs
 5. Converts to ZipNum format
 
-**Output:** `COLLECTION-2024-11.zip` ready for pywb
+**Output:** `AWP999.zip` ready for pywb
 
 ### Option 2: Individual Tools
 

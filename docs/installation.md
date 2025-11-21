@@ -43,7 +43,7 @@ docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
 
 # Process a collection
 docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools:latest \
-    cdxj-index-collection COLLECTION-2024-11 --incremental
+    cdxj-index-collection AWP999 --incremental
 ```
 
 ### Building Docker Image Locally

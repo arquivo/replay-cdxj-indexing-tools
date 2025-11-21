@@ -118,9 +118,9 @@ Tag all records with collection information:
 
 ```bash
 addfield-to-flat-cdxj \
-    -i collection-2024-11.cdxj \
+    -i AWP999.cdxj \
     -o enriched.cdxj \
-    -f collection=COLLECTION-2024-11 \
+    -f collection=AWP999 \
     -f source=arquivo \
     -f indexed_date=$(date +%Y%m%d)
 ```
@@ -130,7 +130,7 @@ addfield-to-flat-cdxj \
 {
   "url": "...",
   "status": "200",
-  "collection": "COLLECTION-2024-11",
+  "collection": "AWP999",
   "source": "arquivo",
   "indexed_date": "20241121"
 }
@@ -285,13 +285,13 @@ The main pipeline script has built-in support:
 
 ```bash
 # Add fields during collection processing
-./cdxj-index-collection.sh COLLECTION-2024-11 \
+./cdxj-index-collection.sh AWP999 \
     --addfield collection=ARQUIVO-2024 \
     --addfield source=web \
     --addfield indexed_date=20241121
 
 # Or use custom function
-./cdxj-index-collection.sh COLLECTION-2024-11 \
+./cdxj-index-collection.sh AWP999 \
     --addfield-func /path/to/addfield_year.py
 ```
 

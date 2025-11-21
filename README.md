@@ -27,7 +27,7 @@ python3 -m venv venv && source venv/bin/activate
 pip install -e .
 
 # Process a collection
-cdxj-index-collection COLLECTION-2024-11
+cdxj-index-collection AWP-999
 ```
 
 **Output:** Complete ZipNum indexes ready for pywb
@@ -59,13 +59,13 @@ cdxj-index-collection COLLECTION-2024-11
 
 ```bash
 # Full collection processing
-cdxj-index-collection COLLECTION-2024-11
+cdxj-index-collection AWP-999
 
 # Daily incremental update (only new WARCs)
-cdxj-index-collection COLLECTION-2024-11 --incremental
+cdxj-index-collection AWP-999 --incremental
 
 # Custom configuration
-cdxj-index-collection COLLECTION-2024-11 \
+cdxj-index-collection AWP-999 \
     --jobs 32 \
     --threshold 5000 \
     --blocklist /path/to/blocklist.txt
@@ -117,7 +117,7 @@ docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools \
 
 # Collection processing
 docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools \
-    cdxj-index-collection COLLECTION-2024-11 --incremental
+    cdxj-index-collection AWP-999 --incremental
 ```
 
 ## Processing Pipeline
@@ -180,14 +180,7 @@ See [Installation Guide](docs/installation.md) for other platforms.
 ## Testing
 
 ```bash
-# Python tests (91 tests)
-pytest tests/ -v
-
-# Shell script tests (15 tests)
-bash tests/test_process_collection_simple.sh
-
-# All tests
-pytest tests/ && bash tests/test_process_collection_simple.sh
+make test
 ```
 
 See [Testing Guide](tests/README.md) for details.

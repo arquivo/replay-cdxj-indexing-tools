@@ -19,13 +19,13 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 
 ```bash
 # Process collection with defaults
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 
 # Daily incremental update
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 
 # Custom configuration
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --jobs 32 \
     --threshold 5000 \
     --blocklist /path/to/blocklist.txt
@@ -35,7 +35,7 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 
 ### Required
 
-- **COLLECTION_NAME** - Name of the collection (e.g., `COLLECTION-2024-11`)
+- **COLLECTION_NAME** - Name of the collection (e.g., `AWP999`)
 
 ### Optional Flags
 
@@ -58,7 +58,7 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 ### Input
 
 ```
-/data/collections/COLLECTION-2024-11/
+/data/collections/AWP999/
 ├── file-001.warc.gz
 ├── file-002.warc.gz
 └── file-NNN.warc.gz
@@ -67,7 +67,7 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 ### Processing (Temporary)
 
 ```
-/tmp/cdxj-processing/COLLECTION-2024-11/
+/tmp/cdxj-processing/AWP999/
 ├── indexes/
 │   ├── file-001.cdxj      # Individual indexes
 │   ├── file-002.cdxj
@@ -81,7 +81,7 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 ### Output
 
 ```
-/data/zipnum/COLLECTION-2024-11/
+/data/zipnum/AWP999/
 ├── cdx-00000.gz
 ├── cdx-00001.gz
 ├── ...
@@ -96,7 +96,7 @@ The script executes 5 stages sequentially:
 
 **Command:**
 ```bash
-find /data/collections/COLLECTION-2024-11 -name "*.warc.gz" | \
+find /data/collections/AWP999 -name "*.warc.gz" | \
     parallel --bar --eta -j $JOBS \
     'cdx-indexer {} > indexes/{/.}.cdxj'
 ```
@@ -155,7 +155,7 @@ filter-excessive-urls auto \
 **Command:**
 ```bash
 flat-cdxj-to-zipnum \
-    -o /data/zipnum/COLLECTION-2024-11/ \
+    -o /data/zipnum/AWP999/ \
     -i filtered-excessive.cdxj \
     -n 3000 \
     --compress
@@ -168,7 +168,7 @@ flat-cdxj-to-zipnum \
 ### Basic Collection Processing
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 ```
 
 **What it does:**
@@ -183,7 +183,7 @@ flat-cdxj-to-zipnum \
 ### Daily Incremental Update
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 --incremental
+./cdxj-index-collection AWP999 --incremental
 ```
 
 **What it does:**
@@ -199,7 +199,7 @@ flat-cdxj-to-zipnum \
 ### Custom Configuration
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --jobs 64 \
     --threshold 5000 \
     --shard-size 5000 \
@@ -235,14 +235,14 @@ cp /data/collections/PROD/*.warc.gz /tmp/test-collection/ | head -10
 The script provides color-coded logging:
 
 ```
-[INFO] Starting processing for collection: COLLECTION-2024-11
+[INFO] Starting processing for collection: AWP999
 [INFO] Found 1523 WARC files
 
 Configuration:
-  Collection:         COLLECTION-2024-11
+  Collection:         AWP999
   WARC files:         1523
-  Collection dir:     /data/collections/COLLECTION-2024-11
-  Output dir:         /data/zipnum/COLLECTION-2024-11
+  Collection dir:     /data/collections/AWP999
+  Output dir:         /data/zipnum/AWP999
   Blocklist:          /data/blocklists/arquivo-blocklist.txt
   Excessive threshold: 1000
   Parallel jobs:      32
@@ -261,7 +261,7 @@ Configuration:
 
 [SUCCESS] All stages completed successfully
 [SUCCESS] Total processing time: 1h 35m 47s
-[INFO] ZipNum output: /data/zipnum/COLLECTION-2024-11/
+[INFO] ZipNum output: /data/zipnum/AWP999/
 ```
 
 ### Log Files
@@ -269,8 +269,8 @@ Configuration:
 Redirect output for persistent logging:
 
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 2>&1 | \
-    tee logs/COLLECTION-2024-11_$(date +%Y%m%d).log
+./cdxj-index-collection AWP999 2>&1 | \
+    tee logs/AWP999_$(date +%Y%m%d).log
 ```
 
 ### Progress Tracking
@@ -334,13 +334,13 @@ fi
 
 ```bash
 # Use all cores (default)
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 
 # Limit to 16 cores
-./cdxj-index-collection COLLECTION-2024-11 --jobs 16
+./cdxj-index-collection AWP999 --jobs 16
 
 # Use more cores (if available)
-./cdxj-index-collection COLLECTION-2024-11 --jobs 64
+./cdxj-index-collection AWP999 --jobs 64
 ```
 
 **Recommendation:** Start with default (`nproc`), adjust based on I/O vs CPU bottleneck
@@ -360,17 +360,17 @@ fi
 **Temporary files:**
 ```bash
 # Use fast SSD for temp dir
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --temp-dir /fast-ssd/temp
 ```
 
 **Keep or cleanup:**
 ```bash
 # Keep temp files for debugging
-./cdxj-index-collection COLLECTION-2024-11 --keep-temp
+./cdxj-index-collection AWP999 --keep-temp
 
 # Auto-cleanup (default)
-./cdxj-index-collection COLLECTION-2024-11
+./cdxj-index-collection AWP999
 ```
 
 ## Integration
@@ -414,7 +414,7 @@ grep "Total processing time" log.txt | \
 **Alerting:**
 ```bash
 # Check exit code
-if ! ./cdxj-index-collection COLLECTION-2024-11; then
+if ! ./cdxj-index-collection AWP999; then
     echo "ALERT: CDXJ processing failed" | \
         mail -s "CDXJ Failure" ops@example.com
 fi
@@ -469,7 +469,7 @@ ulimit -v unlimited
 
 **Solution:** Provide valid blocklist path:
 ```bash
-./cdxj-index-collection COLLECTION-2024-11 \
+./cdxj-index-collection AWP999 \
     --blocklist /correct/path/blocklist.txt
 ```
 

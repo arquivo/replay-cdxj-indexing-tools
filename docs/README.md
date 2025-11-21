@@ -107,14 +107,14 @@ Individual tool documentation:
 ### Complete Pipeline (Recommended)
 
 ```bash
-cdxj-index-collection COLLECTION-2024-11
+cdxj-index-collection AWP999
 ```
 
 ### Individual Tools
 
 ```bash
 # Add fields to CDXJ
-addfield-to-flat-cdxj -i input.cdxj -o output.cdxj -f collection=COL-2024
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj -f collection=AWP999
 
 # Merge CDXJ files
 merge-flat-cdxj output.cdxj input1.cdxj input2.cdxj
@@ -145,7 +145,7 @@ arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 
 ```bash
 # CDXJ pipeline with field addition
-addfield-to-flat-cdxj -i input.cdxj -f collection=COL-2024 | \
+addfield-to-flat-cdxj -i input.cdxj -f collection=AWP999 | \
     filter-blocklist -i - -b blocklist.txt | \
     filter-excessive-urls auto -i - -n 1000 | \
     flat-cdxj-to-zipnum -o indexes/ -i - --compress
