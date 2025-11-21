@@ -257,17 +257,14 @@ filter-blocklist -i site.cdxj -b ads-blocklist.txt -o clean.cdxj
 
 ## Performance
 
-**Benchmark Results:**
-
-| File Size | Lines | Patterns | Time | Throughput |
-|-----------|-------|----------|------|------------|
-| 500MB | 1M | 10 | ~3s | ~300K lines/sec |
-| 5GB | 10M | 50 | ~30s | ~300K lines/sec |
-| 50GB | 100M | 100 | ~300s | ~300K lines/sec |
-
 **Memory Usage:**
 - O(patterns) - stores compiled regex patterns in memory
-- ~1-10MB for typical blocklists (10-1000 patterns)
+- Minimal memory for typical blocklists (10-1000 patterns)
+
+**Performance Characteristics:**
+- I/O bound - limited by disk read/write speed
+- Scales linearly with file size
+- Fast pattern matching with compiled regex
 
 **Performance Tips:**
 1. Keep blocklists focused (fewer patterns = faster)

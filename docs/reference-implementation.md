@@ -178,8 +178,6 @@ flat-cdxj-to-zipnum \
 4. Removes URLs with >1000 captures
 5. Creates compressed ZipNum
 
-**Duration:** ~2-4 hours for 100GB collection (32 cores)
-
 ### Daily Incremental Update
 
 ```bash
@@ -192,7 +190,7 @@ flat-cdxj-to-zipnum \
 3. Applies filters
 4. Updates ZipNum
 
-**Duration:** ~30-60 minutes (typically 5-10% of full processing)
+**Performance:** Typically 90% faster than full reprocessing
 
 **Use case:** Daily crawl additions
 
@@ -252,15 +250,14 @@ Configuration:
 [INFO] Found 23 orphaned .tmp files from previous run, cleaning up...
 100% [====================================] 1523/1523 ETA: 0s
 
-[SUCCESS] Stage 1 completed in 45m 23s
+[SUCCESS] Stage 1 completed
 
 [STAGE 2/5] Merging CDXJ indexes...
-[SUCCESS] Stage 2 completed in 8m 12s
+[SUCCESS] Stage 2 completed
 
 ...
 
 [SUCCESS] All stages completed successfully
-[SUCCESS] Total processing time: 1h 35m 47s
 [INFO] ZipNum output: /data/zipnum/AWP999/
 ```
 
@@ -403,13 +400,6 @@ echo "Update completed" | tee -a "$LOG_FILE"
 ```
 
 ### Monitoring Integration
-
-**Prometheus metrics:**
-```bash
-# Export metrics from log
-grep "Total processing time" log.txt | \
-    awk '{print "cdxj_processing_duration_seconds " $5}'
-```
 
 **Alerting:**
 ```bash

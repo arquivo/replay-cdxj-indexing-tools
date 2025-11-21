@@ -177,18 +177,12 @@ excessive_count, kept, filtered = process_pipeline(
 **Memory Usage:**
 - `find` command: O(unique URLs) - stores counts for all unique SURT keys
 - `remove` command: O(blacklist size) - only stores blacklisted URLs
-- For 10M lines with 100K unique URLs: ~200MB memory usage
+- Scales with number of unique URLs in collection
 
 **Processing Speed:**
-- ~500K-1M lines/second on modern hardware
 - I/O bound - disk speed is the limiting factor
 - Uses 1MB read/write buffers for optimal throughput
-
-**Typical Arquivo.pt Performance:**
-- 100M line CDXJ file (~20GB)
-- `find`: ~3-5 minutes
-- `remove`: ~3-5 minutes
-- Total: ~6-10 minutes for complete filtering
+- Efficient for large CDXJ files
 
 ### Recommended Thresholds
 

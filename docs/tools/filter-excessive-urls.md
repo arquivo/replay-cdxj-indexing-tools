@@ -284,18 +284,15 @@ done
 
 ## Performance
 
-**Benchmark Results:**
-
-| Operation | File Size | Lines | Time | Throughput |
-|-----------|-----------|-------|------|------------|
-| find | 5GB | 10M | ~20s | ~500K lines/sec |
-| remove | 5GB | 10M | ~20s | ~500K lines/sec |
-| auto | 5GB | 10M | ~40s | ~250K lines/sec |
-
 **Memory Usage:**
-- **find**: O(unique URLs) - typically 100-500MB for 10M lines
-- **remove**: O(excessive URLs) - typically 1-10MB
+- **find**: O(unique URLs) - scales with number of unique URLs
+- **remove**: O(excessive URLs) - minimal memory usage
 - **auto**: Same as find (needs to count all URLs)
+
+**Performance Characteristics:**
+- I/O bound - limited by disk read/write speed
+- **auto**: Two-pass operation (slower but convenient)
+- **find + remove**: More efficient for very large files
 
 **Performance Tips:**
 

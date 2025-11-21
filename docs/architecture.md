@@ -82,8 +82,8 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 - Preserves all original data
 
 **Performance:**
-- ~500K-1M lines/second per core
-- **13x speedup** with 16-core parallel processing
+- Efficient per-core throughput
+- Near-linear speedup with parallel processing
 - Best practice: Run in parallel before filtering and merge
 
 **Output:** Enriched CDXJ files with collection identifier
@@ -287,14 +287,13 @@ merge-flat-cdxj - *.cdxj | \
 ### Typical Performance
 
 **Arquivo.pt production** (32-core server):
-- Indexing: ~50 GB/hour (parallelized)
-- Merging: ~1 GB/minute
-- Filtering: ~500 MB/minute
-- ZipNum: ~300 MB/minute (with compression)
+- Parallel indexing scales efficiently with CPU cores
+- Streaming merge and filter operations
+- Optimized compression for ZipNum output
 
 **Daily incremental update:**
-- Before: 3-5 hours (full reprocess)
-- After: 35-75 minutes (incremental, 90% reduction)
+- Incremental mode provides significant speedup (90% reduction)
+- Only processes new/modified WARCs
 
 ## Error Handling
 

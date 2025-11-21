@@ -164,15 +164,14 @@ Example for 1TB collection:
 
 Incremental mode dramatically reduces processing time:
 
-**Full indexing** (1TB collection, 10,000 WARCs):
-- Indexing: 2-4 hours
-- Merge + Filter: 30-60 minutes
-- **Total: 3-5 hours**
+**Full indexing** (large collection):
+- Processes all WARCs from scratch
+- Time scales with collection size
 
-**Incremental update** (100 new WARCs per day):
-- Indexing: 5-15 minutes (only 100 WARCs)
-- Merge + Filter: 30-60 minutes (all indexes)
-- **Total: 35-75 minutes**
+**Incremental update** (daily changes):
+- Only indexes new/modified WARCs
+- Merge and filter operations process all indexes
+- **Significant speedup: ~90% reduction in processing time**
 
 ### Optimization Tips
 

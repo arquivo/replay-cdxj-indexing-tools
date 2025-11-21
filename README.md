@@ -38,7 +38,7 @@ cdxj-index-collection AWP-999
 
 ### Essential Guides
 
-- **[Quick Start](docs/quick-start.md)** - Get running in 5 minutes
+- **[Quick Start](docs/quick-start.md)** - Get running quickly
 - **[Installation](docs/installation.md)** - Detailed setup guide
 - **[Reference Implementation](docs/reference-implementation.md)** - Complete workflow script guide
 - **[Incremental Workflow](docs/incremental-workflow.md)** - Daily updates (90% faster)
@@ -172,14 +172,12 @@ See [Installation Guide](docs/installation.md) for other platforms.
 
 ## Performance
 
-**Arquivo.pt production benchmarks** (32-core server, 100GB collection):
+**Optimized for production use:**
 
-| Operation | Time | Throughput |
-|-----------|------|------------|
-| Full processing | 2-4 hours | ~30 GB/hour |
-| Incremental update | 35-75 min | **90% reduction** |
-| Parallel indexing | 45 min | ~50 GB/hour |
-| Merge + Filter | 15 min | ~1 GB/min |
+- Parallel processing scales with available CPU cores
+- Incremental mode significantly reduces processing time (90% reduction)
+- Efficient memory usage with streaming algorithms
+- Fast I/O with optimized buffering
 
 ## Testing
 

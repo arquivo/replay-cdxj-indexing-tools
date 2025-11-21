@@ -1,6 +1,6 @@
 # Quick Start Guide
 
-Get started with CDXJ indexing tools in 5 minutes.
+Get started with CDXJ indexing tools.
 
 ## Installation
 

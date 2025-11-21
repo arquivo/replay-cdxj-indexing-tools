@@ -150,15 +150,7 @@ pt,sapo,www)/ 20230615120000 {...}
 
 ### Performance
 
-**Benchmark Results** (tested on modern hardware):
-
-| Files | Total Lines | Total Size | Time | Throughput |
-|-------|-------------|------------|------|------------|
-| 10 | 1M | 500MB | ~2s | ~500K lines/sec |
-| 50 | 10M | 5GB | ~20s | ~500K lines/sec |
-| 100 | 100M | 50GB | ~200s | ~500K lines/sec |
-
-Performance is primarily I/O bound - limited by disk read/write speed.
+Performance is primarily I/O bound - limited by disk read/write speed. Use fast storage (SSD/NVMe) for best results.
 
 ## Arquivo.pt Use Case: Excluding Open Collections
 
@@ -295,9 +287,9 @@ merge-flat-cdxj output.cdxj /data/parts/*.cdxj
 ### 1. Use SSD Storage
 
 Merge performance is I/O bound. Use SSD for best performance:
-- **HDD**: ~100-200K lines/sec
-- **SSD**: ~500K-1M lines/sec
-- **NVMe**: ~1M+ lines/sec
+- **HDD**: Slower throughput
+- **SSD**: Good performance for most use cases
+- **NVMe**: Best performance for large merges
 
 ### 2. Pipe to Compression
 

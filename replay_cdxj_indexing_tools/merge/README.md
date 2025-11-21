@@ -14,29 +14,23 @@ This module provides a memory-efficient k-way merge algorithm that can combine a
 
 
 
-## FeaturesThe script can be used to merge multiple CDXJ files, instead of merging them
+## Features
 
-using `cat` and `sort`. This new method/script is more efficient because it takes
+The script can be used to merge multiple CDXJ files, instead of merging them using `cat` and `sort`. This method is more efficient because it takes advantage that the existing CDXJ files are already sorted.
 
-- **Memory Efficient**: Only keeps K lines in memory (one per file) regardless of file sizesadvanced that the existing CDXJ files are already sorted.
+- **Memory Efficient**: Only keeps K lines in memory (one per file) regardless of file sizes
 
 - **Fast**: O(N log K) time complexity using heap-based priority queue
 
-- **Flexible**: Accepts files, directories, or mix of both as inputOn one of high performant servers with SSD disks of Arquivo.pt it could merge
+- **Flexible**: Accepts files, directories, or mix of both as input
 
-- **Stdout Support**: Can output to stdout for pipeline integration1.3TB from 12 CDXJ files during 2h20 minutes.
+- **Stdout Support**: Can output to stdout for pipeline integration
 
 - **Configurable**: Adjustable buffer size for I/O optimization
 
-Usage example, that redirect stderr to a file.
-
 ## Command-Line Usage
 
-```bash
-
-### Basic Mergingtime python merge_sorted_files.py FAWP48-59.cdxj /data/indexes_cdx/FAWP48.cdxj /data/indexes_cdx/FAWP49.cdxj /data/indexes_cdx/FAWP50.cdxj /data/indexes_cdx/FAWP51.cdxj /data/indexes_cdx/FAWP52.cdxj /data/indexes_cdx/FAWP53.cdxj /data/indexes_cdx/FAWP54.cdxj /data/indexes_cdx/FAWP55.cdxj /data/indexes_cdx/FAWP56.cdxj /data/indexes_cdx/FAWP57.cdxj /data/indexes_cdx/FAWP58.cdxj /data/indexes_cdx/FAWP59.cdxj 2> errors.log
-
-```
+### Basic Merging
 
 ```bash
 # Merge specific files

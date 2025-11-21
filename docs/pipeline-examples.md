@@ -166,10 +166,7 @@ echo "Performance: Parallel addfield = 10-15x faster than sequential!"
 
 **Performance Comparison:**
 
-| Approach | 100 files (1M lines each) | Speedup |
-|----------|---------------------------|---------|
-| Sequential (after merge) | ~200 seconds | 1x |
-| Parallel (16 cores, before merge) | ~15 seconds | **13x faster** |
+Parallel processing (before merge) provides significant speedup compared to sequential processing (after merge). Near-linear scaling with CPU cores.
 
 ### Custom Field Functions in Parallel
 
@@ -233,11 +230,11 @@ echo "Done!"
 
 Output shows real-time progress:
 ```
-Processing 1523847 total lines...
+Processing total lines...
 
-merge:      1.52M 0:00:23 [65.2k/s] [=========>] 100%
-blocklist:  1.48M 0:00:25 [59.1k/s] [=========>] 97%
-excessive:  1.39M 0:00:27 [51.5k/s] [=========>] 91%
+merge:      [=========>] 100%
+blocklist:  [=========>] 97%
+excessive:  [=========>] 91%
 Done!
 ```
 

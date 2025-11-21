@@ -360,39 +360,23 @@ processed, skipped = addfield_to_cdxj(
 
 ### Throughput
 
-- **~500K-1M lines/second** on modern hardware
 - I/O bound - disk speed is the limiting factor
 - Uses 1MB read/write buffers for optimal performance
+- Scales efficiently with parallel processing
 
 ### Memory Usage
 
 - **O(1)** - constant memory usage
 - Processes line-by-line, no data accumulation
-- ~10-20MB baseline memory footprint
+- Minimal memory footprint
 
 ### Parallel Processing Benefits
 
-Processing 100 CDXJ files with 1M lines each:
+**Significant speedup with multiple cores:**
+- Sequential processing: Baseline performance
+- Parallel processing: Near-linear scaling with CPU cores
 
-| Approach | Time | Speedup |
-|----------|------|---------|
-| Sequential | ~200 seconds | 1x |
-| Parallel (16 cores) | ~15 seconds | **13x faster** |
-
-**Recommendation:** Always use parallel processing for large collections!
-
-### Benchmark Results
-
-Test: 100M lines CDXJ file (~20GB)
-
-```bash
-time addfield-to-flat-cdxj -i large.cdxj -o enriched.cdxj -f collection=TEST
-
-# Results:
-# real    0m25.341s   (~4M lines/sec)
-# user    0m18.234s
-# sys     0m7.012s
-```
+**Recommendation:** Always use parallel processing (GNU parallel) for large collections!
 
 ## Best Practices
 

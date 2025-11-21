@@ -164,8 +164,7 @@ Arclist to Redis Pipeline
 Pipeline Complete
 ============================================================
 
-[SUCCESS] Statistics:
-  Processing time:     0h 0m 4s
+[SUCCESS] Processing complete
 
 [INFO] Finished at 2024-11-20 10:30:04
 ```

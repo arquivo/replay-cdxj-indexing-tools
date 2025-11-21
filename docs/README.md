@@ -6,7 +6,7 @@ Welcome to the CDXJ Indexing Tools documentation. This guide covers everything f
 
 **New users start here:**
 
-1. **[Quick Start](quick-start.md)** - Get running in 5 minutes
+1. **[Quick Start](quick-start.md)** - Get running quickly
 2. **[Installation](installation.md)** - Detailed setup guide
 3. **[Reference Implementation](reference-implementation.md)** - Complete workflow script
 

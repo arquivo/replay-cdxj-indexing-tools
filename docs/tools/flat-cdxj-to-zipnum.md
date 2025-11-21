@@ -248,14 +248,11 @@ echo "Done! ZipNum indexes in /data/zipnum_final"
 
 ## Performance
 
-**Benchmark Results:**
-
-| Input Size | Lines | Shard Size | Compression | Time | Throughput |
-|------------|-------|------------|-------------|------|------------|
-| 500MB | 1M | 3000 | No | ~5s | ~200K lines/sec |
-| 500MB | 1M | 3000 | Yes | ~10s | ~100K lines/sec |
-| 5GB | 10M | 3000 | Yes | ~100s | ~100K lines/sec |
-| 50GB | 100M | 5000 | Yes | ~1000s | ~100K lines/sec |
+**Performance Characteristics:**
+- Compression significantly reduces output size (70-80% savings)
+- Larger shard sizes improve efficiency for large collections
+- I/O bound - benefits from fast storage (SSD/NVMe)
+- pywb handles compressed shards transparently
 
 **Performance Tips:**
 
@@ -274,8 +271,8 @@ echo "Done! ZipNum indexes in /data/zipnum_final"
    ```
 
 3. **Process on SSD:**
-   - SSD: ~100K lines/sec
-   - HDD: ~50K lines/sec
+   - SSD: Better performance
+   - HDD: Slower throughput
 
 4. **Pipeline mode saves disk:**
    ```bash
