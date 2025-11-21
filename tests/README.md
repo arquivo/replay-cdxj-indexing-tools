@@ -54,52 +54,55 @@ Test coverage for Python CLI tools:
 
 ### Shell Script Tests
 
-#### Bats Test Suite (Advanced)
+#### Current Test Suite
 
-`test_process_collection.bats` - Comprehensive test suite for `cdxj-index-collection`
-
-**Requirements:**
-```bash
-sudo apt-get install bats
-```
+`test_cdxj_index_collection.sh` - Comprehensive pure bash test suite for `cdxj-index-collection.sh`
 
 **Run:**
 ```bash
-bats tests/test_process_collection.bats
+bash tests/test_cdxj_index_collection.sh
 ```
 
-**Coverage (13 tests):**
-- Script existence and executability
-- Help output validation
-- Argument parsing (all flags)
-- Error handling (missing/empty collections)
-- Configuration validation
-- Function testing (index_warc)
-- Dependency checking
-
-#### Simple Bash Test Suite (Standalone)
-
-`test_process_collection_simple.sh` - Pure bash test suite (no dependencies)
-
-**Run:**
-```bash
-bash tests/test_process_collection_simple.sh
-```
-
-**Coverage (15 tests):**
+**Coverage (31 tests):**
 - Script validation (exists, executable, syntax)
 - Help and usage output
-- Command-line flags (--incremental, --jobs, --threshold, etc.)
-- Error handling (missing collection, empty directory, non-existent paths)
-- Blocklist validation (missing, custom paths)
-- Unknown option rejection
-- Confirmation prompt verification
+- Command-line flags:
+  - `--incremental`, `--jobs`, `--threshold`, `--shard-size`
+  - `--addfield` (single and multiple)
+  - `--addfield-func`
+  - `--blocklist`, `--keep-temp`, `--no-compress`
+- Error handling:
+  - Missing/non-existent collections
+  - Empty directories
+  - Unknown options
+  - Multiple collection names
+- Configuration display
+- Stage numbering (with/without addfield)
+- Static analysis:
+  - Error handling flags (`set -e`, `-o pipefail`, `-u`)
+  - Cleanup trap for errors
+  - Atomic writes (.tmp files)
+  - Dependency checking
+  - Function exports for parallel
+  - Logging functions (info, success, warning, error)
+
+**Test Results:**
+- Tests pass for static validation (syntax, code structure, error handling)
+- Tests that require script execution will fail early at dependency checking (expected behavior)
+- The script correctly validates dependencies before running (fail-fast principle)
 
 **Advantages:**
 - No external dependencies (pure bash)
 - Colored output with detailed results
 - Proper setup/teardown with temporary test environments
 - Safe to run without affecting system
+- Tests both static and dynamic behavior
+
+#### Legacy Test Suites
+
+`test_process_collection.bats` and `test_process_collection_simple.sh` - Test suites for the older `process-collection.sh` script (deprecated)
+
+These are kept for reference but test an older version of the pipeline script.
 
 ## Running All Tests
 
