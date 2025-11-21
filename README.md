@@ -123,8 +123,13 @@ docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools \
 ## Processing Pipeline
 
 ```
-WARC Files → Parallel Index → Merge → Filter Blocklist → Filter Excessive → ZipNum → pywb
+WARC Files → Parallel Index → Add Collection → Filter Blocklist (Parallel) → Merge → Filter Excessive → ZipNum → pywb
 ```
+
+**Key Optimizations:**
+- **Collection field added in parallel** after indexing
+- **Blocklist filtering parallelized** (CPU intensive, 4x faster before merge)
+- **Excessive URL filtering** runs after merge (requires complete dataset)
 
 Each stage is optimized for throughput and memory efficiency.
 

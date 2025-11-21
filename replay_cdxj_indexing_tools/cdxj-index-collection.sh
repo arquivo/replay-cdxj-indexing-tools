@@ -4,7 +4,7 @@
 # Reference implementation using Unix pipes
 #
 # This script processes a complete web archive collection:
-# 1. Index WARCs in parallel → 2. Merge → 3. Filter blocklist → 4. Filter excessive URLs → 5. Convert to ZipNum
+# 1. Index WARCs in parallel → 2. Add collection field → 3. Filter blocklist in parallel → 4. Merge → 5. Filter excessive URLs → 6. Convert to ZipNum
 #
 # Usage:
 #   ./process-collection.sh <collection_name> [options]
@@ -32,8 +32,6 @@ DEFAULT_BLOCKLIST="arquivo-blocklist.txt"
 EXCESSIVE_THRESHOLD=1000
 PARALLEL_JOBS=$(nproc)
 SHARD_SIZE=3000
-ADDFIELD_ENABLED=0
-ADDFIELD_OPTS=""
 
 # Colors for output
 RED='\033[0;31m'
@@ -53,13 +51,11 @@ Arguments:
   collection_name       Name of the collection (e.g., AWP999)
 
 Options:
-  --blocklist FILE      Path to blocklist file (default: $BLOCKLIST_DIR/$DEFAULT_BLOCKLIST)
-  --threshold N         Excessive URLs threshold (default: $EXCESSIVE_THRESHOLD)
-  --jobs N              Number of parallel jobs (default: $PARALLEL_JOBS)
-  --shard-size N        ZipNum shard size (default: $SHARD_SIZE)
-  --addfield KEY=VALUE  Add custom field to all CDXJ records (can be used multiple times)
-  --addfield-func FILE  Python file with addfield() function for custom logic
-  --collections-dir DIR Base directory for collections (default: $COLLECTIONS_BASE)
+  --blocklist FILE          Path to blocklist file (default: $BLOCKLIST_DIR/$DEFAULT_BLOCKLIST)
+  --threshold N             Excessive URLs threshold (default: $EXCESSIVE_THRESHOLD)
+  --jobs N                  Number of parallel jobs (default: $PARALLEL_JOBS)
+  --shard-size N            ZipNum shard size (default: $SHARD_SIZE)
+  --collections-dir DIR     Base directory for collections (default: $COLLECTIONS_BASE)
   --output-dir DIR      Output directory base (default: $OUTPUT_BASE)
   --temp-dir DIR        Temporary directory base (default: $TEMP_BASE)
   --keep-temp           Keep temporary files after processing
@@ -68,7 +64,7 @@ Options:
   --help                Show this help message
 
 Examples:
-  # Process collection with defaults
+  # Process collection
   $0 AWP999
 
   # Process with custom blocklist and threshold
@@ -90,10 +86,11 @@ Directory Structure:
 
 Pipeline Stages:
   1. Index WARCs in parallel using cdx-indexer
-  2. Merge all CDXJ indexes
-  3. Filter using blocklist (spam, adult content, legal removals)
-  4. Filter excessive URLs (crawler traps, spam sites)
-  5. Convert to ZipNum format for pywb
+  2. Add collection field to all records (parallel)
+  3. Filter using blocklist in parallel (legal removals)
+  4. Merge all filtered CDXJ indexes
+  5. Filter excessive URLs (crawler issues)
+  6. Convert to ZipNum format for pywb
 
 EOF
     exit 1
@@ -189,20 +186,6 @@ while [[ $# -gt 0 ]]; do
             SHARD_SIZE="$2"
             shift 2
             ;;
-        --addfield)
-            ADDFIELD_ENABLED=1
-            if [ -z "$ADDFIELD_OPTS" ]; then
-                ADDFIELD_OPTS="-f $2"
-            else
-                ADDFIELD_OPTS="$ADDFIELD_OPTS -f $2"
-            fi
-            shift 2
-            ;;
-        --addfield-func)
-            ADDFIELD_ENABLED=1
-            ADDFIELD_OPTS="--function $2"
-            shift 2
-            ;;
         --collections-dir)
             COLLECTIONS_BASE="$2"
             shift 2
@@ -249,6 +232,9 @@ if [ -z "$COLLECTION_NAME" ]; then
     usage
 fi
 
+# Use collection name as the collection field value
+COLLECTION_FIELD="$COLLECTION_NAME"
+
 # Set paths
 COLLECTION_DIR="$COLLECTIONS_BASE/$COLLECTION_NAME"
 TEMP_DIR="$TEMP_BASE/$COLLECTION_NAME"
@@ -293,6 +279,7 @@ echo "=========================================="
 echo ""
 log_info "Configuration:"
 echo "  Collection:         $COLLECTION_NAME"
+echo "  Collection field:   collection=$COLLECTION_FIELD"
 echo "  WARC files:         $WARC_COUNT"
 echo "  Collection dir:     $COLLECTION_DIR"
 echo "  Output dir:         $OUTPUT_DIR"
@@ -343,9 +330,9 @@ trap 'cleanup_on_error $LINENO' ERR
 # ============================================
 echo ""
 if [ $INCREMENTAL -eq 1 ]; then
-    log_info "STAGE 1/5: Incremental indexing - only processing new/modified WARCs ($PARALLEL_JOBS jobs)..."
+    log_info "STAGE 1/6: Incremental indexing - only processing new/modified WARCs ($PARALLEL_JOBS jobs)..."
 else
-    log_info "STAGE 1/5: Indexing ALL WARC files in parallel ($PARALLEL_JOBS jobs)..."
+    log_info "STAGE 1/6: Indexing ALL WARC files in parallel ($PARALLEL_JOBS jobs)..."
 fi
 echo ""
 
@@ -414,68 +401,59 @@ else
 fi
 
 # ============================================
-# STAGE 2: Add Fields in Parallel (if enabled)
+# STAGE 2: Add Collection Field in Parallel
 # ============================================
-if [ $ADDFIELD_ENABLED -eq 1 ]; then
-    echo ""
-    log_info "STAGE 2/6: Adding custom fields in parallel ($PARALLEL_JOBS jobs)..."
-    log_info "OPTIMIZATION: Add fields before merge for efficient parallel processing"
-    echo ""
+echo ""
+log_info "STAGE 2/6: Adding collection field (collection=$COLLECTION_FIELD) in parallel ($PARALLEL_JOBS jobs)..."
+log_info "OPTIMIZATION: Add collection field before filtering for efficient parallel processing"
+echo ""
+
+ADDFIELD_DIR="$TEMP_DIR/addfield"
+mkdir -p "$ADDFIELD_DIR"
+
+# Function to add collection field to a single CDXJ file
+addfield_cdxj() {
+    local input_file="$1"
+    local collection_field="$2"
+    local output_dir="$3"
     
-    ADDFIELD_DIR="$TEMP_DIR/addfield"
-    mkdir -p "$ADDFIELD_DIR"
+    local basename=$(basename "$input_file")
+    local output_file="$output_dir/$basename"
     
-    # Function to add fields to a single CDXJ file
-    addfield_cdxj() {
-        local input_file="$1"
-        local addfield_opts="$2"
-        local output_dir="$3"
-        
-        local basename=$(basename "$input_file")
-        local output_file="$output_dir/$basename"
-        
-        # Add fields to this file
-        addfield-to-flat-cdxj -i "$input_file" -o "$output_file" $addfield_opts 2>/dev/null
-        
-        if [ $? -eq 0 ]; then
-            echo "  [ADDFIELD] $basename" >&2
-        else
-            echo "  [ERROR] Failed to add fields to $basename" >&2
-            return 1
-        fi
-    }
+    # Add collection field to this file
+    addfield-to-flat-cdxj -i "$input_file" -o "$output_file" -f "collection=$collection_field" 2>/dev/null
     
-    # Export for parallel
-    export -f addfield_cdxj
-    export ADDFIELD_OPTS
-    export ADDFIELD_DIR
-    
-    # Add fields to all CDXJ files in parallel
-    find "$INDEXES_DIR" -name "*.cdxj" | \
-        parallel -j "$PARALLEL_JOBS" --bar --eta \
-        addfield_cdxj {} "$ADDFIELD_OPTS" "$ADDFIELD_DIR"
-    
-    ADDFIELD_COUNT=$(ls "$ADDFIELD_DIR"/*.cdxj 2>/dev/null | wc -l)
-    log_success "Added fields to $ADDFIELD_COUNT files in parallel"
-    
-    # Use enriched files for subsequent stages
-    PROCESS_DIR="$ADDFIELD_DIR"
-else
-    # No addfield - use original indexes
-    PROCESS_DIR="$INDEXES_DIR"
-fi
+    if [ $? -eq 0 ]; then
+        echo "  [ADDFIELD] $basename" >&2
+    else
+        echo "  [ERROR] Failed to add collection field to $basename" >&2
+        return 1
+    fi
+}
+
+# Export for parallel
+export -f addfield_cdxj
+export COLLECTION_FIELD
+export ADDFIELD_DIR
+
+# Add collection field to all CDXJ files in parallel
+find "$INDEXES_DIR" -name "*.cdxj" | \
+    parallel -j "$PARALLEL_JOBS" --bar --eta \
+    addfield_cdxj {} "$COLLECTION_FIELD" "$ADDFIELD_DIR"
+
+ADDFIELD_COUNT=$(ls "$ADDFIELD_DIR"/*.cdxj 2>/dev/null | wc -l)
+log_success "Added collection field to $ADDFIELD_COUNT files in parallel"
+
+# Use enriched files for subsequent stages
+PROCESS_DIR="$ADDFIELD_DIR"
 
 # ============================================
 # STAGE 3: Filter Blocklist in Parallel (if enabled)
 # ============================================
 if [ $USE_BLOCKLIST -eq 1 ]; then
     echo ""
-    if [ $ADDFIELD_ENABLED -eq 1 ]; then
-        log_info "STAGE 3/6: Filtering blocklist in parallel ($PARALLEL_JOBS jobs)..."
-    else
-        log_info "STAGE 2/5: Filtering blocklist in parallel ($PARALLEL_JOBS jobs)..."
-    fi
-    log_info "OPTIMIZATION: Filter before merge for 4x speedup"
+    log_info "STAGE 3/6: Filtering blocklist in parallel ($PARALLEL_JOBS jobs)..."
+    log_info "OPTIMIZATION: Filter before merge for 4x speedup (CPU intensive)"
     echo ""
     
     FILTERED_DIR="$TEMP_DIR/filtered"
@@ -506,8 +484,8 @@ if [ $USE_BLOCKLIST -eq 1 ]; then
     export BLOCKLIST
     export FILTERED_DIR
     
-    # Filter all CDXJ files in parallel
-    find "$INDEXES_DIR" -name "*.cdxj" | \
+    # Filter all CDXJ files in parallel (use enriched files from previous stage)
+    find "$PROCESS_DIR" -name "*.cdxj" | \
         parallel -j "$PARALLEL_JOBS" --bar --eta \
         filter_cdxj {} "$BLOCKLIST" "$FILTERED_DIR"
     
@@ -525,14 +503,10 @@ fi
 # STAGE 4-6: Pipeline Processing
 # ============================================
 echo ""
-if [ $ADDFIELD_ENABLED -eq 1 ] && [ $USE_BLOCKLIST -eq 1 ]; then
-    log_info "STAGE 4-6: Processing pipeline (merge → filter excessive → zipnum)..."
-elif [ $ADDFIELD_ENABLED -eq 1 ] || [ $USE_BLOCKLIST -eq 1 ]; then
-    log_info "STAGE 3-5: Processing pipeline (merge → filter excessive → zipnum)..."
-else
-    log_info "STAGE 2-5: Processing pipeline (merge → filter excessive → zipnum)..."
-fi
-log_info "This uses Unix pipes for efficient streaming processing"
+log_info "STAGE 4/6: Merge filtered indexes"
+log_info "STAGE 5/6: Filter excessive URLs (requires global counts)"
+log_info "STAGE 6/6: Convert to ZipNum format"
+log_info "Streaming pipeline: merge → filter → zipnum"
 echo ""
 
 # Build pipeline command (using enriched/filtered files from previous stages)

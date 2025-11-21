@@ -17,8 +17,14 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
        │
        ▼
 ┌─────────────────────┐
-│  Parallel Addfield  │  (addfield-to-flat-cdxj) [Optional]
-│   Add metadata      │
+│  Add Collection     │  (addfield-to-flat-cdxj in parallel)
+│  Field to records   │
+└──────┬──────────────┘
+       │
+       ▼
+┌─────────────────────┐
+│ Filter Blocklist    │  (filter-blocklist in parallel)
+│ Spam, adult, legal  │  [CPU intensive - parallelized]
 └──────┬──────────────┘
        │
        ▼
@@ -29,14 +35,8 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
        │
        ▼
 ┌─────────────────────┐
-│ Filter Blocklist    │  (filter-blocklist)
-│ Spam, adult, legal  │
-└──────┬──────────────┘
-       │
-       ▼
-┌─────────────────────┐
 │ Filter Excessive    │  (filter-excessive-urls)
-│ Crawler traps       │
+│ Crawler traps       │  [Requires merged data]
 └──────┬──────────────┘
        │
        ▼
@@ -69,54 +69,35 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 - Atomic writes (`.tmp` files prevent corruption)
 - Incremental mode (skip already-indexed files)
 
-### 2. Field Addition Stage (Optional)
+### 2. Collection Field Addition Stage
 
-**Purpose:** Enrich CDXJ records with custom metadata
+**Purpose:** Add collection identifier to all CDXJ records
 
 **Tool:** `addfield-to-flat-cdxj`
 
 **Key Features:**
-- Parallel processing (before merge for optimal performance)
-- Simple field addition: `collection=ARQUIVO-2024`
-- Custom Python functions for complex logic
+- Parallel processing (before filtering for optimal performance)
+- Adds `collection` field to all records
+- Required for identifying record source
 - Preserves all original data
-
-**When to Use:**
-- Add collection identifiers or source metadata
-- Tag records with processing dates
-- Add derived fields (year from timestamp, domain from SURT)
-- Integrate external data lookups
 
 **Performance:**
 - ~500K-1M lines/second per core
 - **13x speedup** with 16-core parallel processing
-- Best practice: Run in parallel before merge stage
+- Best practice: Run in parallel before filtering and merge
 
-**Output:** Enriched CDXJ files with additional JSON fields
+**Output:** Enriched CDXJ files with collection identifier
 
-### 3. Merge Stage
-
-**Purpose:** Combine multiple sorted CDXJ files into one
-
-**Tool:** `merge-flat-cdxj`
-
-**Algorithm:** K-way merge using priority queue (heapq)
-
-**Performance:**
-- Streaming I/O (low memory usage)
-- Efficient sorting (SURT-based)
-- Buffer optimization (8KB default)
-
-**Output:** Single merged CDXJ file, sorted by SURT
-
-### 4. Blocklist Filter
+### 3. Blocklist Filter (Parallel)
 
 **Purpose:** Remove unwanted content (spam, adult, legal removals)
 
 **Tool:** `filter-blocklist`
 
-**Features:**
-- Regex pattern matching
+**Key Features:**
+- **Parallel processing:** Run on all CDXJ files before merge
+- **CPU intensive:** Regex pattern matching benefits from parallelization
+- **4x speedup:** Filtering before merge vs after merge
 - SURT-based filtering
 - Comment support in blocklist
 - Verbose logging
@@ -128,11 +109,39 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 ^com,example,banned-path
 ```
 
+**Performance:**
+- **Critical optimization:** Filter BEFORE merge
+- Parallel processing on individual files (16 cores = 16x speedup)
+- CPU-bound operation benefits significantly from parallelization
+
+**Output:** Filtered CDXJ files (one per input WARC)
+
+### 4. Merge Stage
+
+**Purpose:** Combine multiple filtered CDXJ files into one
+
+**Tool:** `merge-flat-cdxj`
+
+**Algorithm:** K-way merge using priority queue (heapq)
+
+**Performance:**
+- Streaming I/O (low memory usage)
+- Efficient sorting (SURT-based)
+- Buffer optimization (8KB default)
+- Processes pre-filtered files (smaller, faster)
+
+**Output:** Single merged CDXJ file, sorted by SURT
+
 ### 5. Excessive URL Filter
 
 **Purpose:** Remove crawler traps and sites with excessive captures
 
 **Tool:** `filter-excessive-urls`
+
+**Why After Merge:**
+- **Requires merged data:** Must count URLs across ALL files
+- Cannot be parallelized (needs global URL counts)
+- Must run on complete, merged dataset
 
 **Modes:**
 - `find` - Identify excessive URLs
@@ -140,7 +149,7 @@ Overview of the CDXJ indexing tools architecture and processing pipeline.
 - `auto` - One-pass combined operation
 
 **Algorithm:**
-1. Count URLs per SURT key
+1. Count URLs per SURT key across entire dataset
 2. Identify those exceeding threshold
 3. Remove excessive captures
 
