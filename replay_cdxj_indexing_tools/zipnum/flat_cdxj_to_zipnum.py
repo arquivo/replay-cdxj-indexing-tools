@@ -67,8 +67,8 @@ The tool creates three types of files:
 
 3. Location File (.loc)
    - Maps shard names to file paths
-   - Format: <shard_name>\\t<filepath>
-   - Example: index-01\\t/path/to/index-01.cdx.gz
+   - Format: <shard_name.cdx.gz>\t<filepath>
+   - Example: index-01.cdx.gz\tindex-01.cdx.gz
 
 PARAMETERS
 ==========
@@ -279,12 +279,11 @@ def cdxj_to_zipnum(
                     pre = extract_prejson(first_line)
 
                     shard_basename = os.path.basename(created_shards[current_shard])
-                    # Remove .cdx.gz extension from shard name for idx file
-                    shard_name_no_ext = shard_basename.replace(".cdx.gz", "")
+                    # Keep .cdx.gz extension in shard name for idx file part column
 
                     # Buffer idx entries to reduce I/O calls
                     idx_buffer.append(
-                        f"{pre}\t{shard_name_no_ext}\t{start_offset}\t"
+                        f"{pre}\t{shard_basename}\t{start_offset}\t"
                         f"{comp_len}\t{current_shard + 1}\n"
                     )
 
@@ -329,12 +328,11 @@ def cdxj_to_zipnum(
                 pre = extract_prejson(first_line)
 
                 shard_basename = os.path.basename(created_shards[current_shard])
-                # Remove .cdx.gz extension from shard name for idx file
-                shard_name_no_ext = shard_basename.replace(".cdx.gz", "")
+                # Keep .cdx.gz extension in shard name for idx file part column
 
                 # Buffer idx entries to reduce I/O calls
                 idx_buffer.append(
-                    f"{pre}\t{shard_name_no_ext}\t{start_offset}\t"
+                    f"{pre}\t{shard_basename}\t{start_offset}\t"
                     f"{comp_len}\t{current_shard + 1}\n"
                 )
 
@@ -366,10 +364,9 @@ def cdxj_to_zipnum(
     with open(loc_name, "w", encoding="utf-8") as locf:
         for path in created_shards:
             basename = os.path.basename(path)
-            # Remove .cdx.gz extension from first column
-            shard_name = basename.replace(".cdx.gz", "")
-            # Format: <shard_name>\t<relative_path>\n
-            locf.write(f"{shard_name}\t{basename}\n")
+            # Keep .cdx.gz extension in both columns
+            # Format: <shard_name.cdx.gz>\t<relative_path>\n
+            locf.write(f"{basename}\t{basename}\n")
 
     print(
         f"Finished. Wrote {len(created_shards)} shard file(s), index: {idx_name}, loc: {loc_name}"

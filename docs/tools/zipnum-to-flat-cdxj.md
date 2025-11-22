@@ -101,12 +101,12 @@ ZipNum format consists of three components:
 Tab-separated file pointing to compressed chunks:
 
 ```
-com,example)/ 20230101000000	shard-01	0	45231	1
-com,example)/ 20230102000000	shard-02	0	48102	2
-com,example)/ 20230103000000	shard-03	0	52341	3
+com,example)/ 20230101000000	shard-01.cdx.gz	0	45231	1
+com,example)/ 20230102000000	shard-02.cdx.gz	0	48102	2
+com,example)/ 20230103000000	shard-03.cdx.gz	0	52341	3
 ```
 
-Format: `<key>\t<shard_name>\t<offset>\t<length>\t<shard_num>`
+Format: `<key>\t<shard_name.cdx.gz>\t<offset>\t<length>\t<shard_num>`
 
 #### 2. Shard Files (.cdx.gz)
 
@@ -127,12 +127,12 @@ base-03.cdx.gz
 Maps shard names to file paths:
 
 ```
-shard-01	/data/shards/base-01.cdx.gz
-shard-02	/data/shards/base-02.cdx.gz
-shard-03	/data/shards/base-03.cdx.gz
+base-01.cdx.gz	base-01.cdx.gz
+base-02.cdx.gz	base-02.cdx.gz
+base-03.cdx.gz	base-03.cdx.gz
 ```
 
-Format: `<shard_name>\t<filepath>`
+Format: `<shard_name.cdx.gz>\t<filepath>`
 
 ## Use Cases
 

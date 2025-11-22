@@ -55,7 +55,7 @@ ZipNum format consists of:
 
 3. Location File (.loc) - Optional
    - Maps shard names to file paths
-   - Format: <shard_name>\\t<filepath>
+   - Format: <shard_name.cdx.gz>\t<filepath>
 
 PARAMETERS
 ==========

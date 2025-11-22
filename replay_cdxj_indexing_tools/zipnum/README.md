@@ -125,13 +125,13 @@ Tab-separated index for binary search.
 
 **Format:**
 ```
-<cdxj_key>\t<shard_name>\t<byte_offset>\t<byte_length>\t<shard_number>
+<cdxj_key>\t<shard_name.cdx.gz>\t<byte_offset>\t<byte_length>\t<shard_number>
 ```
 
 **Example:**
 ```
-pt,governo,www)/ 20230615120200	arquivo-01	186	193	1
-pt,sapo,www)/ 20230615120300	arquivo-01	379	155	1
+pt,governo,www)/ 20230615120200	arquivo-01.cdx.gz	186	193	1
+pt,sapo,www)/ 20230615120300	arquivo-01.cdx.gz	379	155	1
 ```
 
 ### 3. Location File (.loc)
@@ -140,13 +140,13 @@ Maps shard names to file paths.
 
 **Format:**
 ```
-<shard_name>\t<filepath>
+<shard_name.cdx.gz>\t<filepath>
 ```
 
 **Example:**
 ```
-arquivo-01	/data/indexes/arquivo-01.cdx.gz
-arquivo-02	/data/indexes/arquivo-02.cdx.gz
+arquivo-01.cdx.gz\tarquivo-01.cdx.gz
+arquivo-02.cdx.gz\tarquivo-02.cdx.gz
 ```
 
 ## Parameters Explained

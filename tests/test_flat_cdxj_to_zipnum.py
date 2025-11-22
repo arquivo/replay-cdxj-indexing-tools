@@ -126,8 +126,8 @@ The conversion produces three types of files:
    Example: pt,governo,www)/ 20230615120200\tpt-domains-01\t186\t193\t1
 
 3. Location File (.loc): Maps shard names to file paths
-   Format: <shard_name>\t<filepath>
-   Example: pt-domains-01\t/path/to/pt-domains-01.cdx.gz
+   Format: <shard_name.cdx.gz>\t<filepath>
+   Example: pt-domains-01.cdx.gz\tpt-domains-01.cdx.gz
 
 COMMAND-LINE USAGE
 ==================
@@ -208,6 +208,7 @@ NOTES
 
 import gzip
 import os
+import shutil
 import tempfile
 import unittest
 
@@ -712,13 +713,14 @@ class TestCdxjToZipnum(unittest.TestCase):
         with open(loc_file, "r") as f:
             first_line = f.readline().strip()
 
-        # Format should be: <shard_name>\t<filename>
+        # Format should be: <shard_name.cdx.gz>\t<filename.cdx.gz>
         parts = first_line.split("\t")
         self.assertEqual(len(parts), 2, f"Loc line should have 2 fields, got: {first_line}")
 
-        # Both parts should refer to the same shard (first without extension, second with)
+        # Both parts should be identical and include .cdx.gz extension
+        self.assertTrue(parts[0].endswith(".cdx.gz"))
         self.assertTrue(parts[1].endswith(".cdx.gz"))
-        self.assertEqual(parts[0], parts[1].replace(".cdx.gz", ""))
+        self.assertEqual(parts[0], parts[1])
 
     def test_shard_file_naming(self):
         """Test that shard files are named correctly."""
@@ -855,6 +857,174 @@ class TestCdxjToZipnum(unittest.TestCase):
 
         original = b"".join(test_lines)
         self.assertEqual(decompressed, original, "Decompressed data should match original")
+
+    def test_idx_file_includes_cdxgz_extension(self):
+        """
+        Test that .idx file part column includes .cdx.gz extension.
+
+        This is a regression test to ensure the part column in the .idx file
+        maintains the .cdx.gz extension as expected by pywb's ZipNum format.
+
+        The .idx file format should be:
+        <key>\t<shard_name.cdx.gz>\t<offset>\t<length>\t<shard_number>
+
+        For example:
+        - Single shard: pt,example)/ 20200101120000\tarchive.cdx.gz\t0\t150\t1
+        - Multiple shards: pt,example)/ 20200101120000\tarchive-01.cdx.gz\t0\t150\t1
+
+        This test prevents regression of the issue where the part column was
+        incorrectly generated without the .cdx.gz extension (e.g., "awp-01"
+        instead of "awp-01.cdx.gz").
+
+        Validates:
+        - Single shard: part column is "<base>.cdx.gz"
+        - Multiple shards: part column is "<base>-XX.cdx.gz" with numbering
+        - .loc file format has .cdx.gz extension in both columns
+        """
+        # Test single shard case
+        input_file = os.path.join(self.input_dir, "single.cdxj")
+        lines = [
+            b'pt,example)/ 20200101120000 {"status": "200"}\n',
+            b'pt,example)/page1 20200101120001 {"status": "200"}\n',
+            b'pt,example)/page2 20200101120002 {"status": "200"}\n',
+        ]
+
+        with open(input_file, "wb") as f:
+            f.writelines(lines)
+
+        # Use large shard size to ensure single shard
+        cdxj_to_zipnum(
+            self.output_dir, input_file, shard_size_mb=1000, chunk_size=3, base="single-test"
+        )
+
+        # Verify .idx file has .cdx.gz extension in part column
+        idx_file = os.path.join(self.output_dir, "single-test.idx")
+        with open(idx_file, "r") as f:
+            first_line = f.readline().strip()
+
+        parts = first_line.split("\t")
+        self.assertEqual(len(parts), 5, f"Index line should have 5 fields, got: {first_line}")
+
+        # Part column (index 1) should include .cdx.gz extension
+        part_column = parts[1]
+        self.assertTrue(
+            part_column.endswith(".cdx.gz"),
+            f"Part column should end with .cdx.gz, got: {part_column}",
+        )
+        # For single shard, could be either "single-test.cdx.gz" or "single-test-01.cdx.gz"
+        # depending on whether renaming happens after idx writing
+        self.assertIn(
+            part_column,
+            ["single-test.cdx.gz", "single-test-01.cdx.gz"],
+            f"Expected single shard name with .cdx.gz, got: {part_column}",
+        )
+
+        # Verify .loc file format is correct (both columns with .cdx.gz extension)
+        loc_file = os.path.join(self.output_dir, "single-test.loc")
+        with open(loc_file, "r") as f:
+            loc_line = f.readline().strip()
+
+        loc_parts = loc_line.split("\t")
+        self.assertEqual(len(loc_parts), 2, f"Loc line should have 2 fields, got: {loc_line}")
+        # Both columns should have .cdx.gz extension and be identical
+        self.assertTrue(
+            loc_parts[0].endswith(".cdx.gz"),
+            f"Loc first column should have .cdx.gz extension, got: {loc_parts[0]}",
+        )
+        self.assertTrue(
+            loc_parts[1].endswith(".cdx.gz"),
+            f"Loc second column should have .cdx.gz extension, got: {loc_parts[1]}",
+        )
+        # Both columns should be identical
+        self.assertEqual(
+            loc_parts[0],
+            loc_parts[1],
+            f"Loc columns should be identical: '{loc_parts[0]}' should equal '{loc_parts[1]}'",
+        )
+
+        # Test multiple shards case
+        multi_input_file = os.path.join(self.input_dir, "multi.cdxj")
+        multi_lines = []
+        for i in range(1000):
+            # Use varied data to prevent excessive compression
+            random_data = "".join(
+                chr(65 + (i * j) % 26) for j in range(50)
+            )  # Generate semi-random characters
+            multi_lines.append(
+                f'pt,example)/{i:05d} 20200101120000 {{"data": "{random_data}"}}\n'.encode()
+            )
+
+        with open(multi_input_file, "wb") as f:
+            f.writelines(multi_lines)
+
+        # Use small shard size to force multiple shards (50KB)
+        multi_output_dir = tempfile.mkdtemp()
+        try:
+            cdxj_to_zipnum(
+                multi_output_dir,
+                multi_input_file,
+                shard_size_mb=0.05,
+                chunk_size=100,
+                base="multi-test",
+            )
+
+            # Verify .idx file entries have .cdx.gz extension with numbering
+            idx_file = os.path.join(multi_output_dir, "multi-test.idx")
+            with open(idx_file, "r") as f:
+                idx_lines = f.readlines()
+
+            # Check first few index entries
+            for idx_line in idx_lines[:3]:
+                parts = idx_line.strip().split("\t")
+                self.assertEqual(len(parts), 5, f"Index line should have 5 fields, got: {idx_line}")
+
+                part_column = parts[1]
+                self.assertTrue(
+                    part_column.endswith(".cdx.gz"),
+                    f"Part column should end with .cdx.gz, got: {part_column}",
+                )
+                # Should match pattern: multi-test-XX.cdx.gz (e.g., multi-test-01.cdx.gz)
+                self.assertRegex(
+                    part_column,
+                    r"^multi-test(-\d{2})?\.cdx\.gz$",
+                    f"Part column should match 'multi-test-XX.cdx.gz' pattern, got: {part_column}",
+                )
+
+            # Verify .loc file entries
+            loc_file = os.path.join(multi_output_dir, "multi-test.loc")
+            with open(loc_file, "r") as f:
+                loc_lines = f.readlines()
+
+            # Each .loc entry should have both columns with .cdx.gz extension (identical)
+            for loc_line in loc_lines:
+                loc_parts = loc_line.strip().split("\t")
+                self.assertEqual(
+                    len(loc_parts), 2, f"Loc line should have 2 fields, got: {loc_line}"
+                )
+
+                # First column: shard filename with extension (e.g., "multi-test-01.cdx.gz")
+                shard_name = loc_parts[0]
+                self.assertTrue(
+                    shard_name.endswith(".cdx.gz"),
+                    f"Loc first column should have .cdx.gz extension, got: {shard_name}",
+                )
+
+                # Second column: shard filename with extension (e.g., "multi-test-01.cdx.gz")
+                shard_filename = loc_parts[1]
+                self.assertTrue(
+                    shard_filename.endswith(".cdx.gz"),
+                    f"Loc second column should have .cdx.gz extension, got: {shard_filename}",
+                )
+
+                # Both columns should be identical
+                self.assertEqual(
+                    shard_name,
+                    shard_filename,
+                    f"Loc columns should be identical: '{shard_name}' should equal '{shard_filename}'",
+                )
+
+        finally:
+            shutil.rmtree(multi_output_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":
