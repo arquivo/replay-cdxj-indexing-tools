@@ -58,6 +58,9 @@ Individual tool documentation:
 **...deploy to production:**
 → [Reference Implementation](reference-implementation.md) → [Incremental Workflow](incremental-workflow.md)
 
+**...merge last years cdxj:**
+→ [Merge last years cdxj](merge-last-years-cdxj.md)
+
 ## Processing Pipeline Overview
 
 ```
@@ -202,4 +205,4 @@ make --jobs 10 ci-all
 
 ## License
 
-MIT License - See [LICENSE](../LICENSE) file for details.
+GPLv3+ License - See [LICENSE](../LICENSE) file for details.

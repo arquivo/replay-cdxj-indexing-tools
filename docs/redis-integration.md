@@ -539,6 +539,14 @@ protected-mode yes        # Enable protected mode
 requirepass your_password # Set password
 ```
 
+## Docker
+
+Publish (w)arc list data to the Redis DB for one of the branches.
+
+```bash
+docker run --rm --network host -v /data/warcIndex:/data/warcIndex:ro arquivo/replay-cdxj-indexing-tools:latest bash -c "arclist-index-to-redis --folder /data/warcIndex/branchA/arcList --redis-key pathindex:branchA --batch-size 1000 --verbose"
+```
+
 ## Related Documentation
 
 - **[arclist-index-to-redis](tools/arclist-index-to-redis.md)** - Complete pipeline tool
