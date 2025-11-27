@@ -1,6 +1,8 @@
 # filter-blocklist - Blocklist Pattern Filter
 
-Filter CDXJ records matching regex patterns in a blocklist file. Use this to remove spam domains, adult content, specific MIME types, or other unwanted content from web archive indexes.
+Filter CDXJ records matching regex patterns in a blocklist file. Use this to remove spam domains, adult content, or other unwanted content from web archive indexes.
+
+**This tool matches regex patterns against ENTIRE CDXJ lines** (like `grep -E -v`), providing flexibility for filtering by SURT domain prefixes and URL patterns (including paths).
 
 ## Command-Line Usage
 
@@ -42,79 +44,102 @@ merge-flat-cdxj - *.cdxj | \
 - `-o, --output OUTPUT` - Output file or `-` for stdout (default: stdout)
 - `-v, --verbose` - Print statistics to stderr
 
+## How It Works
+
+The filter **matches regex patterns against the entire CDXJ line**, just like the original bash implementation:
+
+```bash
+# Original bash: grep -E -v -f blocklist.txt input.cdxj
+# Python equivalent: filter-blocklist -i input.cdxj -b blocklist.txt
+```
+
+**CDXJ line format:**
+```
+SURT TIMESTAMP JSON
+```
+
+Example:
+```
+pt,governo,www)/ 20230615120000 {"url": "https://www.governo.pt/", "mime": "text/html", "status": "200"}
+```
+
+Patterns can match any part: SURT, timestamp, or JSON fields.
+
 ## Blocklist File Format
 
-Each line in the blocklist is a **regex pattern**. Lines starting with `#` are comments.
+Each line is a **regex pattern** matched against entire CDXJ lines. Lines starting with `#` are comments.
 
 ### Example Blocklist
 
 ```text
 # blocklist.txt - Example blocklist patterns
 
-# Block spam domains
+# Block by SURT prefix (entire domain)
 ^pt,spam,
-^pt,spam-site,
-^pt,fake-news,
-
-# Block adult content
 ^pt,adult,
-^pt,xxx,
-^com,pornsite,
 
-# Block advertising paths
-/ads/
-/banner
-/tracking\.js
-/analytics\.js
+# Block by URL pattern (domain + path in JSON)
+https://www\.spam\.pt/
+http://.*\.adult\.pt/
+https://www\.site\.pt/unwanted-section/
 
-# Block specific MIME types
-"mime": "application/x-shockwave-flash"
-"mime": "application/pdf"
-
-# Block error responses
-"status": "404"
-"status": "500"
-"status": "502"
+# Block by file extension (URL pattern)
+\.pdf"
+\.swf"
+/ads/.*"
 ```
 
-### Pattern Types
+### Pattern Strategies
 
-#### 1. Domain Patterns (SURT)
+#### 1. Block by SURT (Entire Domain)
 
-Block entire domains using SURT prefix:
+**Most efficient** - matches start of line (anchored regex):
 
 ```text
-^pt,spam,              # Block all spam.pt
+^pt,spam,              # Block all *.spam.pt
 ^pt,adult,xxx)         # Block xxx.adult.pt
-^com,malware,          # Block all malware.com
+^com,malware,          # Block all *.malware.com
 ```
 
-#### 2. Path Patterns
+#### 2. Block by URL Pattern (in JSON)
 
-Block specific URL paths:
+Match specific URLs or URL patterns inside the JSON `"url"` field:
 
 ```text
-/ads/                  # Any path containing /ads/
-/tracker\.js           # Specific file
-/wp-admin/             # WordPress admin
+https://www\.spam\.pt/           # Specific domain
+http://.*\.adult\.pt/            # Any subdomain of adult.pt
+https://www\.site\.pt/admin/     # Specific path on domain
+https://www\.site\.pt/unwanted/  # Block subdirectory
 ```
 
-#### 3. JSON Metadata Patterns
+#### 3. Block by Path Pattern
 
-Block by MIME type, status code, or other JSON fields:
+Match any URL containing specific paths:
 
 ```text
-"mime": "application/x-shockwave-flash"    # Block Flash
-"status": "404"                             # Block 404s
-"digest": "sha1:ABCDEF"                     # Block specific content
+/wp-admin/                       # WordPress admin (any site)
+/ads/                            # Ads directory (any site)
+/tracking\.js"                   # Tracking script (any site)
 ```
 
-#### 4. Combined Patterns
+#### 4. Block by File Extension
 
-Match multiple conditions:
+Block specific file types (matches end of URL in JSON):
 
 ```text
-^pt,site,www\).*"status": "404"    # 404s from specific site
+\.pdf"                           # All PDFs
+\.swf"                           # All Flash files
+\.exe"                           # Executables
+```
+
+#### 5. Advanced: Domain + Path Combination
+
+Combine SURT domain with specific path requirements:
+
+```text
+^pt,site,www\)/admin/            # Only /admin/ path on www.site.pt
+^pt,site,www\)/.*\.pdf"          # Only PDFs from www.site.pt
+^com,example,.*\)/private/       # /private/ on any example.com subdomain
 ```
 
 ## Python API
@@ -184,7 +209,7 @@ kept, blocked = filter_cdxj_by_blocklist(
 
 ### 1. Remove Spam Domains
 
-Block known spam and malicious domains:
+Block known spam and malicious domains by SURT:
 
 ```bash
 # blocklist.txt
@@ -198,48 +223,49 @@ filter-blocklist -i arquivo.cdxj -b blocklist.txt -o clean.cdxj -v
 
 ### 2. Filter Adult Content
 
-Remove adult/NSFW content from web archive:
+Remove adult/NSFW content by domain or URL patterns:
 
 ```bash
 # adult-blocklist.txt
 ^pt,adult,
 ^pt,xxx,
-^com,pornsite,
-^com,xxx,
+http://.*\.adult\.pt/
+https://.*\.xxx\./
 
 filter-blocklist -i collection.cdxj -b adult-blocklist.txt -o filtered.cdxj
 ```
 
-### 3. Remove Legacy Technologies
+### 3. Remove Specific File Types
 
-Block outdated technologies (Flash, Java applets):
+Block file types by URL extension:
 
 ```bash
-# legacy-tech-blocklist.txt
-"mime": "application/x-shockwave-flash"
-"mime": "application/x-java-applet"
-"mime": "application/x-silverlight"
+# file-types-blocklist.txt
+\.pdf"           # PDFs
+\.swf"           # Flash
+\.exe"           # Executables
+\.zip"           # Archives
 
-filter-blocklist -i index.cdxj -b legacy-tech-blocklist.txt -o modern.cdxj
+filter-blocklist -i index.cdxj -b file-types-blocklist.txt -o filtered.cdxj
 ```
 
-### 4. Quality Control - Remove Errors
+### 4. Block Domain + Specific Paths
 
-Filter out error responses:
+Block specific sections of websites:
 
 ```bash
-# errors-blocklist.txt
-"status": "404"
-"status": "500"
-"status": "502"
-"status": "503"
+# domain-path-blocklist.txt
+^pt,site,www\)/admin/
+^pt,site,www\)/wp-admin/
+^pt,news,www\)/private/
+https://www\.forum\.pt/spam-section/
 
-filter-blocklist -i full.cdxj -b errors-blocklist.txt -o valid.cdxj
+filter-blocklist -i full.cdxj -b domain-path-blocklist.txt -o filtered.cdxj
 ```
 
 ### 5. Remove Advertising Content
 
-Block ads, trackers, and analytics:
+Block ads and trackers by URL patterns:
 
 ```bash
 # ads-blocklist.txt
@@ -263,48 +289,103 @@ filter-blocklist -i site.cdxj -b ads-blocklist.txt -o clean.cdxj
 
 **Performance Characteristics:**
 - I/O bound - limited by disk read/write speed
-- Scales linearly with file size
-- Fast pattern matching with compiled regex
+- Scales linearly with file size: O(lines × patterns)
+- Optimized regex matching with compiled patterns
 
 **Performance Tips:**
-1. Keep blocklists focused (fewer patterns = faster)
-2. Use specific patterns (avoid wildcards when possible)
+1. Use SURT prefix patterns (`^pt,spam,`) - fastest
+2. Avoid complex regex with backtracking
 3. Use pipeline mode to avoid intermediate files
-4. Process on SSD for best performance
+4. Process on SSD for best I/O performance
+
+## Pattern Best Practices
+
+### 1. Prefer SURT Prefix Matching
+
+**Fast** (anchored at start of line):
+```text
+^pt,spam,              # Matches: pt,spam,www)/ ...
+^com,ads,              # Matches: com,ads,tracking)/ ...
+```
+
+**Slower** (full line scan):
+```text
+spam\.pt               # Must scan entire line
+```
+
+### 2. URL Patterns Should Match JSON Format
+
+URLs in CDXJ are inside JSON strings:
+```text
+{"url": "https://www.spam.pt/path"}
+```
+
+Patterns:
+```text
+https://www\.spam\.pt/     # Correct - matches JSON format
+\.pdf"                     # Correct - matches end of URL in JSON
+```
+
+### 3. Combine Domain + Path Efficiently
+
+```text
+# Good: Single pattern for domain + specific path
+^pt,news,www\)/admin/
+
+# Less efficient: Would match domain separately
+^pt,news,www\)
+/admin/
+```
+
+### 4. Escape Special Characters
+
+```text
+\.pdf"          # Escaped dot (literal .)
+/ads/           # Forward slashes are literal in regex
+\(.*\)          # Escaped parentheses
+```
 
 ## Common Blocklist Patterns
 
 ### Portuguese Spam Domains
 
 ```text
-# Common PT spam patterns
+# Common PT spam patterns (SURT prefix)
 ^pt,spam,
 ^pt,publicidade,
 ^pt,anuncios,
 ```
 
-### International Spam
+### Block by File Extension
 
 ```text
-# Common spam TLDs and patterns
-^com,spam,
-^info,spam,
-^biz,
-\.tk\)         # Free TLD often used for spam
-\.ml\)         # Free TLD
+# Common unwanted file types
+\.pdf"
+\.doc"
+\.xls"
+\.swf"
+\.exe"
 ```
 
-### Privacy-Respecting Filters
+### Block by URL Patterns
 
 ```text
-# Remove tracking and surveillance
-/tracking
-/analytics
+# Advertising and tracking paths (any domain)
+/ads/
+/banner
+/tracking\.js
+/analytics\.js
+/pixel\.gif
 /beacon
-/pixel\.
-^com,google-analytics,
-^com,facebook,.*\/pixel
-^com,twitter,.*\/ads
+```
+
+### Block Domain + Path Combinations
+
+```text
+# Specific paths on specific domains
+^pt,site,www\)/admin/
+^pt,forum,www\)/spam-section/
+^com,example,www\)/private/
 ```
 
 ## Error Handling
@@ -369,16 +450,20 @@ grep -a -E -v -f blacklist_patterns.txt input.cdxj > output.cdxj
 ### New Approach (Python)
 
 ```bash
-# New: filter-blocklist
+# New: filter-blocklist (same behavior as grep -E -v)
 filter-blocklist -i input.cdxj -b blacklist_patterns.txt -o output.cdxj
 ```
 
 **Benefits:**
-- 10-50x faster
-- Better error handling
-- Pipeline compatible
-- Cross-platform
+- **Same pattern matching as grep -E -v** (regex against entire line)
+- Better error handling and pattern validation
+- Pipeline compatible (stdin/stdout)
+- Cross-platform (no grep dependency)
 - Integrated with other tools
+- Verbose statistics mode
+
+**Pattern Compatibility:**
+The Python implementation uses the **same regex matching** as `grep -E`, so existing blocklist files work without modification.
 
 ## See Also
 

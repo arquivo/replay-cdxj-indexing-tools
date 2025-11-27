@@ -2,12 +2,12 @@
 """
 filter_blocklist.py
 
-Filter out CDXJ records matching blocklist patterns (regex or literal strings).
+Filter out CDXJ records matching blocklist patterns (regex patterns).
 This tool helps remove unwanted content like spam domains, adult content, or
 other blocked patterns from web archive indexes.
 
-Replaces the legacy apply_blacklist.sh script with better performance and
-cross-platform compatibility.
+Replaces the legacy apply_blacklist.sh script (grep -E -v) with better
+performance and cross-platform compatibility.
 
 COMMAND-LINE USAGE
 ==================
@@ -26,26 +26,28 @@ Basic usage:
 Blocklist file format:
 
     # Lines starting with # are comments
-    # Each line is a regex pattern to block
+    # Each line is a regex pattern to match against ENTIRE CDXJ lines
 
-    # Block entire domains
+    # Block by SURT domain prefix (entire domain)
     ^pt,spam,
     ^pt,adult,
 
-    # Block specific paths
-    /ads/
-    /tracker\\.js
+    # Block by URL patterns (matches JSON url field)
+    https://www\.spam\.pt/
+    http://.*\.adult\.pt/
+    https://www\.site\.pt/unwanted-section/
 
-    # Block MIME types
-    "mime": "application/x-shockwave-flash"
+    # Block by file extension
+    \.pdf"
+    \.swf"
 
-    # Block by status code
-    "status": "404"
+    # Block domain + specific path
+    ^pt,site,www\)/admin/
 
 PYTHON API
 ==========
 
-    from replay_cdxj_indexing_tools.utils.filter_blocklist import (
+    from replay_cdxj_indexing_tools.filter.blocklist import (
         load_blocklist,
         filter_cdxj_by_blocklist,
     )
@@ -67,88 +69,7 @@ PYTHON API
 import argparse
 import re
 import sys
-from typing import List, Pattern, Set, Tuple, Union
-
-
-class BlocklistMatcher:
-    """
-    Optimized blocklist matcher using pattern categorization.
-
-    Categorizes patterns by type for faster matching:
-    - Simple domain prefixes: Fast string prefix checks
-    - Path patterns: Fast substring checks
-    - Complex patterns: Full regex matching
-
-    This provides 3-5x speedup for typical Arquivo.pt blocklists.
-    """
-
-    def __init__(self, patterns: List[Pattern]):
-        """Initialize with list of compiled patterns."""
-        self.domain_prefixes: Set[str] = set()
-        self.path_substrings: Set[str] = set()
-        self.json_patterns: List[Pattern] = []
-        self.complex_patterns: List[Pattern] = []
-
-        # Categorize patterns
-        for pattern in patterns:
-            pattern_str = pattern.pattern
-
-            # Domain prefix patterns: ^pt,domain,
-            if pattern_str.startswith("^") and pattern_str.endswith(",") and "(" not in pattern_str:
-                # Extract simple prefix
-                prefix = pattern_str[1:]  # Remove ^
-                self.domain_prefixes.add(prefix)
-
-            # Simple path substring: /ads/ or /tracker.js (no regex metacharacters)
-            elif pattern_str.startswith("/") and set(pattern_str) & set(".*+?[]{}()^$|\\") <= {
-                ".",
-                "\\",
-            }:
-                # Simple path pattern - use substring search
-                # Handle escaped dots
-                path = pattern_str.replace("\\.", ".")
-                self.path_substrings.add(path)
-
-            # JSON field patterns: "field": "value"
-            elif '"' in pattern_str and ":" in pattern_str:
-                self.json_patterns.append(pattern)
-
-            # Complex regex patterns
-            else:
-                self.complex_patterns.append(pattern)
-
-    def matches(self, line: str) -> bool:
-        """Check if line matches any blocklist pattern."""
-        # Fast path 1: Domain prefix check (O(1) hash lookup)
-        for prefix in self.domain_prefixes:
-            if line.startswith(prefix):
-                return True
-
-        # Fast path 2: Path substring check (O(n) but fast native string search)
-        for substring in self.path_substrings:
-            if substring in line:
-                return True
-
-        # Medium path: JSON patterns (fewer than complex)
-        for pattern in self.json_patterns:
-            if pattern.search(line):
-                return True
-
-        # Slow path: Complex regex patterns
-        for pattern in self.complex_patterns:
-            if pattern.search(line):
-                return True
-
-        return False
-
-    def __len__(self):
-        """Return total number of patterns."""
-        return (
-            len(self.domain_prefixes)
-            + len(self.path_substrings)
-            + len(self.json_patterns)
-            + len(self.complex_patterns)
-        )
+from typing import List, Pattern, Tuple
 
 
 def load_blocklist(blocklist_path: str) -> List[Pattern]:
@@ -196,22 +117,23 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
 
 def filter_cdxj_by_blocklist(
     input_path: str,
-    blocklist_patterns: Union[BlocklistMatcher, List[Pattern]],
+    blocklist_patterns: List[Pattern],
     output_path: str = "-",
     buffer_size: int = 1024 * 1024,
 ) -> Tuple[int, int]:
     """
     Filter CDXJ records matching blocklist patterns.
 
-    Reads CDXJ line by line, checks each line against all blocklist patterns.
-    If any pattern matches, the line is blocked. Otherwise, it's written to output.
+    Reads CDXJ line by line, checks each line against all blocklist patterns
+    using regex matching (like grep -E -v). If any pattern matches the entire
+    CDXJ line, that line is blocked. Otherwise, it's written to output.
 
-    Performance: Automatically uses optimized BlocklistMatcher if list of patterns provided.
-    This provides 3-5x speedup for typical Arquivo.pt blocklists with 160+ patterns.
+    This matches the behavior of the original bash implementation:
+        grep -E -v -f blocklist.txt input.cdxj > output.cdxj
 
     Args:
         input_path: Input CDXJ file, or '-' for stdin
-        blocklist_patterns: BlocklistMatcher or List of Patterns to block
+        blocklist_patterns: List of compiled regex Pattern objects to block
         output_path: Output file, or '-' for stdout (default: stdout)
         buffer_size: I/O buffer size in bytes (default: 1MB)
 
@@ -226,12 +148,6 @@ def filter_cdxj_by_blocklist(
     lines_kept = 0
     lines_blocked = 0
 
-    # Auto-optimize: Convert list of patterns to BlocklistMatcher
-    if isinstance(blocklist_patterns, list):
-        matcher = BlocklistMatcher(blocklist_patterns)
-    else:
-        matcher = blocklist_patterns
-
     # Open input
     if input_path == "-":
         input_fh = sys.stdin
@@ -245,9 +161,16 @@ def filter_cdxj_by_blocklist(
         output_fh = open(output_path, "w", encoding="utf-8", buffering=buffer_size)
 
     try:
-        # Optimized matching
+        # Match patterns against entire CDXJ line (like grep -E)
         for line in input_fh:
-            if matcher.matches(line):
+            # Check if any pattern matches this line
+            blocked = False
+            for pattern in blocklist_patterns:
+                if pattern.search(line):
+                    blocked = True
+                    break
+            
+            if blocked:
                 lines_blocked += 1
             else:
                 output_fh.write(line)
