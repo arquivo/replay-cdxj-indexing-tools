@@ -310,7 +310,7 @@ class TestCLIIntegration(unittest.TestCase):
 
         try:
             result = subprocess.run(
-                ["arclist-to-path-index", "-i", test_file],
+                ["python3", "-m", "replay_cdxj_indexing_tools.arclist_to_path_index", "-i", test_file],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -332,7 +332,7 @@ class TestCLIIntegration(unittest.TestCase):
                 f.write("/mnt/file2.warc.gz\n")
 
             result = subprocess.run(
-                ["arclist-to-path-index", "-d", tmpdir],
+                ["python3", "-m", "replay_cdxj_indexing_tools.arclist_to_path_index", "-d", tmpdir],
                 capture_output=True,
                 text=True,
                 timeout=5,
@@ -345,7 +345,7 @@ class TestCLIIntegration(unittest.TestCase):
     def test_cli_missing_args(self):
         """Test CLI with missing required arguments."""
         result = subprocess.run(
-            ["arclist-to-path-index"],
+            ["python3", "-m", "replay_cdxj_indexing_tools.arclist_to_path_index"],
             capture_output=True,
             text=True,
             timeout=5,
@@ -366,7 +366,7 @@ class TestCLIIntegration(unittest.TestCase):
 
         try:
             result = subprocess.run(
-                ["arclist-to-path-index", "-i", file1, "-i", file2],
+                ["python3", "-m", "replay_cdxj_indexing_tools.arclist_to_path_index", "-i", file1, "-i", file2],
                 capture_output=True,
                 text=True,
                 timeout=5,
