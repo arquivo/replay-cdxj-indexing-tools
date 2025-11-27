@@ -622,7 +622,11 @@ class TestEdgeCases(unittest.TestCase):
             f.writelines(cdxj_lines)
 
         # Exact timestamp match
-        patterns = [re.compile('^\S* 20170222051345 \{"url": "(.*://)?(www.)?example.pt/files/2/documentos/123456789.pdf(\S)*"')]
+        patterns = [
+            re.compile(
+                r'^\S* 20170222051345 \{"url": "(.*://)?(www.)?example.pt/files/2/documentos/123456789.pdf(\S)*"'
+            )
+        ]
 
         kept, blocked = filter_cdxj_by_blocklist(input_path, patterns, output_path)
 
@@ -630,12 +634,17 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(blocked, 1)
 
         # Same for any timestamp
-        patterns = [re.compile('^\S* [0-9]{14} \{"url": "(.*://)?(www.)?example.pt/files/2/documentos/123456789.pdf(\S)*"')]
+        patterns = [
+            re.compile(
+                r'^\S* [0-9]{14} \{"url": "(.*://)?(www.)?example.pt/files/2/documentos/123456789.pdf(\S)*"'
+            )
+        ]
 
         kept, blocked = filter_cdxj_by_blocklist(input_path, patterns, output_path)
 
         self.assertEqual(kept, 3)
         self.assertEqual(blocked, 1)
+
 
 if __name__ == "__main__":
     unittest.main()

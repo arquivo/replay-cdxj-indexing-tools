@@ -33,16 +33,16 @@ Blocklist file format:
     ^pt,adult,
 
     # Block by URL patterns (matches JSON url field)
-    https://www\.spam\.pt/
-    http://.*\.adult\.pt/
-    https://www\.site\.pt/unwanted-section/
+    https://www.spam.pt/
+    http://.*\\.adult.pt/
+    https://www.site.pt/unwanted-section/
 
     # Block by file extension
-    \.pdf"
-    \.swf"
+    \\.pdf"
+    \\.swf"
 
     # Block domain + specific path
-    ^pt,site,www\)/admin/
+    ^pt,site,www)/admin/
 
 PYTHON API
 ==========
@@ -67,9 +67,12 @@ PYTHON API
 """
 
 import argparse
+import os
 import re
+import subprocess
 import sys
-from typing import List, Pattern, Tuple
+import tempfile
+from typing import List, Optional, Pattern, Tuple
 
 
 def load_blocklist(blocklist_path: str) -> List[Pattern]:
@@ -119,8 +122,8 @@ def filter_cdxj_by_blocklist(
     input_path: str,
     blocklist_patterns: List[Pattern],
     output_path: str = "-",
-    buffer_size: int = 1024 * 1024,
-    blocklist_file: str = None,
+    buffer_size: int = 1024 * 1024,  # pylint: disable=unused-argument
+    blocklist_file: Optional[str] = None,
 ) -> Tuple[int, int]:
     """
     Filter CDXJ records matching blocklist patterns.
@@ -131,7 +134,8 @@ def filter_cdxj_by_blocklist(
 
     Args:
         input_path: Input CDXJ file, or '-' for stdin
-        blocklist_patterns: List of compiled regex Pattern objects to block (deprecated, use blocklist_file)
+        blocklist_patterns: List of compiled regex Pattern objects to block
+            (deprecated, use blocklist_file)
         output_path: Output file, or '-' for stdout (default: stdout)
         buffer_size: I/O buffer size in bytes (unused, kept for API compatibility)
         blocklist_file: Path to blocklist file (preferred for performance)
@@ -140,65 +144,68 @@ def filter_cdxj_by_blocklist(
         Tuple of (lines_kept, lines_blocked)
 
     Example:
-        >>> kept, blocked = filter_cdxj_by_blocklist('input.cdxj', [], 'output.cdxj', blocklist_file='blocklist.txt')
+        >>> kept, blocked = filter_cdxj_by_blocklist(
+        ...     'input.cdxj', [],  'output.cdxj',
+        ...     blocklist_file='blocklist.txt'
+        ... )
         >>> print(f"Kept {kept} lines, blocked {blocked} lines")
     """
-    import subprocess
-    import tempfile
-    
     # If blocklist_file not provided, create temp file from patterns
     temp_blocklist = None
     if blocklist_file is None:
         # Create temporary blocklist file from patterns
-        temp_blocklist = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+        temp_blocklist = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt")
         for pattern in blocklist_patterns:
-            temp_blocklist.write(pattern.pattern + '\n')
+            temp_blocklist.write(pattern.pattern + "\n")
         temp_blocklist.close()
         blocklist_file = temp_blocklist.name
-    
+
     try:
         # Build grep command
-        cmd = ['grep', '-a', '-E', '-v', '-f', blocklist_file]
-        
+        cmd = ["grep", "-a", "-E", "-v", "-f", blocklist_file]
+
         # Handle input
-        if input_path == '-':
-            cmd.append('-')
+        if input_path == "-":
+            cmd.append("-")
             stdin_input = sys.stdin
         else:
             cmd.append(input_path)
             stdin_input = None
-        
+
         # Handle output and capture for counting
-        if output_path == '-':
+        if output_path == "-":
             # Output to stdout, capture to count lines
-            result = subprocess.run(cmd, stdin=stdin_input, capture_output=True, text=True)
+            result = subprocess.run(
+                cmd, stdin=stdin_input, capture_output=True, text=True, check=False
+            )
             sys.stdout.write(result.stdout)
-            lines_kept = result.stdout.count('\n')
+            lines_kept = result.stdout.count("\n")
         else:
             # Output to file, capture to count lines
-            result = subprocess.run(cmd, stdin=stdin_input, capture_output=True, text=True)
-            with open(output_path, 'w') as f:
+            result = subprocess.run(
+                cmd, stdin=stdin_input, capture_output=True, text=True, check=False
+            )
+            with open(output_path, "w") as f:
                 f.write(result.stdout)
-            lines_kept = result.stdout.count('\n')
-        
+            lines_kept = result.stdout.count("\n")
+
         # Count blocked lines (total - kept)
         # We need to count total lines in input
-        if input_path == '-':
+        if input_path == "-":
             # Can't count stdin lines easily, estimate as 0 blocked
             lines_blocked = 0
         else:
             total_lines = 0
-            with open(input_path, 'r') as f:
+            with open(input_path, "r") as f:
                 for _ in f:
                     total_lines += 1
             lines_blocked = total_lines - lines_kept
-        
+
         return lines_kept, lines_blocked
-    
+
     finally:
         # Cleanup temp file if created
         if temp_blocklist is not None:
-            import os
             os.unlink(temp_blocklist.name)
 
 
