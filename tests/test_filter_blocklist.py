@@ -604,6 +604,38 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(kept, 2)
         self.assertEqual(blocked, 100)
 
+    def test_pattern_matching(self):
+        """
+        Use a pattern that matches what we are using on Ansible Arquivo.pt scripts.
+        """
+        cdxj_lines = [
+            'pt,example,www)/admin/ 20170222051345 {"url": "https://www.example.pt/admin/panel"}\n',
+            'pt,example,www)/files/2/documentos/123456789.pdf 20170222051345 {"url": "https://www.example.pt/files/2/documentos/123456789.pdf"}\n',
+            'pt,example,www)/files/2/documentos/other.pdf 20170222051345 {"url": "https://www.example.pt/files/2/documentos/other.pdf"}\n',
+            'pt,example,www)/files/2/documentos/other.pdf 20170222051345 {"url": "https://www.example.pt/files/2/documentos/other.pdf?aaa=value"}\n',
+        ]
+
+        input_path = os.path.join(self.temp_dir, "input.cdxj")
+        output_path = os.path.join(self.temp_dir, "output.cdxj")
+
+        with open(input_path, "w") as f:
+            f.writelines(cdxj_lines)
+
+        # Exact timestamp match
+        patterns = [re.compile('^\S* 20170222051345 \{"url": "(.*://)?(www.)?example.pt/files/2/documentos/123456789.pdf(\S)*"')]
+
+        kept, blocked = filter_cdxj_by_blocklist(input_path, patterns, output_path)
+
+        self.assertEqual(kept, 3)
+        self.assertEqual(blocked, 1)
+
+        # Same for any timestamp
+        patterns = [re.compile('^\S* [0-9]{14} \{"url": "(.*://)?(www.)?example.pt/files/2/documentos/123456789.pdf(\S)*"')]
+
+        kept, blocked = filter_cdxj_by_blocklist(input_path, patterns, output_path)
+
+        self.assertEqual(kept, 3)
+        self.assertEqual(blocked, 1)
 
 if __name__ == "__main__":
     unittest.main()
