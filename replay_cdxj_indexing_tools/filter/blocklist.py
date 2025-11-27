@@ -120,69 +120,86 @@ def filter_cdxj_by_blocklist(
     blocklist_patterns: List[Pattern],
     output_path: str = "-",
     buffer_size: int = 1024 * 1024,
+    blocklist_file: str = None,
 ) -> Tuple[int, int]:
     """
     Filter CDXJ records matching blocklist patterns.
 
-    Reads CDXJ line by line, checks each line against all blocklist patterns
-    using regex matching (like grep -E -v). If any pattern matches the entire
-    CDXJ line, that line is blocked. Otherwise, it's written to output.
-
-    This matches the behavior of the original bash implementation:
+    Uses grep internally for best performance. This matches the behavior of the
+    original bash implementation:
         grep -E -v -f blocklist.txt input.cdxj > output.cdxj
 
     Args:
         input_path: Input CDXJ file, or '-' for stdin
-        blocklist_patterns: List of compiled regex Pattern objects to block
+        blocklist_patterns: List of compiled regex Pattern objects to block (deprecated, use blocklist_file)
         output_path: Output file, or '-' for stdout (default: stdout)
-        buffer_size: I/O buffer size in bytes (default: 1MB)
+        buffer_size: I/O buffer size in bytes (unused, kept for API compatibility)
+        blocklist_file: Path to blocklist file (preferred for performance)
 
     Returns:
         Tuple of (lines_kept, lines_blocked)
 
     Example:
-        >>> patterns = load_blocklist('blocklist.txt')
-        >>> kept, blocked = filter_cdxj_by_blocklist('input.cdxj', patterns, 'output.cdxj')
+        >>> kept, blocked = filter_cdxj_by_blocklist('input.cdxj', [], 'output.cdxj', blocklist_file='blocklist.txt')
         >>> print(f"Kept {kept} lines, blocked {blocked} lines")
     """
-    lines_kept = 0
-    lines_blocked = 0
-
-    # Open input
-    if input_path == "-":
-        input_fh = sys.stdin
-    else:
-        input_fh = open(input_path, "r", encoding="utf-8", buffering=buffer_size)
-
-    # Open output
-    if output_path == "-":
-        output_fh = sys.stdout
-    else:
-        output_fh = open(output_path, "w", encoding="utf-8", buffering=buffer_size)
-
+    import subprocess
+    import tempfile
+    
+    # If blocklist_file not provided, create temp file from patterns
+    temp_blocklist = None
+    if blocklist_file is None:
+        # Create temporary blocklist file from patterns
+        temp_blocklist = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt')
+        for pattern in blocklist_patterns:
+            temp_blocklist.write(pattern.pattern + '\n')
+        temp_blocklist.close()
+        blocklist_file = temp_blocklist.name
+    
     try:
-        # Match patterns against entire CDXJ line (like grep -E)
-        for line in input_fh:
-            # Check if any pattern matches this line
-            blocked = False
-            for pattern in blocklist_patterns:
-                if pattern.search(line):
-                    blocked = True
-                    break
-            
-            if blocked:
-                lines_blocked += 1
-            else:
-                output_fh.write(line)
-                lines_kept += 1
-
+        # Build grep command
+        cmd = ['grep', '-a', '-E', '-v', '-f', blocklist_file]
+        
+        # Handle input
+        if input_path == '-':
+            cmd.append('-')
+            stdin_input = sys.stdin
+        else:
+            cmd.append(input_path)
+            stdin_input = None
+        
+        # Handle output and capture for counting
+        if output_path == '-':
+            # Output to stdout, capture to count lines
+            result = subprocess.run(cmd, stdin=stdin_input, capture_output=True, text=True)
+            sys.stdout.write(result.stdout)
+            lines_kept = result.stdout.count('\n')
+        else:
+            # Output to file, capture to count lines
+            result = subprocess.run(cmd, stdin=stdin_input, capture_output=True, text=True)
+            with open(output_path, 'w') as f:
+                f.write(result.stdout)
+            lines_kept = result.stdout.count('\n')
+        
+        # Count blocked lines (total - kept)
+        # We need to count total lines in input
+        if input_path == '-':
+            # Can't count stdin lines easily, estimate as 0 blocked
+            lines_blocked = 0
+        else:
+            total_lines = 0
+            with open(input_path, 'r') as f:
+                for _ in f:
+                    total_lines += 1
+            lines_blocked = total_lines - lines_kept
+        
         return lines_kept, lines_blocked
-
+    
     finally:
-        if input_path != "-":
-            input_fh.close()
-        if output_path != "-":
-            output_fh.close()
+        # Cleanup temp file if created
+        if temp_blocklist is not None:
+            import os
+            os.unlink(temp_blocklist.name)
 
 
 def main():
@@ -243,7 +260,9 @@ Blocklist file format:
         if args.verbose:
             print(f"Filtering {args.input}...", file=sys.stderr)
 
-        lines_kept, lines_blocked = filter_cdxj_by_blocklist(args.input, patterns, args.output)
+        lines_kept, lines_blocked = filter_cdxj_by_blocklist(
+            args.input, patterns, args.output, blocklist_file=args.blocklist
+        )
 
         # Print statistics
         total = lines_kept + lines_blocked
