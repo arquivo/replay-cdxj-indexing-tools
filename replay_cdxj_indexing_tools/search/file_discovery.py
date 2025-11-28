@@ -78,28 +78,6 @@ def detect_file_type(filepath: str) -> str:
         return "cdxj"  # Default assumption
 
 
-def find_zipnum_data_file(idx_file: str) -> str:
-    """
-    Find the corresponding .cdxj.gz file for a .idx file.
-
-    Args:
-        idx_file: Path to .idx file
-
-    Returns:
-        Path to corresponding .cdxj.gz file
-
-    Raises:
-        FileNotFoundError: If data file not found
-    """
-    # Standard naming: index.idx -> index.cdxj.gz
-    if idx_file.endswith(".idx"):
-        data_file = idx_file[:-4] + ".cdxj.gz"
-        if os.path.exists(data_file):
-            return data_file
-
-    raise FileNotFoundError(f"Could not find data file for index: {idx_file}")
-
-
 def find_zipnum_index_file(data_file: str) -> str:
     """
     Find the corresponding .idx file for a .cdxj.gz file.

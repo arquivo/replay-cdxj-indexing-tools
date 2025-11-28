@@ -9,11 +9,7 @@ from typing import List
 import surt
 
 from replay_cdxj_indexing_tools.search.binary_search import search_cdxj_file
-from replay_cdxj_indexing_tools.search.file_discovery import (
-    detect_file_type,
-    discover_files,
-    find_zipnum_data_file,
-)
+from replay_cdxj_indexing_tools.search.file_discovery import detect_file_type, discover_files
 from replay_cdxj_indexing_tools.search.filters import CDXJFilter, deduplicate_lines, sort_lines
 from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
@@ -95,8 +91,7 @@ def search_file(
             return search_cdxj_file(filepath, modified_key, use_prefix, verbose)
 
         elif file_type == "zipnum_idx":
-            data_file = find_zipnum_data_file(filepath)
-            return search_zipnum_file(filepath, data_file, modified_key, use_prefix, verbose)
+            return search_zipnum_file(filepath, modified_key, use_prefix, verbose)
 
         elif file_type == "zipnum_data":
             # For .cdxj.gz files, we need to find the index first
@@ -105,7 +100,7 @@ def search_file(
             from replay_cdxj_indexing_tools.search.file_discovery import find_zipnum_index_file
 
             idx_file = find_zipnum_index_file(filepath)
-            return search_zipnum_file(idx_file, filepath, modified_key, use_prefix, verbose)
+            return search_zipnum_file(idx_file, modified_key, use_prefix, verbose)
 
         else:
             if verbose:
