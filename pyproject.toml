@@ -69,6 +69,7 @@ arclist-to-path-index = "replay_cdxj_indexing_tools.arclist_to_path_index:main"
 path-index-to-redis = "replay_cdxj_indexing_tools.redis.path_index_to_redis:main"
 arclist-index-to-redis = "replay_cdxj_indexing_tools.arclist_index_to_redis:main"
 cdxj-search = "replay_cdxj_indexing_tools.search.cdxj_search:main"
+cdxj-extract-field = "replay_cdxj_indexing_tools.search.extract_field:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
