@@ -46,12 +46,16 @@ cdxj-index-collection AWP-999
 
 ### Tool Reference
 
+- **[addfield-to-flat-cdxj](docs/tools/addfield-to-flat-cdxj.md)** - Add custom JSON fields to CDXJ records
 - **[merge-flat-cdxj](docs/tools/merge-flat-cdxj.md)** - Merge sorted flat CDXJ files
 - **[filter-blocklist](docs/tools/filter-blocklist.md)** - Content filtering
 - **[filter-excessive-urls](docs/tools/filter-excessive-urls.md)** - Crawler trap removal
 - **[flat-cdxj-to-zipnum](docs/tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
 - **[zipnum-to-flat-cdxj](docs/tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
+- **[cdxj-search](docs/tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 - **[arclist-to-path-index](docs/tools/arclist-to-path-index.md)** - Convert arclist files to path index format
+- **[arclist-index-to-redis](docs/tools/arclist-index-to-redis.md)** - Complete arclist to Redis pipeline
+- **[cdxj-index-collection](docs/reference-implementation.md)** - Complete collection processing pipeline
 
 ## Usage Examples
 
