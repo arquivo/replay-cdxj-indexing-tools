@@ -23,7 +23,7 @@ TEST COVERAGE SUMMARY
 1. TestFileDiscovery - File discovery and type detection
 2. TestFilters - Date range and field filtering
 3. TestBinarySearch - Binary search on flat CDXJ files
-4. TestMatchTypes - Different match types (exact, prefix, host, domain)
+4. TestMatchTypes - Different match types (exact, prefix, domain, subdomains)
 5. TestCDXJSearch - End-to-end integration tests
 """
 
@@ -287,21 +287,29 @@ class TestMatchTypes(unittest.TestCase):
         self.assertEqual(key, "com,example)/path/")
         self.assertTrue(use_prefix)
 
-    def test_match_type_host(self):
-        """Test host match type extracts host."""
-        key, use_prefix = apply_match_type("com,example)/any/path", "host")
+    def test_match_type_domain(self):
+        """Test domain match type (only paths for specific domain)."""
+        key, use_prefix = apply_match_type("com,example)/any/path", "domain")
         self.assertEqual(key, "com,example)")
         self.assertTrue(use_prefix)
 
-    def test_match_type_domain(self):
-        """Test domain match type extracts domain."""
-        key, use_prefix = apply_match_type("com,example,www)/page", "domain")
-        self.assertEqual(key, "com,example,www)")
+    def test_match_type_subdomains(self):
+        """Test subdomains match type, don't match the domain itself, just any subdomain."""
+        key, use_prefix = apply_match_type("com,example)/page", "subdomains")
+        self.assertEqual(key, "com,example,")
         self.assertTrue(use_prefix)
 
-    def test_match_type_host_no_path(self):
-        """Test host match when no path present."""
-        key, use_prefix = apply_match_type("com,example)", "host")
+        key, use_prefix = apply_match_type("com,example)/", "subdomains")
+        self.assertEqual(key, "com,example,")
+        self.assertTrue(use_prefix)
+
+        key, use_prefix = apply_match_type("com,example)", "subdomains")
+        self.assertEqual(key, "com,example,")
+        self.assertTrue(use_prefix)
+
+    def test_match_type_domain_no_path(self):
+        """Test domain match when no path present."""
+        key, use_prefix = apply_match_type("com,example)", "domain")
         self.assertEqual(key, "com,example)")
         self.assertTrue(use_prefix)
 

@@ -32,20 +32,27 @@ def apply_match_type(search_key: str, match_type: str) -> tuple:
     if match_type == "prefix":
         return (search_key, True)
 
-    if match_type == "host":
-        # Extract just the host part (everything before the first ')')
+    if match_type == "domain":
+        # Domain matching: matches only the specific domain and its paths
+        # Example: com,example matches com,example)/... but NOT com,example,www)/...
         if ")" in search_key:
-            host_part = search_key.split(")", 1)[0] + ")"
-            return (host_part, True)
+            domain_part = search_key.split(")", 1)[0] + ")"
+            return (domain_part, True)
         return (search_key, True)
 
-    if match_type == "domain":
-        # For domain matching, we need to match the domain and all subdomains
-        # Example: com,example,) matches com,example,www,) and com,example,mail,) etc.
+    if match_type == "subdomains":
+        # Subdomain matching: it won't match the domain itself,
+        # only matches everything on subdomains.
+        # Example: com,example matches:
+        #   - com,example)/ (the domain itself)
+        #   - com,example)/path/ (domain paths)
+        #   - com,example,www)/ (subdomains)
+        #   - com,example,mail)/ (subdomains)
+        # It transforms the search key removes the last ')' of the SURT to ','
+        # so it just matches the subdomains and paths.
         if ")" in search_key:
-            # Extract domain part (up to and including the ')')
-            host_part = search_key.split(")", 1)[0] + ")"
-            return (host_part, True)
+            domain_part = search_key.split(")", 1)[0] + ","
+            return (domain_part, True)
         return (search_key, True)
 
     # Default to exact
@@ -131,11 +138,11 @@ Examples:
   cdxj-search --url http://example.com/ --matchType prefix \\
     --from 2020 --to 2021 /data/*.cdxj
 
-  # Host match (match all paths for a host)
-  cdxj-search --url http://example.com/any/path --matchType host /data/*.cdxj
+  # Domain match (match all paths for domain only)
+  cdxj-search --url http://example.com/any/path --matchType domain /data/*.cdxj
 
-  # Domain match (match host and all subdomains)
-  cdxj-search --url http://example.com --matchType domain /data/*.cdxj
+  # Subdomains match (match domain and all subdomains with their paths)
+  cdxj-search --url http://example.com --matchType subdomains /data/*.cdxj
 
   # Multiple filters
   cdxj-search --surt "com,example)/" \\
@@ -161,10 +168,10 @@ Examples:
     # Search options
     parser.add_argument(
         "--matchType",
-        choices=["exact", "prefix", "host", "domain"],
+        choices=["exact", "prefix", "domain", "subdomains"],
         default="exact",
         help="Match type: exact (default), prefix (path prefix), "
-        "host (all paths for host), domain (host + subdomains)",
+        "domain (all paths for domain only), subdomains (domain + all subdomains)",
     )
 
     # Filtering options

@@ -23,14 +23,14 @@ cdxj-search --url http://example.com/page index.cdxj
 cdxj-search --url http://example.com/ --matchType prefix index.cdxj
 ```
 
-**Host match (all paths for a host):**
+**Domain match (all paths for domain only):**
 ```bash
-cdxj-search --url http://example.com/any/path --matchType host index.cdxj
+cdxj-search --url http://example.com/any/path --matchType domain /data/*.cdxj
 ```
 
-**Domain match (host + all subdomains):**
+**Subdomains match (except domain itself):**
 ```bash
-cdxj-search --url http://example.com --matchType domain index.cdxj
+cdxj-search --url http://example.com --matchType subdomains /data/*.cdxj
 ```
 
 **Date range filtering:**
@@ -68,8 +68,8 @@ cdxj-search --url http://example.com /data/indexes/
 - **--matchType TYPE**: Match type for search
   - `exact` (default): Exact SURT match
   - `prefix`: Match all entries with SURT prefix
-  - `host`: Match all paths for the host
-  - `domain`: Match host and all subdomains
+  - `domain`: Match domain and all its paths (no subdomains)
+  - `subdomains`: Match domain + all subdomains and their paths
 
 #### Date Filtering:
 
@@ -172,13 +172,13 @@ key, use_prefix = apply_match_type(url_surt, "exact")
 key, use_prefix = apply_match_type(url_surt, "prefix")
 # key: "com,example)/path/page", use_prefix: True
 
-# Host match (all paths for host)
-key, use_prefix = apply_match_type(url_surt, "host")
-# key: "com,example)", use_prefix: True
-
-# Domain match (host + subdomains)
+# Domain match (all paths for domain only)
 key, use_prefix = apply_match_type(url_surt, "domain")
 # key: "com,example)", use_prefix: True
+
+# Subdomains match (domain + all subdomains)
+key, use_prefix = apply_match_type(url_surt, "subdomains")
+# key: "com,example", use_prefix: True
 ```
 
 ### Date and Field Filtering
@@ -329,8 +329,8 @@ SURT enables efficient domain/host matching through lexicographic sorting.
 |------------|-----------|------------|---------|
 | **exact** | `http://example.com/page` | `com,example)/page` | Exact URL only |
 | **prefix** | `http://example.com/dir/` | `com,example)/dir/` | All paths under `/dir/` |
-| **host** | `http://example.com/any` | `com,example)` | All paths on `example.com` |
-| **domain** | `http://example.com` | `com,example)` | `example.com` + subdomains |
+| **domain** | `http://example.com/page` | `com,example)` | All paths on `example.com` only |
+| **subdomains** | `http://example.com` | `com,example` | `example.com` + subdomains |
 
 ### ZipNum Format Support
 
@@ -360,7 +360,7 @@ Check what paths were captured for a domain:
 
 ```bash
 cdxj-search --url http://example.com \
-  --matchType domain \
+  --matchType subdomains \
   --from 2023 \
   --to 2024 \
   /data/indexes/
@@ -372,7 +372,7 @@ Find all HTML captures:
 
 ```bash
 cdxj-search --url http://example.com \
-  --matchType host \
+  --matchType domain \
   --filter mime~text/html \
   --filter status=200 \
   index.cdxj
@@ -425,7 +425,7 @@ Find duplicate captures (same timestamp):
 
 ```bash
 cdxj-search --url http://example.com/ \
-  --matchType host \
+  --matchType domain \
   index.cdxj | \
   cut -d' ' -f1-2 | \
   sort | \
@@ -438,7 +438,7 @@ Count captures by status code:
 
 ```bash
 cdxj-search --url http://example.com \
-  --matchType host \
+  --matchType domain \
   index.cdxj | \
   grep -oP '"status":\s*"\K\d+' | \
   sort | \
@@ -699,7 +699,7 @@ Find URLs to check in Wayback:
 
 ```bash
 cdxj-search --url http://example.com \
-  --matchType host \
+  --matchType domain \
   index.cdxj | \
   cut -d' ' -f1 | \
   sort -u | \
