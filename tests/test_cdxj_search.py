@@ -574,6 +574,38 @@ class TestZipNumSearch(unittest.TestCase):
         self.assertEqual(loc_map["test-01.cdx.gz"], "test-01.cdx.gz")
         self.assertEqual(loc_map["test-02.cdx.gz"], "test-02.cdx.gz")
 
+    def test_zipnum_path_traversal_relative(self):
+        """Path traversal via relative .loc entry must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        malicious_loc = os.path.join(self.test_dir, "malicious.loc")
+        with open(malicious_loc, "w") as f:
+            f.write("test-00.cdx.gz\t../../etc/passwd\n")
+
+        with self.assertRaises(ValueError):
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=malicious_loc,
+            )
+
+    def test_zipnum_path_traversal_absolute(self):
+        """Absolute path outside base_dir in .loc entry must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        malicious_loc = os.path.join(self.test_dir, "malicious_abs.loc")
+        with open(malicious_loc, "w") as f:
+            f.write("test-00.cdx.gz\t/etc/passwd\n")
+
+        with self.assertRaises(ValueError):
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=malicious_loc,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -494,6 +494,11 @@ def search_zipnum_file(
             shard_path = loc_map[shard_name]
             if not os.path.isabs(shard_path):
                 shard_path = os.path.join(base_dir, shard_path)
+            resolved = os.path.realpath(shard_path)
+            resolved_base = os.path.realpath(base_dir)
+            if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
+                raise ValueError(f"Path traversal detected in .loc file: {shard_path!r}")
+            shard_path = resolved
         else:
             if not shard_name.endswith(".cdx.gz") and not shard_name.endswith(".cdxj.gz"):
                 shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
