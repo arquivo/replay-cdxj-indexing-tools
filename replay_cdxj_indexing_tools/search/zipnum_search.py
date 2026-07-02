@@ -31,8 +31,8 @@ def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
             offset = int(parts[2])
             length = int(parts[3])
             shard_num = int(parts[4])
-        except ValueError:
-            raise ValueError(f"Invalid numeric field in index line: {line!r}")
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric field in index line: {line!r}") from exc
         return (surt_key, shard_name, offset, length, shard_num)
 
     raise ValueError(f"Invalid index line format: {line!r}")
