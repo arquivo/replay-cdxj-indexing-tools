@@ -632,6 +632,7 @@ class TestZipNumSearch(unittest.TestCase):
     def test_zipnum_path_traversal_idx_no_loc(self):
         """Traversal via .idx shard name when no .loc file is used must raise ValueError."""
         import tempfile
+
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -651,6 +652,7 @@ class TestZipNumSearch(unittest.TestCase):
     def test_zipnum_path_traversal_idx_partial_loc(self):
         """Traversal via .idx shard name not covered by partial .loc must raise ValueError."""
         import tempfile
+
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -668,6 +670,7 @@ class TestZipNumSearch(unittest.TestCase):
             # Create the safe shard so it passes the existence check
             safe_shard = os.path.join(tmpdir, "safe-00.cdx.gz")
             import gzip as gz
+
             with open(safe_shard, "wb") as f:
                 f.write(gz.compress(b'com,example)/ 20200101 {"status":"200"}\n'))
 
