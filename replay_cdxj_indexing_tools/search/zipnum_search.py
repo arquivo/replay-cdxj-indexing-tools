@@ -504,6 +504,10 @@ def search_zipnum_file(
                 shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
             else:
                 shard_path = os.path.join(base_dir, shard_name)
+            resolved = os.path.realpath(shard_path)
+            if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
+                raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}")
+            shard_path = resolved
 
         if not os.path.exists(shard_path):
             if verbose:
