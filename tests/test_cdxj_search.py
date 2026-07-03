@@ -496,6 +496,27 @@ class TestZipNumSearch(unittest.TestCase):
         self.assertEqual(length, 100)
         self.assertEqual(shard_num, 0)
 
+    def test_zipnum_index_parsing_invalid_offset(self):
+        """Non-numeric offset must raise ValueError, not silently default to 0."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import parse_idx_line
+
+        with self.assertRaises(ValueError):
+            parse_idx_line("com,example)/\tbase-00.cdx.gz\tNOT_A_NUM\t100\t0")
+
+    def test_zipnum_index_parsing_invalid_length(self):
+        """Non-numeric length must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import parse_idx_line
+
+        with self.assertRaises(ValueError):
+            parse_idx_line("com,example)/\tbase-00.cdx.gz\t0\tBAD\t0")
+
+    def test_zipnum_index_parsing_too_few_fields(self):
+        """Fewer than 5 tab-separated fields must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import parse_idx_line
+
+        with self.assertRaises(ValueError):
+            parse_idx_line("com,example)/\tbase-00.cdx.gz\t0")
+
     def test_zipnum_exact_search(self):
         """Test exact match search in ZipNum format."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file

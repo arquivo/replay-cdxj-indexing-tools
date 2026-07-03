@@ -27,12 +27,15 @@ def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
     if len(parts) >= 5:
         surt_key = parts[0]
         shard_name = parts[1]
-        offset = int(parts[2]) if parts[2].isdigit() else 0
-        length = int(parts[3]) if parts[3].isdigit() else 0
-        shard_num = int(parts[4]) if parts[4].isdigit() else 0
+        try:
+            offset = int(parts[2])
+            length = int(parts[3])
+            shard_num = int(parts[4])
+        except ValueError as exc:
+            raise ValueError(f"Invalid numeric field in index line: {line!r}") from exc
         return (surt_key, shard_name, offset, length, shard_num)
 
-    raise ValueError(f"Invalid index line format: {line}")
+    raise ValueError(f"Invalid index line format: {line!r}")
 
 
 def read_loc_file(loc_filepath: str) -> Dict[str, str]:
