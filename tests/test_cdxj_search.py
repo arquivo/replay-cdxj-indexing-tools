@@ -606,6 +606,29 @@ class TestZipNumSearch(unittest.TestCase):
                 loc_filepath=malicious_loc,
             )
 
+    @unittest.skipIf(not hasattr(os, "symlink"), "symlinks not supported")
+    def test_zipnum_path_traversal_symlink(self):
+        """Symlink inside base_dir pointing outside must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        link_path = os.path.join(self.test_dir, "evil_link.cdx.gz")
+        try:
+            os.symlink("/etc/passwd", link_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("Cannot create symlinks on this platform")
+
+        malicious_loc = os.path.join(self.test_dir, "malicious_sym.loc")
+        with open(malicious_loc, "w") as f:
+            f.write("test-00.cdx.gz\tevil_link.cdx.gz\n")
+
+        with self.assertRaises(ValueError):
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=malicious_loc,
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

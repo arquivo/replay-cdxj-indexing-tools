@@ -487,6 +487,7 @@ def search_zipnum_file(
 
     # Group blocks by shard to minimize file opens
     shard_blocks: Dict[str, List[Tuple[str, int, int]]] = defaultdict(list)
+    resolved_base = os.path.realpath(base_dir)
 
     for surt_key, shard_name, offset, length in blocks:
         # Resolve shard path using .loc file or base_dir
@@ -495,7 +496,6 @@ def search_zipnum_file(
             if not os.path.isabs(shard_path):
                 shard_path = os.path.join(base_dir, shard_path)
             resolved = os.path.realpath(shard_path)
-            resolved_base = os.path.realpath(base_dir)
             if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
                 raise ValueError(f"Path traversal detected in .loc file: {shard_path!r}")
             shard_path = resolved
