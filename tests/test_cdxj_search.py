@@ -595,6 +595,115 @@ class TestZipNumSearch(unittest.TestCase):
         self.assertEqual(loc_map["test-01.cdx.gz"], "test-01.cdx.gz")
         self.assertEqual(loc_map["test-02.cdx.gz"], "test-02.cdx.gz")
 
+    def test_zipnum_path_traversal_relative(self):
+        """Path traversal via relative .loc entry must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        malicious_loc = os.path.join(self.test_dir, "malicious.loc")
+        with open(malicious_loc, "w") as f:
+            f.write("test-00.cdx.gz\t../../etc/passwd\n")
+
+        with self.assertRaises(ValueError):
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=malicious_loc,
+            )
+
+    def test_zipnum_path_traversal_absolute(self):
+        """Absolute path outside base_dir in .loc entry must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        malicious_loc = os.path.join(self.test_dir, "malicious_abs.loc")
+        with open(malicious_loc, "w") as f:
+            f.write("test-00.cdx.gz\t/etc/passwd\n")
+
+        with self.assertRaises(ValueError):
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=malicious_loc,
+            )
+
+    @unittest.skipIf(not hasattr(os, "symlink"), "symlinks not supported")
+    def test_zipnum_path_traversal_symlink(self):
+        """Symlink inside base_dir pointing outside must raise ValueError."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        link_path = os.path.join(self.test_dir, "evil_link.cdx.gz")
+        try:
+            os.symlink("/etc/passwd", link_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("Cannot create symlinks on this platform")
+
+        malicious_loc = os.path.join(self.test_dir, "malicious_sym.loc")
+        with open(malicious_loc, "w") as f:
+            f.write("test-00.cdx.gz\tevil_link.cdx.gz\n")
+
+        with self.assertRaises(ValueError):
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=malicious_loc,
+            )
+
+    def test_zipnum_path_traversal_idx_no_loc(self):
+        """Traversal via .idx shard name when no .loc file is used must raise ValueError."""
+        import tempfile
+
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Build an .idx file whose shard name contains a path traversal
+            malicious_idx = os.path.join(tmpdir, "malicious.idx")
+            with open(malicious_idx, "w") as f:
+                f.write("com,example)/\t../../etc/passwd.cdx.gz\t0\t100\t0\n")
+
+            with self.assertRaises(ValueError):
+                search_zipnum_file(
+                    malicious_idx,
+                    "com,example)/",
+                    match_prefix=False,
+                    base_dir=tmpdir,
+                )
+
+    def test_zipnum_path_traversal_idx_partial_loc(self):
+        """Traversal via .idx shard name not covered by partial .loc must raise ValueError."""
+        import tempfile
+
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # .loc covers only shard 0; shard 1 entry in .idx has a traversal path
+            malicious_idx = os.path.join(tmpdir, "partial.idx")
+            with open(malicious_idx, "w") as f:
+                f.write("com,example)/\tsafe-00.cdx.gz\t0\t10\t0\n")
+                f.write("com,test)/\t../../etc/passwd.cdx.gz\t0\t100\t1\n")
+
+            partial_loc = os.path.join(tmpdir, "partial.loc")
+            with open(partial_loc, "w") as f:
+                # Only register the safe shard — leave the malicious one to the else branch
+                f.write("safe-00.cdx.gz\tsafe-00.cdx.gz\n")
+
+            # Create the safe shard so it passes the existence check
+            safe_shard = os.path.join(tmpdir, "safe-00.cdx.gz")
+            import gzip as gz
+
+            with open(safe_shard, "wb") as f:
+                f.write(gz.compress(b'com,example)/ 20200101 {"status":"200"}\n'))
+
+            with self.assertRaises(ValueError):
+                search_zipnum_file(
+                    malicious_idx,
+                    "com,test)/",
+                    match_prefix=False,
+                    loc_filepath=partial_loc,
+                    base_dir=tmpdir,
+                )
+
 
 if __name__ == "__main__":
     unittest.main()
