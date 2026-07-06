@@ -200,17 +200,28 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
 
     1. If loc_map provided, use it to find filepath
     2. Otherwise, construct path as: base_dir/shard_name.cdx.gz
+
+    Path traversal defense: all resolved paths must remain within base_dir.
     """
+    resolved_base = os.path.realpath(base_dir)
+
     if loc_map and shard_name in loc_map:
         # Use path from .loc file
         loc_path = loc_map[shard_name]
         # If relative, resolve against base_dir
         if not os.path.isabs(loc_path):
-            return os.path.join(base_dir, loc_path)
-        return loc_path
+            loc_path = os.path.join(base_dir, loc_path)
+        resolved = os.path.realpath(loc_path)
+        if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
+            raise ValueError(f"Path traversal detected in .loc file: {loc_path!r}")
+        return resolved
 
     # Default: shard_name.cdx.gz in base_dir
-    return os.path.join(base_dir, f"{shard_name}.cdx.gz")
+    shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
+    resolved = os.path.realpath(shard_path)
+    if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
+        raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}")
+    return resolved
 
 
 def decompress_shard_worker(shard_path: str) -> bytes:

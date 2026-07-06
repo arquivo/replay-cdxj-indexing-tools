@@ -166,13 +166,14 @@ class TestResolveShardPath:
         assert path == os.path.join(base_dir, "test-01.cdx.gz")
 
     def test_resolve_with_loc_map_absolute(self, tmp_path):
-        """Test resolving with loc map and absolute path."""
+        """Test that absolute paths outside base_dir are rejected for security."""
         abs_path = "/data/shards/test-01.cdx.gz"
         loc_map = {"test-01": abs_path}
         base_dir = str(tmp_path)
 
-        path = resolve_shard_path("test-01", base_dir, loc_map)
-        assert path == abs_path
+        # Absolute paths outside base_dir should be rejected (security defense)
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            resolve_shard_path("test-01", base_dir, loc_map)
 
     def test_resolve_without_loc_map(self, tmp_path):
         """Test resolving without loc map (default naming)."""
@@ -188,6 +189,44 @@ class TestResolveShardPath:
 
         path = resolve_shard_path("test-02", base_dir, loc_map)
         assert path == os.path.join(base_dir, "test-02.cdx.gz")
+
+    def test_resolve_path_traversal_relative_loc(self, tmp_path):
+        """Path traversal via relative .loc entry must raise ValueError."""
+        loc_map = {"test-00": "../../etc/passwd"}
+        base_dir = str(tmp_path)
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            resolve_shard_path("test-00", base_dir, loc_map)
+
+    def test_resolve_path_traversal_absolute_loc(self, tmp_path):
+        """Absolute path outside base_dir in .loc entry must raise ValueError."""
+        loc_map = {"test-00": "/etc/passwd"}
+        base_dir = str(tmp_path)
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            resolve_shard_path("test-00", base_dir, loc_map)
+
+    def test_resolve_path_traversal_idx_shard_name(self, tmp_path):
+        """Path traversal via .idx shard name must raise ValueError."""
+        base_dir = str(tmp_path)
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            resolve_shard_path("../../etc/passwd", base_dir, None)
+
+    @pytest.mark.skipif(not hasattr(os, "symlink"), reason="Symlinks not supported")
+    def test_resolve_path_traversal_symlink(self, tmp_path):
+        """Symlink inside base_dir pointing outside must raise ValueError."""
+        link_path = os.path.join(str(tmp_path), "evil_link.cdx.gz")
+        try:
+            os.symlink("/etc/passwd", link_path)
+        except (OSError, NotImplementedError):
+            pytest.skip("Cannot create symlinks on this platform")
+
+        loc_map = {"test-00": "evil_link.cdx.gz"}
+        base_dir = str(tmp_path)
+
+        with pytest.raises(ValueError, match="Path traversal detected"):
+            resolve_shard_path("test-00", base_dir, loc_map)
 
 
 class TestZipnumToFlatCdxj:
