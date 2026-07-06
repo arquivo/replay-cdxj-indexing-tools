@@ -1029,7 +1029,6 @@ class TestCdxjToZipnum(unittest.TestCase):
 
     def test_file_handle_closed_on_exception(self):
         """File handle for the shard must be closed even when compression raises."""
-        import gc
         import unittest.mock as mock
 
         input_file = os.path.join(self.input_dir, "leak.cdxj")
@@ -1054,7 +1053,6 @@ class TestCdxjToZipnum(unittest.TestCase):
                 with self.assertRaises(RuntimeError):
                     cdxj_to_zipnum(self.output_dir, input_file, chunk_size=5)
 
-        gc.collect()
         for fh in opened_handles:
             self.assertTrue(fh.closed, "Shard file handle must be closed after exception")
 

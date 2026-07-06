@@ -346,11 +346,15 @@ def cdxj_to_zipnum(
                     idxf.write("".join(idx_buffer))
 
     finally:
-        # Close final shard file
-        try:
+        # Close final shard file; propagate close errors on the success path
+        # so callers learn about ENOSPC or other flush failures.
+        if sys.exc_info()[0] is None:
             current_raw_fh.close()
-        except Exception:
-            pass
+        else:
+            try:
+                current_raw_fh.close()
+            except Exception:
+                pass
 
     # If only one shard was created, rename it to use simple naming (no numbering)
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
