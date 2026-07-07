@@ -474,7 +474,8 @@ def search_zipnum_file(
                 print(f"  Using .loc file: {loc_filepath}", file=sys.stderr)
     else:
         # Auto-detect .loc file
-        auto_loc = idx_filepath.replace(".idx", ".loc")
+        base, _ = os.path.splitext(idx_filepath)
+        auto_loc = base + ".loc"
         if os.path.exists(auto_loc):
             loc_map = read_loc_file(auto_loc)
             if verbose:
