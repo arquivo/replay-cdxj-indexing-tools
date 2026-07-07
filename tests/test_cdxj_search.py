@@ -704,6 +704,45 @@ class TestZipNumSearch(unittest.TestCase):
                     base_dir=tmpdir,
                 )
 
+    def test_zipnum_loc_autodetection_with_idx_in_dirname(self):
+        """Auto-detection must use splitext, not str.replace, to handle directory names with .idx."""
+        import tempfile
+
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create a subdirectory with .idx in its name
+            idx_store = os.path.join(tmpdir, "data.idx_store")
+            os.makedirs(idx_store, exist_ok=True)
+
+            # Create index file
+            idx_file = os.path.join(idx_store, "base.idx")
+            with open(idx_file, "w") as f:
+                f.write("com,example)/\tbase.cdx.gz\t0\t100\t0\n")
+
+            # Create .loc file (should be at data.idx_store/base.loc, NOT data.loc_store/base.loc)
+            loc_file = os.path.join(idx_store, "base.loc")
+            with open(loc_file, "w") as f:
+                f.write("base.cdx.gz\tbase.cdx.gz\n")
+
+            # Create shard file
+            shard_file = os.path.join(idx_store, "base.cdx.gz")
+            import gzip as gz
+
+            with open(shard_file, "wb") as f:
+                f.write(gz.compress(b'com,example)/ 20200101 {"status":"200"}\n'))
+
+            # Search without explicit loc_filepath — should auto-detect base.loc
+            results = search_zipnum_file(
+                idx_file,
+                "com,example)/",
+                match_prefix=False,
+            )
+
+            # If auto-detection worked correctly, we should find the result
+            self.assertEqual(len(results), 1)
+            self.assertIn("com,example)/", results[0])
+
 
 if __name__ == "__main__":
     unittest.main()
