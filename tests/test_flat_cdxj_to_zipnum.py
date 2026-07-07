@@ -206,6 +206,7 @@ NOTES
 - Compression and decompression are tested to ensure data integrity
 """
 
+import builtins
 import gzip
 import os
 import shutil
@@ -1025,6 +1026,35 @@ class TestCdxjToZipnum(unittest.TestCase):
 
         finally:
             shutil.rmtree(multi_output_dir, ignore_errors=True)
+
+    def test_file_handle_closed_on_exception(self):
+        """File handle for the shard must be closed even when compression raises."""
+        import unittest.mock as mock
+
+        input_file = os.path.join(self.input_dir, "leak.cdxj")
+        lines = [b'pt,example)/ 20200101120000 {"status": "200"}\n'] * 10
+        with open(input_file, "wb") as f:
+            f.writelines(lines)
+
+        opened_handles = []
+        original_open = builtins.open
+
+        def tracking_open(path, mode="r", **kwargs):
+            fh = original_open(path, mode, **kwargs)
+            if "wb" in mode and str(path).endswith(".cdx.gz"):
+                opened_handles.append(fh)
+            return fh
+
+        with mock.patch("builtins.open", side_effect=tracking_open):
+            with mock.patch(
+                "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum.compress_chunk_worker",
+                side_effect=RuntimeError("simulated compression failure"),
+            ):
+                with self.assertRaises(RuntimeError):
+                    cdxj_to_zipnum(self.output_dir, input_file, chunk_size=5)
+
+        for fh in opened_handles:
+            self.assertTrue(fh.closed, "Shard file handle must be closed after exception")
 
 
 if __name__ == "__main__":

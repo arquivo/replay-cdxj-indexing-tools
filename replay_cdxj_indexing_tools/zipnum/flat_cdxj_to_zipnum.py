@@ -245,25 +245,75 @@ def cdxj_to_zipnum(
     idx_buffer_size = 100  # Write idx in batches of 100 entries
 
     # Set up parallel compression with thread pool
-    with ThreadPoolExecutor(max_workers=workers) as executor:
-        # Use deque to maintain order of compressed chunks
-        compression_queue: deque = deque()
-        max_queue_size = workers * 2  # Keep reasonable memory usage
+    try:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
+            # Use deque to maintain order of compressed chunks
+            compression_queue: deque = deque()
+            max_queue_size = workers * 2  # Keep reasonable memory usage
 
-        with open(idx_name, "w", encoding="utf-8", buffering=65536) as idxf:
-            for _, chunk_lines in chunk_generator:
-                # Prepare chunk data for compression
-                chunk_data = b"".join(chunk_lines)
-                first_line = chunk_lines[0]
+            with open(idx_name, "w", encoding="utf-8", buffering=65536) as idxf:
+                for _, chunk_lines in chunk_generator:
+                    # Prepare chunk data for compression
+                    chunk_data = b"".join(chunk_lines)
+                    first_line = chunk_lines[0]
 
-                # Submit compression task to thread pool
-                future = executor.submit(compress_chunk_worker, chunk_data, compress_level)
-                compression_queue.append((future, first_line))
+                    # Submit compression task to thread pool
+                    future = executor.submit(compress_chunk_worker, chunk_data, compress_level)
+                    compression_queue.append((future, first_line))
 
-                # Process completed compressions to avoid unbounded memory growth
-                while len(compression_queue) > max_queue_size or (
-                    len(compression_queue) > 0 and compression_queue[0][0].done()
-                ):
+                    # Process completed compressions to avoid unbounded memory growth
+                    while len(compression_queue) > max_queue_size or (
+                        len(compression_queue) > 0 and compression_queue[0][0].done()
+                    ):
+                        future, first_line = compression_queue.popleft()
+                        compressed_chunk = future.result()
+
+                        # Compressed start offset (bytes) inside the gz file
+                        start_offset = current_raw_fh.tell()
+
+                        # Write compressed chunk to file
+                        current_raw_fh.write(compressed_chunk)
+                        end_offset = current_raw_fh.tell()
+                        comp_len = end_offset - start_offset
+
+                        # Extract pre-JSON from first line in chunk for index key
+                        pre = extract_prejson(first_line)
+
+                        shard_basename = os.path.basename(created_shards[current_shard])
+                        # Keep .cdx.gz extension in shard name for idx file part column
+
+                        # Buffer idx entries to reduce I/O calls
+                        idx_buffer.append(
+                            f"{pre}\t{shard_basename}\t{start_offset}\t"
+                            f"{comp_len}\t{current_shard + 1}\n"
+                        )
+
+                        if len(idx_buffer) >= idx_buffer_size:
+                            idxf.write("".join(idx_buffer))
+                            idx_buffer.clear()
+
+                        # Check if current shard has reached target size
+                        # Move to next shard if current one is >= target size
+                        if end_offset >= target_shard_size:
+                            # Flush idx buffer before closing shard
+                            if idx_buffer:
+                                idxf.write("".join(idx_buffer))
+                                idx_buffer.clear()
+
+                            # Close current shard file
+                            try:
+                                current_raw_fh.close()
+                            except Exception:
+                                pass
+
+                            # Move to next shard and open new file with larger buffer
+                            current_shard += 1
+                            shard_path = get_shard_path(current_shard)
+                            created_shards.append(shard_path)
+                            current_raw_fh = open(shard_path, "wb", buffering=65536)
+
+                # Process remaining compressed chunks in queue
+                while compression_queue:
                     future, first_line = compression_queue.popleft()
                     compressed_chunk = future.result()
 
@@ -291,64 +341,20 @@ def cdxj_to_zipnum(
                         idxf.write("".join(idx_buffer))
                         idx_buffer.clear()
 
-                    # Check if current shard has reached target size
-                    # Move to next shard if current one is >= target size
-                    if end_offset >= target_shard_size:
-                        # Flush idx buffer before closing shard
-                        if idx_buffer:
-                            idxf.write("".join(idx_buffer))
-                            idx_buffer.clear()
-
-                        # Close current shard file
-                        try:
-                            current_raw_fh.close()
-                        except Exception:
-                            pass
-
-                        # Move to next shard and open new file with larger buffer
-                        current_shard += 1
-                        shard_path = get_shard_path(current_shard)
-                        created_shards.append(shard_path)
-                        current_raw_fh = open(shard_path, "wb", buffering=65536)
-
-            # Process remaining compressed chunks in queue
-            while compression_queue:
-                future, first_line = compression_queue.popleft()
-                compressed_chunk = future.result()
-
-                # Compressed start offset (bytes) inside the gz file
-                start_offset = current_raw_fh.tell()
-
-                # Write compressed chunk to file
-                current_raw_fh.write(compressed_chunk)
-                end_offset = current_raw_fh.tell()
-                comp_len = end_offset - start_offset
-
-                # Extract pre-JSON from first line in chunk for index key
-                pre = extract_prejson(first_line)
-
-                shard_basename = os.path.basename(created_shards[current_shard])
-                # Keep .cdx.gz extension in shard name for idx file part column
-
-                # Buffer idx entries to reduce I/O calls
-                idx_buffer.append(
-                    f"{pre}\t{shard_basename}\t{start_offset}\t"
-                    f"{comp_len}\t{current_shard + 1}\n"
-                )
-
-                if len(idx_buffer) >= idx_buffer_size:
+                # Flush any remaining idx entries
+                if idx_buffer:
                     idxf.write("".join(idx_buffer))
-                    idx_buffer.clear()
 
-            # Flush any remaining idx entries
-            if idx_buffer:
-                idxf.write("".join(idx_buffer))
-
-    # Close final shard file
-    try:
-        current_raw_fh.close()
-    except Exception:
-        pass
+    finally:
+        # Close final shard file; propagate close errors on the success path
+        # so callers learn about ENOSPC or other flush failures.
+        if sys.exc_info()[0] is None:
+            current_raw_fh.close()
+        else:
+            try:
+                current_raw_fh.close()
+            except Exception:
+                pass
 
     # If only one shard was created, rename it to use simple naming (no numbering)
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
