@@ -562,6 +562,143 @@ class TestSubmitIndexToRedis(unittest.TestCase):
             redis_key = hset_calls[0][0][0]
             self.assertEqual(redis_key, "archive:pathindex:test-collection")
 
+    def test_unauthenticated_remote_redis_warning(self):
+        """
+        Test that a warning is printed when connecting to remote Redis without password.
+
+        Should log security warning to stderr for remote hosts without authentication.
+        """
+        test_file = os.path.join(self.test_dir, "pathindex.txt")
+        content = "file.warc.gz\t/mnt/storage/file.warc.gz\n"
+
+        with open(test_file, "w") as f:
+            f.write(content)
+
+        # Setup mock Redis
+        mock_redis = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        mock_redis.ping.return_value = True
+
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.return_value = mock_redis
+
+        # Capture stderr
+        from io import StringIO
+
+        captured_stderr = StringIO()
+
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
+            with patch("sys.stderr", captured_stderr):
+                # Submit to remote Redis (not localhost) without password
+                submitted, errors = submit_index_to_redis(
+                    input_paths=[test_file],
+                    redis_key="pathindex:test-collection",
+                    redis_host="192.168.1.100",  # Remote host
+                    redis_port=6379,
+                    redis_password=None,  # No password
+                    batch_size=100,
+                    dry_run=False,
+                    verbose=False,
+                )
+
+                stderr_output = captured_stderr.getvalue()
+
+                # Verify warning was printed
+                self.assertIn("WARNING", stderr_output)
+                self.assertIn("remote Redis", stderr_output)
+                self.assertIn("password authentication", stderr_output)
+
+    def test_no_warning_for_localhost(self):
+        """
+        Test that NO warning is printed when connecting to localhost without password.
+
+        Local connections are considered safe even without password.
+        """
+        test_file = os.path.join(self.test_dir, "pathindex.txt")
+        content = "file.warc.gz\t/mnt/storage/file.warc.gz\n"
+
+        with open(test_file, "w") as f:
+            f.write(content)
+
+        # Setup mock Redis
+        mock_redis = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        mock_redis.ping.return_value = True
+
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.return_value = mock_redis
+
+        # Capture stderr
+        from io import StringIO
+
+        captured_stderr = StringIO()
+
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
+            with patch("sys.stderr", captured_stderr):
+                # Submit to localhost without password (should NOT warn)
+                submitted, errors = submit_index_to_redis(
+                    input_paths=[test_file],
+                    redis_key="pathindex:test-collection",
+                    redis_host="localhost",
+                    redis_port=6379,
+                    redis_password=None,
+                    batch_size=100,
+                    dry_run=False,
+                    verbose=False,
+                )
+
+                stderr_output = captured_stderr.getvalue()
+
+                # Verify warning was NOT printed for localhost
+                self.assertNotIn("remote Redis", stderr_output)
+
+    def test_no_warning_with_password(self):
+        """
+        Test that NO warning is printed when password is provided for remote Redis.
+
+        Authentication prevents the security warning.
+        """
+        test_file = os.path.join(self.test_dir, "pathindex.txt")
+        content = "file.warc.gz\t/mnt/storage/file.warc.gz\n"
+
+        with open(test_file, "w") as f:
+            f.write(content)
+
+        # Setup mock Redis
+        mock_redis = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        mock_redis.ping.return_value = True
+
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.return_value = mock_redis
+
+        # Capture stderr
+        from io import StringIO
+
+        captured_stderr = StringIO()
+
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
+            with patch("sys.stderr", captured_stderr):
+                # Submit to remote Redis WITH password (should NOT warn)
+                submitted, errors = submit_index_to_redis(
+                    input_paths=[test_file],
+                    redis_key="pathindex:test-collection",
+                    redis_host="192.168.1.100",
+                    redis_port=6379,
+                    redis_password="secret_password",  # Password provided
+                    batch_size=100,
+                    dry_run=False,
+                    verbose=False,
+                )
+
+                stderr_output = captured_stderr.getvalue()
+
+                # Verify warning was NOT printed when password is provided
+                self.assertNotIn("remote Redis", stderr_output)
+
 
 class TestCLIIntegration(unittest.TestCase):
     """
