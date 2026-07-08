@@ -7,7 +7,7 @@ import os
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
 
 def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
@@ -442,9 +442,13 @@ def search_zipnum_file(
     loc_filepath: Optional[str] = None,
     base_dir: Optional[str] = None,
     max_workers: int = 4,
-) -> List[str]:
+) -> Iterator[str]:
     """
-    Search ZipNum files for matching entries.
+    Search ZipNum files for matching entries (streaming/generator).
+
+    Returns results as an iterator to enable unlimited result sets with constant memory usage.
+    Results are yielded as they're found from each shard, allowing efficient processing
+    of very large result sets without loading everything into memory.
 
     Args:
         idx_filepath: Path to .idx file
@@ -455,8 +459,8 @@ def search_zipnum_file(
         base_dir: Optional base directory for shard files (defaults to idx file directory)
         max_workers: Maximum number of parallel workers for searching shards (default: 4)
 
-    Returns:
-        List of matching CDXJ lines
+    Yields:
+        Matching CDXJ lines one at a time
     """
     if verbose:
         print(f"Searching ZipNum: {idx_filepath}", file=sys.stderr)
@@ -487,7 +491,7 @@ def search_zipnum_file(
     if not blocks:
         if verbose:
             print("  No matching blocks found in index", file=sys.stderr)
-        return []
+        return
 
     # Group blocks by shard to minimize file opens
     shard_blocks: Dict[str, List[Tuple[str, int, int]]] = defaultdict(list)
@@ -521,14 +525,16 @@ def search_zipnum_file(
         shard_blocks[shard_path].append((surt_key, offset, length))
 
     # Search shards in parallel if multiple shards, or sequentially if just one
-    all_results = []
+    result_count = 0
 
     if len(shard_blocks) == 1:
         # Single shard - search sequentially (no threading overhead)
-        shard_path, blocks_list = next(iter(shard_blocks.items()))
-        all_results = search_shard_blocks(
+        ((shard_path, blocks_list),) = shard_blocks.items()
+        for result in search_shard_blocks(
             shard_path, blocks_list, search_key, match_prefix, verbose
-        )
+        ):
+            result_count += 1
+            yield result
     else:
         # Multiple shards - use parallel search
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -541,14 +547,13 @@ def search_zipnum_file(
 
             for future in as_completed(futures):
                 try:
-                    results = future.result()
-                    all_results.extend(results)
+                    for result in future.result():
+                        result_count += 1
+                        yield result
                 except Exception as e:
                     shard_path = futures[future]
                     if verbose:
                         print(f"  Error processing {shard_path}: {e}", file=sys.stderr)
 
     if verbose:
-        print(f"  Total matches found: {len(all_results)}", file=sys.stderr)
-
-    return all_results
+        print(f"  Total matches found: {result_count}", file=sys.stderr)

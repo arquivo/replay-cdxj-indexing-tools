@@ -4,7 +4,7 @@ Main entry point for CDXJ/ZipNum search tool.
 
 import argparse
 import sys
-from typing import List
+from typing import Iterator
 
 import surt
 
@@ -68,9 +68,12 @@ def search_file(
     progress: bool,
     file_num: int,
     total_files: int,
-) -> List[str]:
+) -> Iterator[str]:
     """
     Search a single file (CDXJ or ZipNum).
+
+    Returns an iterator of matching lines for memory efficiency.
+    Results are streamed incrementally as they're found.
 
     Args:
         filepath: Path to file
@@ -82,8 +85,8 @@ def search_file(
         file_num: Current file number (for progress)
         total_files: Total number of files (for progress)
 
-    Returns:
-        List of matching lines
+    Yields:
+        Matching CDXJ lines
     """
     if progress:
         print(f"Searching file {file_num}/{total_files}: {filepath}", file=sys.stderr)
@@ -95,7 +98,7 @@ def search_file(
         file_type = detect_file_type(filepath)
 
         if file_type == "cdxj":
-            return search_cdxj_file(filepath, modified_key, use_prefix, verbose)
+            return iter(search_cdxj_file(filepath, modified_key, use_prefix, verbose))
 
         elif file_type == "zipnum_idx":
             return search_zipnum_file(filepath, modified_key, use_prefix, verbose)
@@ -114,12 +117,12 @@ def search_file(
                 print(
                     f"Warning: Unknown file type for {filepath}, treating as CDXJ", file=sys.stderr
                 )
-            return search_cdxj_file(filepath, modified_key, use_prefix, verbose)
+            return iter(search_cdxj_file(filepath, modified_key, use_prefix, verbose))
 
     except Exception as e:
         if skip_errors:
             print(f"Error processing {filepath}: {e}", file=sys.stderr)
-            return []
+            return iter([])
         else:
             raise
 

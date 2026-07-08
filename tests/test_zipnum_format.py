@@ -117,16 +117,16 @@ class TestZipNumFormat(unittest.TestCase):
 
     def test_zipnum_exact_search(self):
         """Test exact match search in ZipNum format."""
-        results = search_zipnum_file(
-            self.idx_file, "com,example)/", match_prefix=False, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "com,example)/", match_prefix=False, verbose=False)
         )
         self.assertEqual(len(results), 1)
         self.assertIn("com,example)/", results[0])
 
     def test_zipnum_prefix_search(self):
         """Test prefix search in ZipNum format."""
-        results = search_zipnum_file(
-            self.idx_file, "com,example)/", match_prefix=True, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "com,example)/", match_prefix=True, verbose=False)
         )
         # Should find all com,example URLs
         self.assertGreaterEqual(len(results), 3)
@@ -135,8 +135,8 @@ class TestZipNumFormat(unittest.TestCase):
 
     def test_zipnum_prefix_search_narrow(self):
         """Test narrow prefix search in ZipNum format."""
-        results = search_zipnum_file(
-            self.idx_file, "com,example)/page", match_prefix=True, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "com,example)/page", match_prefix=True, verbose=False)
         )
         # Should find only /page URL
         self.assertEqual(len(results), 1)
@@ -144,12 +144,14 @@ class TestZipNumFormat(unittest.TestCase):
 
     def test_zipnum_search_with_loc_file(self):
         """Test search using .loc file for shard resolution."""
-        results = search_zipnum_file(
-            self.idx_file,
-            "com,test)/",
-            match_prefix=True,
-            verbose=False,
-            loc_filepath=self.loc_file,
+        results = list(
+            search_zipnum_file(
+                self.idx_file,
+                "com,test)/",
+                match_prefix=True,
+                verbose=False,
+                loc_filepath=self.loc_file,
+            )
         )
         # Should find com,test URLs using .loc file mapping
         self.assertGreaterEqual(len(results), 2)
@@ -161,12 +163,14 @@ class TestZipNumFormat(unittest.TestCase):
         # Remove .loc file temporarily
         os.remove(self.loc_file)
 
-        results = search_zipnum_file(
-            self.idx_file,
-            "com,test)/",
-            match_prefix=True,
-            verbose=False,
-            base_dir=self.test_dir,
+        results = list(
+            search_zipnum_file(
+                self.idx_file,
+                "com,test)/",
+                match_prefix=True,
+                verbose=False,
+                base_dir=self.test_dir,
+            )
         )
         # Should still find com,test URLs using base_dir
         self.assertGreaterEqual(len(results), 2)
@@ -175,23 +179,25 @@ class TestZipNumFormat(unittest.TestCase):
 
     def test_zipnum_search_different_domain(self):
         """Test search for different TLD."""
-        results = search_zipnum_file(
-            self.idx_file, "org,example)/", match_prefix=False, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "org,example)/", match_prefix=False, verbose=False)
         )
         self.assertEqual(len(results), 1)
         self.assertIn("org,example)/", results[0])
 
     def test_zipnum_search_no_matches(self):
         """Test search with no matches."""
-        results = search_zipnum_file(
-            self.idx_file, "com,nonexistent)/", match_prefix=False, verbose=False
+        results = list(
+            search_zipnum_file(
+                self.idx_file, "com,nonexistent)/", match_prefix=False, verbose=False
+            )
         )
         self.assertEqual(len(results), 0)
 
     def test_zipnum_multiple_shards_prefix(self):
         """Test prefix search across multiple shards."""
         # Search for 'com,' which should match both com,example and com,test
-        results = search_zipnum_file(self.idx_file, "com,", match_prefix=True, verbose=False)
+        results = list(search_zipnum_file(self.idx_file, "com,", match_prefix=True, verbose=False))
         # Should find URLs from both com,example and com,test shards
         self.assertGreaterEqual(len(results), 5)  # 3 from example + 2 from test
 
