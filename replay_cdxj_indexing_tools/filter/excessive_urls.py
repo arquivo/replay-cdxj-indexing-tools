@@ -361,7 +361,10 @@ Examples:
                     if not line or line.startswith("#"):
                         continue
                     # Extract just the SURT (first field)
-                    surt = line.split()[0]
+                    parts = line.split()
+                    if not parts:
+                        continue
+                    surt = parts[0]
                     excessive_surts.add(surt)
 
             print(f"# Loaded {len(excessive_surts)} URLs to filter", file=sys.stderr)

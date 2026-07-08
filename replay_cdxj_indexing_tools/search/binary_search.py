@@ -67,7 +67,7 @@ def binary_search_file(
             continue
 
         parts = line_str.split(" ", 1)
-        if not parts:
+        if len(parts) < 2:
             right = mid
             continue
 
@@ -143,7 +143,7 @@ def binary_search_file(
                 continue
 
             parts = line_str.split(" ", 1)
-            if not parts:
+            if len(parts) < 2:
                 continue
 
             line_key = parts[0]
@@ -188,7 +188,7 @@ def binary_search_file(
             continue
 
         parts = line_str.split(" ", 1)
-        if not parts:
+        if len(parts) < 2:
             continue
 
         line_key = parts[0]

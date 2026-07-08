@@ -271,6 +271,18 @@ class TestBinarySearch(unittest.TestCase):
         results = search_cdxj_file(self.test_cdxj, "com,test)/", match_prefix=False)
         self.assertEqual(len(results), 1)
 
+    def test_binary_search_skips_malformed_lines(self):
+        """Binary search must skip lines with no space separator without raising IndexError."""
+        malformed_cdxj = os.path.join(self.test_dir, "malformed.cdxj")
+        with open(malformed_cdxj, "w") as f:
+            f.write("com,example)/\n")  # no timestamp or JSON — no space separator
+            f.write('com,example)/page 20200101000000 {"url": "http://example.com/page"}\n')
+            f.write("malformed-line-no-space\n")
+
+        results = search_cdxj_file(malformed_cdxj, "com,example)/page", match_prefix=False)
+        self.assertEqual(len(results), 1)
+        self.assertIn("com,example)/page", results[0])
+
 
 class TestMatchTypes(unittest.TestCase):
     """Test different match type behaviors."""
