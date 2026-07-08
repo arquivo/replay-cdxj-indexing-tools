@@ -369,6 +369,48 @@ class TestFilterExcessiveUrls(unittest.TestCase):
         self.assertIn("pt,c,www)/", result[2])
         self.assertIn("pt,d,www)/", result[3])
 
+    def test_remove_command_blacklist_with_blank_lines(self):
+        """Blank/whitespace-only lines in the blacklist file must not raise IndexError."""
+        import sys
+        from unittest.mock import patch
+
+        from replay_cdxj_indexing_tools.filter.excessive_urls import main
+
+        input_path = os.path.join(self.temp_dir, "input.cdxj")
+        blacklist_path = os.path.join(self.temp_dir, "blacklist.txt")
+        output_path = os.path.join(self.temp_dir, "output.cdxj")
+
+        with open(input_path, "w") as f:
+            f.write('pt,spam,www)/ 20230101120000 {"url": "..."}\n')
+            f.write('pt,ok,www)/ 20230101120000 {"url": "..."}\n')
+
+        # Blacklist file with blank lines and comments mixed in
+        with open(blacklist_path, "w") as f:
+            f.write("# comment line\n")
+            f.write("\n")
+            f.write("   \n")  # whitespace-only
+            f.write("pt,spam,www)/\n")
+            f.write("\n")
+
+        argv = [
+            "excessive-urls",
+            "remove",
+            "-i",
+            input_path,
+            "-b",
+            blacklist_path,
+            "-o",
+            output_path,
+        ]
+        with patch.object(sys, "argv", argv):
+            main()
+
+        with open(output_path, "r") as f:
+            lines = f.readlines()
+
+        self.assertEqual(len(lines), 1)
+        self.assertIn("pt,ok,www)/", lines[0])
+
 
 class TestProcessPipeline(unittest.TestCase):
     """Test one-pass auto mode (find and filter together)."""
