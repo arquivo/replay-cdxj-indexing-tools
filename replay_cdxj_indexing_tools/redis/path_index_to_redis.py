@@ -379,6 +379,22 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 file=sys.stderr,
             )
 
+        # Warn about unauthenticated remote connections
+        if not redis_socket and redis_host not in ("localhost", "127.0.0.1", "::1"):
+            if not redis_password:
+                print(
+                    "⚠️  WARNING: Connecting to remote Redis without password authentication.",
+                    file=sys.stderr,
+                )
+                print(
+                    "    This is insecure and should only be used in development/testing.",
+                    file=sys.stderr,
+                )
+                print(
+                    "    For production, set --redis-password or REDIS_PASSWORD env var.",
+                    file=sys.stderr,
+                )
+
         if verbose:
             if redis_socket:
                 print(f"# Connecting to Redis via socket: {redis_socket}", file=sys.stderr)
@@ -616,7 +632,10 @@ Redis connection examples:
     redis_conn.add_argument("--host", default="localhost", help="Redis host (default: localhost)")
     redis_conn.add_argument("--port", type=int, default=6379, help="Redis port (default: 6379)")
     redis_conn.add_argument("--db", type=int, default=0, help="Redis database number (default: 0)")
-    redis_conn.add_argument("--password", help="Redis password (optional)")
+    redis_conn.add_argument(
+        "--password",
+        help="Redis password (optional). REQUIRED for remote connections (security risk without auth).",
+    )
     redis_conn.add_argument("--username", help="Redis username for ACL (optional)")
     redis_conn.add_argument("--socket", help="Unix socket path (alternative to host:port)")
     redis_conn.add_argument("--ssl", action="store_true", help="Use SSL/TLS connection")
