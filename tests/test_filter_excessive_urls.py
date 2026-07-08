@@ -392,7 +392,16 @@ class TestFilterExcessiveUrls(unittest.TestCase):
             f.write("pt,spam,www)/\n")
             f.write("\n")
 
-        argv = ["excessive-urls", "remove", "-i", input_path, "-b", blacklist_path, "-o", output_path]
+        argv = [
+            "excessive-urls",
+            "remove",
+            "-i",
+            input_path,
+            "-b",
+            blacklist_path,
+            "-o",
+            output_path,
+        ]
         with patch.object(sys, "argv", argv):
             main()
 
