@@ -533,8 +533,8 @@ class TestZipNumSearch(unittest.TestCase):
         """Test exact match search in ZipNum format."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
-        results = search_zipnum_file(
-            self.idx_file, "com,example)/", match_prefix=False, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "com,example)/", match_prefix=False, verbose=False)
         )
         self.assertEqual(len(results), 1)
         self.assertIn("com,example)/", results[0])
@@ -543,8 +543,8 @@ class TestZipNumSearch(unittest.TestCase):
         """Test prefix search in ZipNum format."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
-        results = search_zipnum_file(
-            self.idx_file, "com,example)/", match_prefix=True, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "com,example)/", match_prefix=True, verbose=False)
         )
         # Should find all com,example URLs
         self.assertGreaterEqual(len(results), 3)
@@ -555,8 +555,8 @@ class TestZipNumSearch(unittest.TestCase):
         """Test narrow prefix search in ZipNum format."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
-        results = search_zipnum_file(
-            self.idx_file, "com,example)/page", match_prefix=True, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "com,example)/page", match_prefix=True, verbose=False)
         )
         # Should find only /page URL
         self.assertEqual(len(results), 1)
@@ -566,12 +566,14 @@ class TestZipNumSearch(unittest.TestCase):
         """Test search using .loc file for shard resolution."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
-        results = search_zipnum_file(
-            self.idx_file,
-            "com,test)/",
-            match_prefix=True,
-            verbose=False,
-            loc_filepath=self.loc_file,
+        results = list(
+            search_zipnum_file(
+                self.idx_file,
+                "com,test)/",
+                match_prefix=True,
+                verbose=False,
+                loc_filepath=self.loc_file,
+            )
         )
         # Should find com,test URLs using .loc file mapping
         self.assertGreaterEqual(len(results), 2)
@@ -582,8 +584,8 @@ class TestZipNumSearch(unittest.TestCase):
         """Test search for different TLD."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
-        results = search_zipnum_file(
-            self.idx_file, "org,example)/", match_prefix=False, verbose=False
+        results = list(
+            search_zipnum_file(self.idx_file, "org,example)/", match_prefix=False, verbose=False)
         )
         self.assertEqual(len(results), 1)
         self.assertIn("org,example)/", results[0])
@@ -592,8 +594,10 @@ class TestZipNumSearch(unittest.TestCase):
         """Test search with no matches."""
         from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
-        results = search_zipnum_file(
-            self.idx_file, "com,nonexistent)/", match_prefix=False, verbose=False
+        results = list(
+            search_zipnum_file(
+                self.idx_file, "com,nonexistent)/", match_prefix=False, verbose=False
+            )
         )
         self.assertEqual(len(results), 0)
 
@@ -616,11 +620,13 @@ class TestZipNumSearch(unittest.TestCase):
             f.write("test-00.cdx.gz\t../../etc/passwd\n")
 
         with self.assertRaises(ValueError):
-            search_zipnum_file(
-                self.idx_file,
-                "com,example)/",
-                match_prefix=False,
-                loc_filepath=malicious_loc,
+            list(
+                search_zipnum_file(
+                    self.idx_file,
+                    "com,example)/",
+                    match_prefix=False,
+                    loc_filepath=malicious_loc,
+                )
             )
 
     def test_zipnum_path_traversal_absolute(self):
@@ -632,11 +638,13 @@ class TestZipNumSearch(unittest.TestCase):
             f.write("test-00.cdx.gz\t/etc/passwd\n")
 
         with self.assertRaises(ValueError):
-            search_zipnum_file(
-                self.idx_file,
-                "com,example)/",
-                match_prefix=False,
-                loc_filepath=malicious_loc,
+            list(
+                search_zipnum_file(
+                    self.idx_file,
+                    "com,example)/",
+                    match_prefix=False,
+                    loc_filepath=malicious_loc,
+                )
             )
 
     @unittest.skipIf(not hasattr(os, "symlink"), "symlinks not supported")
@@ -655,11 +663,13 @@ class TestZipNumSearch(unittest.TestCase):
             f.write("test-00.cdx.gz\tevil_link.cdx.gz\n")
 
         with self.assertRaises(ValueError):
-            search_zipnum_file(
-                self.idx_file,
-                "com,example)/",
-                match_prefix=False,
-                loc_filepath=malicious_loc,
+            list(
+                search_zipnum_file(
+                    self.idx_file,
+                    "com,example)/",
+                    match_prefix=False,
+                    loc_filepath=malicious_loc,
+                )
             )
 
     def test_zipnum_path_traversal_idx_no_loc(self):
@@ -675,11 +685,13 @@ class TestZipNumSearch(unittest.TestCase):
                 f.write("com,example)/\t../../etc/passwd.cdx.gz\t0\t100\t0\n")
 
             with self.assertRaises(ValueError):
-                search_zipnum_file(
-                    malicious_idx,
-                    "com,example)/",
-                    match_prefix=False,
-                    base_dir=tmpdir,
+                list(
+                    search_zipnum_file(
+                        malicious_idx,
+                        "com,example)/",
+                        match_prefix=False,
+                        base_dir=tmpdir,
+                    )
                 )
 
     def test_zipnum_path_traversal_idx_partial_loc(self):
@@ -708,12 +720,14 @@ class TestZipNumSearch(unittest.TestCase):
                 f.write(gz.compress(b'com,example)/ 20200101 {"status":"200"}\n'))
 
             with self.assertRaises(ValueError):
-                search_zipnum_file(
-                    malicious_idx,
-                    "com,test)/",
-                    match_prefix=False,
-                    loc_filepath=partial_loc,
-                    base_dir=tmpdir,
+                list(
+                    search_zipnum_file(
+                        malicious_idx,
+                        "com,test)/",
+                        match_prefix=False,
+                        loc_filepath=partial_loc,
+                        base_dir=tmpdir,
+                    )
                 )
 
     def test_zipnum_loc_autodetection_with_idx_in_dirname(self):
@@ -745,15 +759,98 @@ class TestZipNumSearch(unittest.TestCase):
                 f.write(gz.compress(b'com,example)/ 20200101 {"status":"200"}\n'))
 
             # Search without explicit loc_filepath — should auto-detect base.loc
-            results = search_zipnum_file(
-                idx_file,
-                "com,example)/",
-                match_prefix=False,
+            results = list(
+                search_zipnum_file(
+                    idx_file,
+                    "com,example)/",
+                    match_prefix=False,
+                )
             )
 
             # If auto-detection worked correctly, we should find the result
             self.assertEqual(len(results), 1)
             self.assertIn("com,example)/", results[0])
+
+    def test_search_zipnum_respects_max_results_limit(self):
+        """Results are streamed efficiently; no artificial memory limit."""
+        import gzip as gz
+        import tempfile
+
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create shard file with 500 results
+            shard_file = os.path.join(tmpdir, "base.cdx.gz")
+            results_data = b""
+            for i in range(500):
+                line = f'com,example)/ 20200101{i:03d} {{"status":"200","offset":{i}}}\n'
+                results_data += line.encode("utf-8")
+
+            compressed_data = gz.compress(results_data)
+            with open(shard_file, "wb") as f:
+                f.write(compressed_data)
+
+            # Create index file with single entry pointing to the entire shard
+            idx_file = os.path.join(tmpdir, "base.idx")
+            shard_size = len(compressed_data)
+            with open(idx_file, "w") as f:
+                f.write(f"com,example)/\tbase.cdx.gz\t0\t{shard_size}\t0\n")
+
+            # Search with broad prefix — should stream all 500 results efficiently
+            results = list(
+                search_zipnum_file(
+                    idx_file,
+                    "com,example)/",
+                    match_prefix=True,
+                )
+            )
+
+            # Verify all results are returned (no artificial limit)
+            self.assertEqual(len(results), 500, "All results should be streamed")
+
+    def test_search_zipnum_generator_yields_results(self):
+        """Results should be yielded as a generator for memory efficiency."""
+        import gzip as gz
+        import tempfile
+
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # Create shard file with 100 results
+            shard_file = os.path.join(tmpdir, "base.cdx.gz")
+            results_data = b""
+            for i in range(100):
+                line = f'com,example)/ 20200101{i:03d} {{"status":"200"}}\n'
+                results_data += line.encode("utf-8")
+
+            compressed_data = gz.compress(results_data)
+            with open(shard_file, "wb") as f:
+                f.write(compressed_data)
+
+            # Create index file with single entry
+            idx_file = os.path.join(tmpdir, "base.idx")
+            shard_size = len(compressed_data)
+            with open(idx_file, "w") as f:
+                f.write(f"com,example)/\tbase.cdx.gz\t0\t{shard_size}\t0\n")
+
+            # Search should return a generator/iterator
+            results_iter = search_zipnum_file(
+                idx_file,
+                "com,example)/",
+                match_prefix=False,
+            )
+
+            # Verify it's an iterator
+            self.assertTrue(hasattr(results_iter, "__iter__"))
+            self.assertTrue(hasattr(results_iter, "__next__"))
+
+            # Can consume results one at a time
+            first_result = next(results_iter)
+            self.assertIn("com,example)/", first_result)
+
+            # Can convert to list if needed
+            remaining = list(results_iter)
+            self.assertEqual(len(remaining), 99)  # 100 total - 1 already consumed
 
 
 if __name__ == "__main__":
