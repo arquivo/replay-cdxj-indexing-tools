@@ -529,14 +529,17 @@ def search_zipnum_file(
 
     if len(shard_blocks) == 1:
         # Single shard - search sequentially (no threading overhead)
-        ((shard_path, blocks_list),) = shard_blocks.items()
+        shard_path, blocks_list = next(iter(shard_blocks.items()))
         for result in search_shard_blocks(
             shard_path, blocks_list, search_key, match_prefix, verbose
         ):
             result_count += 1
             yield result
     else:
-        # Multiple shards - use parallel search
+        # Multiple shards - use parallel search.
+        # The executor stays open until this generator is fully consumed or GC'd;
+        # for a CLI tool that is always fine, but library callers should consume
+        # the iterator to completion to release threads promptly.
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = {
                 executor.submit(
