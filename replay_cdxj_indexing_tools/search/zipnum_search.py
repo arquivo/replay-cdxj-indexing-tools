@@ -529,12 +529,12 @@ def search_zipnum_file(
 
     if len(shard_blocks) == 1:
         # Single shard - search sequentially (no threading overhead)
-        shard_path, blocks_list = next(iter(shard_blocks.items()))
-        for result in search_shard_blocks(
-            shard_path, blocks_list, search_key, match_prefix, verbose
-        ):
-            result_count += 1
-            yield result
+        for shard_path, blocks_list in shard_blocks.items():
+            for result in search_shard_blocks(
+                shard_path, blocks_list, search_key, match_prefix, verbose
+            ):
+                result_count += 1
+                yield result
     else:
         # Multiple shards - use parallel search.
         # The executor stays open until this generator is fully consumed or GC'd;
