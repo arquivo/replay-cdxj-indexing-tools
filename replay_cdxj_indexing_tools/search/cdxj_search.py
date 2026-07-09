@@ -3,6 +3,7 @@ Main entry point for CDXJ/ZipNum search tool.
 """
 
 import argparse
+import itertools
 import sys
 from typing import Iterator
 
@@ -127,6 +128,19 @@ def search_file(
             raise
 
 
+def _deduplicate_streaming(lines: Iterator[str]) -> Iterator[str]:
+    seen: set = set()
+    for line in lines:
+        parts = line.strip().split(" ", 2)
+        if len(parts) >= 2:
+            key = (parts[0], parts[1])
+            if key not in seen:
+                seen.add(key)
+                yield line
+        else:
+            yield line
+
+
 def main():
     """Main entry point for cdxj-search command."""
     parser = argparse.ArgumentParser(
@@ -239,63 +253,65 @@ Examples:
         print("No files found matching the specified patterns", file=sys.stderr)
         sys.exit(1)
 
-    # Search all files
-    all_results = []
+    # Build a lazy iterator over all files, preserving per-file error handling
+    def iter_all_files() -> Iterator[str]:
+        for i, filepath in enumerate(files, 1):
+            try:
+                yield from search_file(
+                    filepath,
+                    search_key,
+                    args.matchType,
+                    args.skip_errors,
+                    args.verbose,
+                    args.progress,
+                    i,
+                    len(files),
+                )
+            except Exception as e:
+                print(f"Error processing {filepath}: {e}", file=sys.stderr)
+                if not args.skip_errors:
+                    sys.exit(1)
 
-    for i, filepath in enumerate(files, 1):
-        try:
-            results = search_file(
-                filepath,
-                search_key,
-                args.matchType,
-                args.skip_errors,
-                args.verbose,
-                args.progress,
-                i,
-                len(files),
-            )
-            all_results.extend(results)
-        except Exception as e:
-            print(f"Error processing {filepath}: {e}", file=sys.stderr)
-            if not args.skip_errors:
-                sys.exit(1)
+    results: Iterator[str] = iter_all_files()
 
-    if args.verbose:
-        print(f"Total results before filtering: {len(all_results)}", file=sys.stderr)
-
-    # Apply filters
+    # Apply filter lazily
     if args.from_ts or args.to_ts or args.filters:
         cdxj_filter = CDXJFilter(args.from_ts, args.to_ts, args.filters)
-        all_results = [line for line in all_results if cdxj_filter.matches(line)]
+        results = filter(cdxj_filter.matches, results)
 
-        if args.verbose:
-            print(f"Results after filtering: {len(all_results)}", file=sys.stderr)
-
-    # Sort if requested
     if args.sort:
-        all_results = sort_lines(all_results)
+        # Sort requires full materialisation; dedupe and limit follow in memory
+        buffered = list(results)
+        if args.verbose:
+            print(f"Total results: {len(buffered)}", file=sys.stderr)
+        buffered = sort_lines(buffered)
         if args.verbose:
             print("Results sorted by timestamp", file=sys.stderr)
-
-    # Deduplicate if requested
-    if args.dedupe:
-        original_count = len(all_results)
-        all_results = deduplicate_lines(all_results)
+        if args.dedupe:
+            original_count = len(buffered)
+            buffered = deduplicate_lines(buffered)
+            if args.verbose:
+                print(f"Removed {original_count - len(buffered)} duplicates", file=sys.stderr)
+        if args.limit and len(buffered) > args.limit:
+            buffered = buffered[: args.limit]
+            if args.verbose:
+                print(f"Limited results to {args.limit}", file=sys.stderr)
+        for line in buffered:
+            print(line)
         if args.verbose:
-            print(f"Removed {original_count - len(all_results)} duplicates", file=sys.stderr)
-
-    # Apply limit
-    if args.limit and len(all_results) > args.limit:
-        all_results = all_results[: args.limit]
+            print(f"Output {len(buffered)} results", file=sys.stderr)
+    else:
+        # No sort: stream through dedupe and limit without buffering all results
+        if args.dedupe:
+            results = _deduplicate_streaming(results)
+        if args.limit:
+            results = itertools.islice(results, args.limit)
+        count = 0
+        for line in results:
+            print(line)
+            count += 1
         if args.verbose:
-            print(f"Limited results to {args.limit}", file=sys.stderr)
-
-    # Output results
-    for line in all_results:
-        print(line)
-
-    if args.verbose:
-        print(f"Output {len(all_results)} results", file=sys.stderr)
+            print(f"Output {count} results", file=sys.stderr)
 
 
 if __name__ == "__main__":
