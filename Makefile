@@ -187,7 +187,7 @@ DOCKER_RUN = docker run --rm -v $(PWD):/app -w /app
 define run_ci_version
 	@echo "Running CI checks with Python $(1)..."
 	@LOG=$$(mktemp); \
-	if $(DOCKER_RUN) python:$(1) bash -c "make ci SKIP_VENV=1" > $$LOG 2>&1; then \
+	if $(DOCKER_RUN) python:$(1) bash -c "make ci SKIP_VENV=1; ret=$$?; chown -R $(shell id -u):$(shell id -g) htmlcov .coverage coverage.xml 2>/dev/null; exit $$ret" > $$LOG 2>&1; then \
 		echo "✓ CI checks complete (Python $(1))"; \
 		rm -f $$LOG; \
 	else \
