@@ -452,8 +452,8 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
         except redis.exceptions.ConnectionError as e:
             print(f"Error: Failed to connect to Redis: {e}", file=sys.stderr)
             return 0, 1
-        except Exception as e:
-            print(f"Error: Redis connection error: {e}", file=sys.stderr)
+        except redis.exceptions.RedisError as e:
+            print(f"Error: Redis error: {e}", file=sys.stderr)
             return 0, 1
 
         # Clear existing hash key if requested
