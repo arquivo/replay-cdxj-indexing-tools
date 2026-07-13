@@ -118,5 +118,8 @@ max-line-length = 100
 disable = ["C0111", "R0913", "R0914"]
 
 [tool.mypy]
-ignore_missing_imports = true
 files = ["replay_cdxj_indexing_tools"]
+
+[[tool.mypy.overrides]]
+module = ["pywb.*", "surt.*"]
+ignore_missing_imports = true
