@@ -634,7 +634,8 @@ Redis connection examples:
     redis_conn.add_argument("--db", type=int, default=0, help="Redis database number (default: 0)")
     redis_conn.add_argument(
         "--password",
-        help="Redis password (optional). REQUIRED for remote connections (security risk without auth).",
+        help="Redis password (optional). "
+        "REQUIRED for remote connections (security risk without auth).",
     )
     redis_conn.add_argument("--username", help="Redis username for ACL (optional)")
     redis_conn.add_argument("--socket", help="Unix socket path (alternative to host:port)")
