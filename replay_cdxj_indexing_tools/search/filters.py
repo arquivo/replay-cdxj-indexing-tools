@@ -67,6 +67,31 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
             for filter_expr in filters:
                 self.filter_rules.append(self._parse_filter(filter_expr))
 
+    # Maximum pattern length to prevent memory issues
+    _MAX_PATTERN_LEN = 1000
+    # Patterns known to cause catastrophic backtracking
+    _REDOS_PATTERNS = [
+        re.compile(r'\([^)]+\+\)\+'),      # (x+)+
+        re.compile(r'\([^)]+\*\)\+'),      # (x*)+
+        re.compile(r'\([^)]+\+\)\*'),      # (x+)*
+        re.compile(r'\([^)]+\|[^)]+\)\*'), # (a|b)*
+        re.compile(r'\([^)]+\|[^)]+\)\+'), # (a|b)+
+    ]
+
+    def _compile_safe_regex(self, pattern: str) -> re.Pattern:
+        """Compile a regex pattern, rejecting patterns known to risk ReDoS."""
+        if len(pattern) > self._MAX_PATTERN_LEN:
+            raise ValueError(
+                f"Regex pattern too long ({len(pattern)} chars, max {self._MAX_PATTERN_LEN})"
+            )
+        for danger in self._REDOS_PATTERNS:
+            if danger.search(pattern):
+                raise ValueError(f"Regex pattern rejected due to ReDoS risk: {pattern!r}")
+        try:
+            return re.compile(pattern)
+        except re.error as exc:
+            raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
+
     def _parse_filter(self, expr: str) -> Dict[str, Any]:
         """
         Parse a filter expression.
@@ -83,7 +108,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
                 "field": field.strip(),
                 "op": "!~",
                 "value": pattern.strip(),
-                "regex": re.compile(pattern.strip()),
+                "regex": self._compile_safe_regex(pattern.strip()),
             }
         elif "~" in expr:
             field, pattern = expr.split("~", 1)
@@ -91,7 +116,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
                 "field": field.strip(),
                 "op": "~",
                 "value": pattern.strip(),
-                "regex": re.compile(pattern.strip()),
+                "regex": self._compile_safe_regex(pattern.strip()),
             }
         elif "!=" in expr:
             field, value = expr.split("!=", 1)
