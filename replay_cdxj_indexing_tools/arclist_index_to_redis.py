@@ -121,6 +121,8 @@ YELLOW = "\033[1;33m"
 RED = "\033[0;31m"
 NC = "\033[0m"  # No Color
 
+_PIPELINE_TIMEOUT = 3600  # 1 hour max for arclist → Redis pipeline
+
 
 def log_info(message: str) -> None:
     """Print info message in blue."""
@@ -311,8 +313,16 @@ def run_pipeline(
             arclist_proc.stdout.close()
 
         # Wait for both processes to complete
-        redis_exitcode = redis_proc.wait()
-        arclist_exitcode = arclist_proc.wait()
+        try:
+            redis_exitcode = redis_proc.wait(timeout=_PIPELINE_TIMEOUT)
+            arclist_exitcode = arclist_proc.wait(timeout=_PIPELINE_TIMEOUT)
+        except subprocess.TimeoutExpired:
+            log_error(f"Pipeline timed out after {_PIPELINE_TIMEOUT}s — killing subprocesses")
+            redis_proc.kill()
+            arclist_proc.kill()
+            redis_proc.wait()
+            arclist_proc.wait()
+            return 124  # standard timeout exit code
 
         # Check exit codes
         if arclist_exitcode != 0:
