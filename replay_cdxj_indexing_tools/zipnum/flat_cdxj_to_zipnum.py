@@ -126,6 +126,7 @@ in pywb configuration.
 import gzip
 import os
 import sys
+import tempfile
 from argparse import ArgumentParser
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
@@ -233,9 +234,11 @@ def cdxj_to_zipnum(
 
     # Open first shard (we'll rename if it ends up being single shard)
     # Use larger buffer for better I/O performance
+    current_temp_path: str = ""  # tracks temp file for current shard
     shard_path = get_shard_path(current_shard)
     created_shards.append(shard_path)
-    current_raw_fh = open(shard_path, "wb", buffering=65536)
+    _tmp_fd, current_temp_path = tempfile.mkstemp(dir=output_dir, suffix=".tmp")
+    current_raw_fh = os.fdopen(_tmp_fd, "wb", buffering=65536)
 
     # Iterate chunks in order and write sequentially to shards
     # This maintains the sorted order for binary search
@@ -305,12 +308,16 @@ def cdxj_to_zipnum(
                                 current_raw_fh.close()
                             except Exception:
                                 pass
+                            os.replace(current_temp_path, created_shards[current_shard])
 
                             # Move to next shard and open new file with larger buffer
                             current_shard += 1
                             shard_path = get_shard_path(current_shard)
                             created_shards.append(shard_path)
-                            current_raw_fh = open(shard_path, "wb", buffering=65536)
+                            _tmp_fd, current_temp_path = tempfile.mkstemp(
+                                dir=output_dir, suffix=".tmp"
+                            )
+                            current_raw_fh = os.fdopen(_tmp_fd, "wb", buffering=65536)
 
                 # Process remaining compressed chunks in queue
                 while compression_queue:
@@ -350,11 +357,17 @@ def cdxj_to_zipnum(
         # so callers learn about ENOSPC or other flush failures.
         if sys.exc_info()[0] is None:
             current_raw_fh.close()
+            os.replace(current_temp_path, created_shards[current_shard])
         else:
             try:
                 current_raw_fh.close()
             except Exception:
                 pass
+            if current_temp_path and os.path.exists(current_temp_path):
+                try:
+                    os.unlink(current_temp_path)
+                except Exception:
+                    pass
 
     # If only one shard was created, rename it to use simple naming (no numbering)
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
