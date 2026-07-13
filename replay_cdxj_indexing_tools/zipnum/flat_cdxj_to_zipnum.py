@@ -372,7 +372,7 @@ def cdxj_to_zipnum(
     # If only one shard was created, rename it to use simple naming (no numbering)
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
         simple_name = get_shard_path(0, is_single=True)
-        os.rename(created_shards[0], simple_name)
+        os.replace(created_shards[0], simple_name)
         created_shards[0] = simple_name
 
     # Write loc file
