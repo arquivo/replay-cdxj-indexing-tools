@@ -71,11 +71,11 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
     _MAX_PATTERN_LEN = 1000
     # Patterns known to cause catastrophic backtracking
     _REDOS_PATTERNS = [
-        re.compile(r'\([^)]+\+\)\+'),      # (x+)+
-        re.compile(r'\([^)]+\*\)\+'),      # (x*)+
-        re.compile(r'\([^)]+\+\)\*'),      # (x+)*
-        re.compile(r'\([^)]+\|[^)]+\)\*'), # (a|b)*
-        re.compile(r'\([^)]+\|[^)]+\)\+'), # (a|b)+
+        re.compile(r"\([^)]+\+\)\+"),  # (x+)+
+        re.compile(r"\([^)]+\*\)\+"),  # (x*)+
+        re.compile(r"\([^)]+\+\)\*"),  # (x+)*
+        re.compile(r"\([^)]+\|[^)]+\)\*"),  # (a|b)*
+        re.compile(r"\([^)]+\|[^)]+\)\+"),  # (a|b)+
     ]
 
     def _compile_safe_regex(self, pattern: str) -> re.Pattern:
