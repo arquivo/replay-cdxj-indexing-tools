@@ -376,7 +376,10 @@ def search_shard_blocks(
     all_results = []
 
     try:
-        with open(shard_path, "rb") as fp:
+        _flags = os.O_RDONLY
+        if hasattr(os, "O_NOFOLLOW"):
+            _flags |= os.O_NOFOLLOW
+        with open(os.open(shard_path, _flags), "rb") as fp:
             for surt_key, offset, length in blocks:
                 if verbose:
                     shard_name = os.path.basename(shard_path)
