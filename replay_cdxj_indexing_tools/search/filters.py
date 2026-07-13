@@ -3,8 +3,11 @@ Filter utilities for CDXJ search results.
 """
 
 import json
+import logging
 import re
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 
 def normalize_timestamp(timestamp: str) -> str:
@@ -152,7 +155,8 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
         if self.filter_rules:
             try:
                 data = json.loads(json_str)
-            except json.JSONDecodeError:
+            except json.JSONDecodeError as exc:
+                logger.warning("Malformed JSON in CDXJ line (line rejected): %s | %.100s", exc, line.strip())
                 return False
 
             for rule in self.filter_rules:
