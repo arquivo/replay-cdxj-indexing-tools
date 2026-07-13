@@ -17,26 +17,24 @@ def normalize_timestamp(timestamp: str) -> str:
     Returns:
         14-digit timestamp string padded appropriately
 
+    Raises:
+        ValueError: If timestamp contains non-digit characters
+
     Examples:
         "2020" -> "20200101000000"
         "202012" -> "20201201000000"
         "20201225" -> "20201225000000"
     """
-    # Remove any non-digit characters
-    ts = "".join(c for c in timestamp if c.isdigit())
+    if not timestamp.isdigit():
+        raise ValueError(f"Invalid timestamp (must be numeric): {timestamp!r}")
 
-    # Pad to 14 digits with appropriate defaults
+    ts = timestamp
     if len(ts) < 14:
-        # Default values for each position
-        # YYYY MM DD HH MM SS
-        # Pad month and day with 01, hours/minutes/seconds with 00
+        # YYYY MM DD HH MM SS — pad month/day with 01, time with 00
         defaults = "00000101000000"
-
-        # Build the result by taking what we have and filling in defaults
         result = list(defaults)
         for i, char in enumerate(ts):
             result[i] = char
-
         ts = "".join(result)
 
     return ts[:14]
