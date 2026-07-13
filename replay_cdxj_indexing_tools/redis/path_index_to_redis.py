@@ -413,7 +413,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             if use_cluster:
                 # Redis Cluster connection
                 # pylint: disable=no-member,possibly-used-before-assignment
-                redis_client = redis.RedisCluster(  # type: ignore[assignment,arg-type,call-overload]  # noqa: E501
+                redis_client = redis.RedisCluster(  # type: ignore
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
