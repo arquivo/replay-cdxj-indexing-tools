@@ -9,6 +9,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Iterator, List, Optional, Tuple
 
+_MAX_BLOCK_READ = 512 * 1024 * 1024  # 512 MB hard cap against crafted .idx files
+
 
 def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
     """
@@ -304,7 +306,8 @@ def search_zipnum_data_block(
             fp.seek(offset)
 
             # Read only the specified compressed block
-            compressed_data = fp.read(length)
+            safe_length = min(length, _MAX_BLOCK_READ)
+            compressed_data = fp.read(safe_length)
 
             if not compressed_data:
                 return results
@@ -388,8 +391,8 @@ def search_shard_blocks(
                 # Seek to block offset
                 fp.seek(offset)
 
-                # Read compressed block
-                compressed_data = fp.read(length)
+                # Read compressed block (capped to guard against crafted .idx lengths)
+                compressed_data = fp.read(min(length, _MAX_BLOCK_READ))
                 if not compressed_data:
                     continue
 
