@@ -46,6 +46,7 @@ Author: Ivo Branco / Copilot
 """
 
 import argparse
+import contextlib
 import fnmatch
 import heapq
 import os
@@ -181,37 +182,25 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
     """
     log_progress(f"[MERGE] Starting merge of {len(files)} files...", verbose)
     lines_written = 0
-    # Open all input files with buffering for efficient I/O
-    file_handles = [open(f, "r", buffering=buffer_size) for f in files]
 
-    # Initialize min-heap with the first line from each file
-    # Heap elements are tuples: (line_content, file_index)
-    heap = []
-    for idx, fh in enumerate(file_handles):
-        line = fh.readline()
-        if line:
-            # Push (line, file_index) tuple onto heap
-            # Python's heapq compares tuples lexicographically, so lines are naturally sorted
-            heapq.heappush(heap, (line, idx))
+    with contextlib.ExitStack() as stack:
+        # Open all input files; ExitStack ensures every handle is closed on exit
+        file_handles = [stack.enter_context(open(f, "r", buffering=buffer_size)) for f in files]
 
-    # Open output file with buffering for efficient writing
-    # Use stdout if output_file is '-', otherwise open a file
-    if output_file == "-":
-        out = sys.stdout
-        # Process all lines in sorted order
-        while heap:
-            # Extract the lexicographically smallest line
-            value, idx = heapq.heappop(heap)
-            out.write(value)
-            lines_written += 1
+        # Initialize min-heap with the first line from each file
+        # Heap elements are tuples: (line_content, file_index)
+        heap = []
+        for idx, fh in enumerate(file_handles):
+            line = fh.readline()
+            if line:
+                # Push (line, file_index) tuple onto heap
+                # Python's heapq compares tuples lexicographically, so lines are naturally sorted
+                heapq.heappush(heap, (line, idx))
 
-            # Read the next line from the same file that just provided a line
-            next_line = file_handles[idx].readline()
-            if next_line:
-                # Add the new line back to the heap if file has more content
-                heapq.heappush(heap, (next_line, idx))
-    else:
-        with open(output_file, "w", buffering=buffer_size) as out:
+        # Open output file with buffering for efficient writing
+        # Use stdout if output_file is '-', otherwise open a file
+        if output_file == "-":
+            out = sys.stdout
             # Process all lines in sorted order
             while heap:
                 # Extract the lexicographically smallest line
@@ -224,10 +213,20 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                 if next_line:
                     # Add the new line back to the heap if file has more content
                     heapq.heappush(heap, (next_line, idx))
+        else:
+            with open(output_file, "w", buffering=buffer_size) as out:
+                # Process all lines in sorted order
+                while heap:
+                    # Extract the lexicographically smallest line
+                    value, idx = heapq.heappop(heap)
+                    out.write(value)
+                    lines_written += 1
 
-    # Clean up: close all input file handles
-    for fh in file_handles:
-        fh.close()
+                    # Read the next line from the same file that just provided a line
+                    next_line = file_handles[idx].readline()
+                    if next_line:
+                        # Add the new line back to the heap if file has more content
+                        heapq.heappush(heap, (next_line, idx))
 
     log_progress(f"[MERGE] Complete: {lines_written} lines written", verbose)
 
