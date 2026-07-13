@@ -123,6 +123,7 @@ in pywb configuration.
 
 """
 
+import concurrent.futures
 import gzip
 import os
 import sys
@@ -269,7 +270,10 @@ def cdxj_to_zipnum(
                         len(compression_queue) > 0 and compression_queue[0][0].done()
                     ):
                         future, first_line = compression_queue.popleft()
-                        compressed_chunk = future.result()
+                        try:
+                            compressed_chunk = future.result(timeout=300)
+                        except concurrent.futures.TimeoutError:
+                            raise RuntimeError("Compression worker timed out after 300s")
 
                         # Compressed start offset (bytes) inside the gz file
                         start_offset = current_raw_fh.tell()
@@ -322,7 +326,10 @@ def cdxj_to_zipnum(
                 # Process remaining compressed chunks in queue
                 while compression_queue:
                     future, first_line = compression_queue.popleft()
-                    compressed_chunk = future.result()
+                    try:
+                        compressed_chunk = future.result(timeout=300)
+                    except concurrent.futures.TimeoutError:
+                        raise RuntimeError("Compression worker timed out after 300s")
 
                     # Compressed start offset (bytes) inside the gz file
                     start_offset = current_raw_fh.tell()
