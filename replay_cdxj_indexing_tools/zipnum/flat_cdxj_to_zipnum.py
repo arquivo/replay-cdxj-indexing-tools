@@ -269,8 +269,8 @@ def cdxj_to_zipnum(
                         future, first_line = compression_queue.popleft()
                         try:
                             compressed_chunk = future.result(timeout=300)
-                        except concurrent.futures.TimeoutError:
-                            raise RuntimeError("Compression worker timed out after 300s")
+                        except concurrent.futures.TimeoutError as exc:
+                            raise RuntimeError("Compression worker timed out after 300s") from exc
 
                         # Compressed start offset (bytes) inside the gz file
                         start_offset = current_raw_fh.tell()
@@ -321,8 +321,8 @@ def cdxj_to_zipnum(
                     future, first_line = compression_queue.popleft()
                     try:
                         compressed_chunk = future.result(timeout=300)
-                    except concurrent.futures.TimeoutError:
-                        raise RuntimeError("Compression worker timed out after 300s")
+                    except concurrent.futures.TimeoutError as exc:
+                        raise RuntimeError("Compression worker timed out after 300s") from exc
 
                     # Compressed start offset (bytes) inside the gz file
                     start_offset = current_raw_fh.tell()
