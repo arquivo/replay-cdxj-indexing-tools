@@ -366,7 +366,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             sys.exit(1)
 
     # Create Redis connection
-    redis_client: object = None  # type: ignore[assignment]  # narrowed to Redis/RedisCluster below; typed as object because redis is an optional import
+    redis_client: object = None  # type: ignore[assignment]  # narrowed to Redis/RedisCluster below
     if not dry_run:
         # Warn if username is provided but not supported in current redis version
         if redis_username:
@@ -413,7 +413,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             if use_cluster:
                 # Redis Cluster connection
                 # pylint: disable=no-member,possibly-used-before-assignment
-                redis_client = redis.RedisCluster(  # type: ignore[assignment,arg-type,call-overload]  # redis-py 2.10.6 stubs incomplete
+                redis_client = redis.RedisCluster(  # type: ignore[assignment,arg-type,call-overload]  # noqa: E501
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
@@ -423,7 +423,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 )
             elif redis_socket:
                 # Unix socket connection
-                redis_client = redis.Redis(  # type: ignore[assignment,call-overload]  # redis-py 2.10.6 stubs incomplete
+                redis_client = redis.Redis(  # type: ignore[assignment,call-overload]
                     unix_socket_path=redis_socket,
                     db=redis_db,
                     password=redis_password,
@@ -432,7 +432,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 )
             else:
                 # Standard TCP connection
-                redis_client = redis.Redis(  # type: ignore[assignment,call-overload]  # redis-py 2.10.6 stubs incomplete
+                redis_client = redis.Redis(  # type: ignore[assignment,call-overload]
                     host=redis_host,
                     port=redis_port,
                     db=redis_db,
@@ -444,7 +444,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 )
 
             # Test connection
-            redis_client.ping()  # type: ignore[attr-defined]  # redis_client typed as object; narrowed at runtime
+            redis_client.ping()  # type: ignore[attr-defined]  # object narrowed at runtime
             if verbose:
                 print("# Redis connection successful", file=sys.stderr)
 
@@ -460,7 +460,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             if verbose:
                 print(f"# Clearing existing hash key: {redis_key}", file=sys.stderr)
             try:
-                deleted = redis_client.delete(redis_key)  # type: ignore[attr-defined]  # redis_client typed as object; narrowed at runtime
+                deleted = redis_client.delete(redis_key)  # type: ignore[attr-defined]
                 if verbose and deleted:
                     print("# Deleted existing hash key", file=sys.stderr)
             except Exception as e:
@@ -486,7 +486,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                     if not dry_run:
                         try:
                             # Use pipeline for atomic batch submission
-                            pipe = redis_client.pipeline()  # type: ignore[attr-defined]  # redis_client typed as object; narrowed at runtime
+                            pipe = redis_client.pipeline()  # type: ignore[attr-defined]
                             for filename, path in batch:
                                 pipe.hset(redis_key, filename, path)
                             pipe.execute()
@@ -511,7 +511,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
             if batch:
                 if not dry_run:
                     try:
-                        pipe = redis_client.pipeline()  # type: ignore[attr-defined]  # redis_client typed as object; narrowed at runtime
+                        pipe = redis_client.pipeline()  # type: ignore[attr-defined]
                         for filename, path in batch:
                             pipe.hset(redis_key, filename, path)
                         pipe.execute()
@@ -544,7 +544,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     # Close Redis connection
     if not dry_run:
         try:
-            redis_client.close()  # type: ignore[attr-defined]  # redis_client typed as object; narrowed at runtime
+            redis_client.close()  # type: ignore[attr-defined]  # object narrowed at runtime
         except Exception:
             pass
 
