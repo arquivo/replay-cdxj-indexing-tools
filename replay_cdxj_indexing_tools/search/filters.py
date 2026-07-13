@@ -133,7 +133,9 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
             try:
                 data = json.loads(json_str)
             except json.JSONDecodeError as exc:
-                logger.warning("Malformed JSON in CDXJ line (line rejected): %s | %.100s", exc, line.strip())
+                logger.warning(
+                    "Malformed JSON in CDXJ line (line rejected): %s | %.100s", exc, line.strip()
+                )
                 return False
 
             for rule in self.filter_rules:
