@@ -2,8 +2,11 @@
 Binary search implementation for flat CDXJ files.
 """
 
+import logging
 import sys
 from typing import BinaryIO, List
+
+logger = logging.getLogger(__name__)
 
 
 def binary_search_file(
@@ -61,7 +64,12 @@ def binary_search_file(
             continue
 
         # Decode and extract SURT key
-        line_str = line.decode("utf-8", errors="ignore").strip()
+        try:
+            line_str = line.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            logger.warning("Invalid UTF-8 in index file at offset %d, skipping line", fp.tell())
+            right = mid
+            continue
         if not line_str:
             right = mid
             continue
@@ -138,7 +146,11 @@ def binary_search_file(
             if not line:
                 break
 
-            line_str = line.decode("utf-8", errors="ignore").strip()
+            try:
+                line_str = line.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                logger.warning("Invalid UTF-8 in index file at offset %d, skipping line", fp.tell())
+                continue
             if not line_str:
                 continue
 
@@ -183,7 +195,11 @@ def binary_search_file(
         if not line:
             break
 
-        line_str = line.decode("utf-8", errors="ignore").strip()
+        try:
+            line_str = line.decode("utf-8").strip()
+        except UnicodeDecodeError:
+            logger.warning("Invalid UTF-8 in index file at offset %d, skipping line", fp.tell())
+            continue
         if not line_str:
             continue
 
