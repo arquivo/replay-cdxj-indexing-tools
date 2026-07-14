@@ -853,5 +853,138 @@ class TestZipNumSearch(unittest.TestCase):
             self.assertEqual(len(remaining), 99)  # 100 total - 1 already consumed
 
 
+class TestInputValidation(unittest.TestCase):
+    """Tests for input validation on search_key and filter expressions (issues #40 and #22)."""
+
+    def setUp(self):
+        """Create a minimal temporary CDXJ file and idx file for validation tests."""
+        self.test_dir = tempfile.mkdtemp()
+        self.test_cdxj = os.path.join(self.test_dir, "test.cdxj")
+        with open(self.test_cdxj, "w") as f:
+            f.write('com,example)/ 20200101000000 {"url": "http://example.com/"}\n')
+
+        # Minimal ZipNum index
+        self.idx_file = os.path.join(self.test_dir, "test.idx")
+        shard = os.path.join(self.test_dir, "test-00.cdx.gz")
+        import gzip as gz
+
+        with open(shard, "wb") as f:
+            f.write(gz.compress(b'com,example)/ 20200101000000 {"url": "http://example.com/"}\n'))
+        shard_size = os.path.getsize(shard)
+        with open(self.idx_file, "w") as f:
+            f.write(f"com,example)/\ttest-00.cdx.gz\t0\t{shard_size}\t0\n")
+
+    def tearDown(self):
+        """Clean up temporary files."""
+        import shutil
+
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
+    # --- search_cdxj_file validation ---
+
+    def test_search_cdxj_empty_key_raises(self):
+        """search_cdxj_file must reject an empty search_key."""
+        with self.assertRaises(ValueError, msg="empty search_key should raise ValueError"):
+            search_cdxj_file(self.test_cdxj, "")
+
+    def test_search_cdxj_too_long_key_raises(self):
+        """search_cdxj_file must reject a search_key longer than 10 000 chars."""
+        with self.assertRaises(ValueError):
+            search_cdxj_file(self.test_cdxj, "a" * 10_001)
+
+    def test_search_cdxj_null_byte_key_raises(self):
+        """search_cdxj_file must reject a search_key containing null bytes."""
+        with self.assertRaises(ValueError):
+            search_cdxj_file(self.test_cdxj, "com,example)/\x00")
+
+    def test_search_cdxj_valid_key_does_not_raise(self):
+        """search_cdxj_file must not raise for a normal search_key."""
+        # Should return without raising; result count doesn't matter here
+        result = search_cdxj_file(self.test_cdxj, "com,example)/")
+        self.assertIsInstance(result, list)
+
+    # --- search_zipnum_file validation ---
+
+    def test_search_zipnum_empty_key_raises(self):
+        """search_zipnum_file must reject an empty search_key."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with self.assertRaises(ValueError):
+            list(search_zipnum_file(self.idx_file, ""))
+
+    def test_search_zipnum_too_long_key_raises(self):
+        """search_zipnum_file must reject a search_key longer than 10 000 chars."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with self.assertRaises(ValueError):
+            list(search_zipnum_file(self.idx_file, "a" * 10_001))
+
+    def test_search_zipnum_null_byte_key_raises(self):
+        """search_zipnum_file must reject a search_key containing null bytes."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        with self.assertRaises(ValueError):
+            list(search_zipnum_file(self.idx_file, "com,example)/\x00"))
+
+    def test_search_zipnum_valid_key_does_not_raise(self):
+        """search_zipnum_file must not raise for a normal search_key."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        result = list(search_zipnum_file(self.idx_file, "com,example)/"))
+        self.assertIsInstance(result, list)
+
+    # --- CDXJFilter filter expression validation ---
+
+    def test_filter_too_long_expr_raises(self):
+        """CDXJFilter must reject a filter expression longer than 2000 chars."""
+        long_expr = "status=" + "x" * 2000
+        with self.assertRaises(ValueError):
+            CDXJFilter(filters=[long_expr])
+
+    def test_filter_null_byte_expr_raises(self):
+        """CDXJFilter must reject a filter expression containing null bytes."""
+        with self.assertRaises(ValueError):
+            CDXJFilter(filters=["status=200\x00"])
+
+    def test_filter_valid_expr_does_not_raise(self):
+        """CDXJFilter must not raise for a normal filter expression."""
+        f = CDXJFilter(filters=["status=200"])
+        self.assertEqual(len(f.filter_rules), 1)
+
+    # --- _compile_safe_regex caching (issue #22) ---
+
+    def test_compile_safe_regex_is_cached(self):
+        """_compile_safe_regex must return the same compiled object on repeated calls."""
+        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+
+        result1 = _compile_safe_regex("text/.*")
+        result2 = _compile_safe_regex("text/.*")
+        self.assertIs(result1, result2, "_compile_safe_regex should return cached object")
+
+    def test_compile_safe_regex_cache_info(self):
+        """lru_cache must report at least one hit after calling with the same pattern twice."""
+        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+
+        _compile_safe_regex.cache_clear()
+        _compile_safe_regex("image/.*")
+        _compile_safe_regex("image/.*")
+        info = _compile_safe_regex.cache_info()
+        self.assertGreaterEqual(info.hits, 1)
+
+    def test_compile_safe_regex_rejects_too_long(self):
+        """_compile_safe_regex must reject patterns longer than _MAX_PATTERN_LEN."""
+        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+
+        with self.assertRaises(ValueError):
+            _compile_safe_regex("a" * 1001)
+
+    def test_compile_safe_regex_rejects_redos(self):
+        """_compile_safe_regex must reject patterns with ReDoS structure."""
+        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+
+        with self.assertRaises(ValueError):
+            _compile_safe_regex("(a+)+")
+
+
 if __name__ == "__main__":
     unittest.main()

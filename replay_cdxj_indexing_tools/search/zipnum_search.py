@@ -519,6 +519,13 @@ def search_zipnum_file(
     if verbose:
         print(f"Searching ZipNum: {idx_filepath}", file=sys.stderr)
 
+    if not search_key:
+        raise ValueError("search_key cannot be empty")
+    if len(search_key) > 10_000:
+        raise ValueError(f"search_key too long: {len(search_key)} chars (max 10000)")
+    if "\x00" in search_key:
+        raise ValueError("search_key contains null bytes")
+
     # Determine base directory
     if base_dir is None:
         base_dir = os.path.dirname(os.path.abspath(idx_filepath))
