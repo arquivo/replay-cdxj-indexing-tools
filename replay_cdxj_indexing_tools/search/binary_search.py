@@ -246,6 +246,13 @@ def search_cdxj_file(
     if verbose:
         print(f"Searching file: {filepath}", file=sys.stderr)
 
+    if not search_key:
+        raise ValueError("search_key cannot be empty")
+    if len(search_key) > 10_000:
+        raise ValueError(f"search_key too long: {len(search_key)} chars (max 10000)")
+    if "\x00" in search_key:
+        raise ValueError("search_key contains null bytes")
+
     try:
         with open(filepath, "rb") as fp:
             return binary_search_file(fp, search_key, match_prefix, verbose)
