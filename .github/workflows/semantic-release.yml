@@ -1,0 +1,11 @@
+name: Semantic Release
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  release:
+    uses: arquivo/.github/.github/workflows/semantic-release.yml@main
+    secrets: inherit

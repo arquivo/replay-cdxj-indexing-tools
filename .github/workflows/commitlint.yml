@@ -1,0 +1,8 @@
+name: Lint Commit Messages
+
+on:
+  pull_request:
+
+jobs:
+  commitlint:
+    uses: arquivo/.github/.github/workflows/commitlint.yml@main
