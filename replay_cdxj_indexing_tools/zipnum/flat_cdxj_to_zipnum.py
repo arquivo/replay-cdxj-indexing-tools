@@ -310,7 +310,7 @@ def cdxj_to_zipnum(
                             # Close current shard file
                             try:
                                 current_raw_fh.close()
-                            except Exception:
+                            except Exception:  # pylint: disable=broad-exception-caught  # nonfatal
                                 pass
                             os.replace(current_temp_path, created_shards[current_shard])
 
@@ -368,12 +368,12 @@ def cdxj_to_zipnum(
         else:
             try:
                 current_raw_fh.close()
-            except Exception:
+            except Exception:  # pylint: disable=broad-exception-caught  # best-effort close
                 pass
             if current_temp_path and os.path.exists(current_temp_path):
                 try:
                     os.unlink(current_temp_path)
-                except Exception:
+                except Exception:  # pylint: disable=broad-exception-caught  # best-effort cleanup
                     pass
 
     # If only one shard was created, rename it to use simple naming (no numbering)

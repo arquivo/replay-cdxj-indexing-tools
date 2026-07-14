@@ -40,7 +40,7 @@ def main():
     except KeyboardInterrupt:
         print("\nInterrupted by user", file=sys.stderr)
         sys.exit(130)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # top-level handler
         print(f"Error executing script: {e}", file=sys.stderr)
         sys.exit(1)
 

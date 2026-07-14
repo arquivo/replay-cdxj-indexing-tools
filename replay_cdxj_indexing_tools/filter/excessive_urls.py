@@ -100,7 +100,7 @@ def find_excessive_urls(input_path: str, threshold: int = 1000) -> Dict[str, int
     # Open input (file or stdin)
     if input_path == "-":
         fh = sys.stdin
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         fh = open(input_path, "r", encoding="utf-8")
 
     try:
@@ -152,13 +152,13 @@ def filter_excessive_urls(
     # Open input
     if input_path == "-":
         input_fh = sys.stdin
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         input_fh = open(input_path, "r", encoding="utf-8", buffering=buffer_size)
 
     # Open output
     if output_path == "-":
         output_fh = sys.stdout
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         output_fh = open(output_path, "w", encoding="utf-8", buffering=buffer_size)
 
     try:

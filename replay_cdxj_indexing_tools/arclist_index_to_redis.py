@@ -350,11 +350,11 @@ def run_pipeline(
                 arclist_proc.terminate()
             if redis_proc:
                 redis_proc.terminate()
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught  # best-effort terminate
             pass
         return 130
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # catch-all
         log_error(f"Pipeline execution failed: {e}")
         return 1
 
@@ -501,7 +501,7 @@ argument handling, colored logging, and --clear option support.
         print("", file=sys.stderr)
         log_warning("Interrupted by user")
         return 130
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # top-level handler
         log_error(f"Error: {e}")
         return 1
 

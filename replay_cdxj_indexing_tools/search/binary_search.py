@@ -249,7 +249,7 @@ def search_cdxj_file(
     try:
         with open(filepath, "rb") as fp:
             return binary_search_file(fp, search_key, match_prefix, verbose)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised after logging
         if verbose:
             print(f"  Error reading file: {e}", file=sys.stderr)
         raise

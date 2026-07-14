@@ -220,13 +220,13 @@ def addfield_to_cdxj(
     # Open input
     if input_path == "-":
         input_fh = sys.stdin
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         input_fh = open(input_path, "r", encoding="utf-8", buffering=buffer_size)
 
     # Open output
     if output_path == "-":
         output_fh = sys.stdout
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         output_fh = open(output_path, "w", encoding="utf-8", buffering=buffer_size)
 
     try:

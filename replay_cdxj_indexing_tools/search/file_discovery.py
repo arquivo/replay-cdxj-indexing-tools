@@ -69,7 +69,7 @@ def detect_file_type(filepath: str) -> str:
     """
     if filepath.endswith(".idx"):
         return "zipnum_idx"
-    elif filepath.endswith(".cdxj.gz"):
+    elif filepath.endswith(".cdxj.gz"):  # pylint: disable=no-else-return  # elif priority order
         return "zipnum_data"
     elif filepath.endswith(".cdxj"):
         return "cdxj"

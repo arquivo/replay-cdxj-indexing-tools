@@ -117,7 +117,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
                 "value": pattern.strip(),
                 "regex": self._compile_safe_regex(pattern.strip()),
             }
-        elif "~" in expr:
+        elif "~" in expr:  # pylint: disable=no-else-return  # elif order
             field, pattern = expr.split("~", 1)
             return {
                 "field": field.strip(),

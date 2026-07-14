@@ -147,7 +147,7 @@ def extract_field_value(
         # Raw mode: convert value to string without JSON encoding
         if isinstance(value, str):
             return value
-        elif isinstance(value, bool):
+        elif isinstance(value, bool):  # pylint: disable=no-else-return  # bool checked before str
             return "true" if value else "false"
         elif value is None:
             return "null"
@@ -200,7 +200,7 @@ def extract_field_from_cdxj(
         # Open input file
         if input_file == "-":
             infile = sys.stdin
-        else:
+        else:  # pylint: disable-next=consider-using-with,unspecified-encoding  # locale
             infile = open(input_file, "r", buffering=buffer_size)
 
         try:

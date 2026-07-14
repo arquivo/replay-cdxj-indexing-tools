@@ -126,7 +126,7 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
 
     if idx_path == "-":
         fh = sys.stdin
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         fh = open(idx_path, "r", encoding="utf-8")
 
     try:

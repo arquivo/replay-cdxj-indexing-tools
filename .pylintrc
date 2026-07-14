@@ -4,19 +4,21 @@ jobs=1
 
 [MESSAGES CONTROL]
 # Disable specific messages
-# C0111: missing-docstring
-# R0913: too-many-arguments
-# R0914: too-many-locals
-# R0917: too-many-positional-arguments (Python 3.12+ check)
-# W0718: broad-exception-caught (catching general Exception is intentional)
-# W0621: redefined-outer-name (common in nested functions)
-# R1732: consider-using-with (manual resource management needed for stdin/stdout)
-# W1514: unspecified-encoding (binary mode used intentionally)
-# R1705: no-else-return (else improves readability in some cases)
-# R0912: too-many-branches (complex logic required)
-# R0915: too-many-statements (long functions with clear structure)
-# R0801: duplicate-code (acceptable for similar I/O patterns)
-disable=C0111,R0913,R0914,R0917,W0718,W0621,R1732,W1514,R1705,R0912,R0915,R0801
+# C0111: missing-docstring (too broad: all public items would need docstrings)
+# R0913: too-many-arguments (intentional: CLI tools have many config parameters)
+# R0914: too-many-locals (intentional: pipeline functions need many tracking vars)
+# R0917: too-many-positional-arguments (Python 3.12+ only check)
+# R0912: too-many-branches (complex logic required in merge/search algorithms)
+# R0915: too-many-statements (long functions with clear sequential structure)
+# R0801: duplicate-code (acceptable for similar stdin/file I/O patterns)
+#
+# Re-enabled (addressed inline):
+#   W0718: broad-exception-caught → inline disables with reason comments
+#   W0621: redefined-outer-name  → no violations found in current code
+#   R1732: consider-using-with   → inline disables (conditional stdin/file handles)
+#   W1514: unspecified-encoding  → inline disables (system encoding intentional)
+#   R1705: no-else-return        → inline disables (elif chains aid readability)
+disable=C0111,R0913,R0914,R0917,R0912,R0915,R0801
 
 [FORMAT]
 # Maximum number of characters on a single line
