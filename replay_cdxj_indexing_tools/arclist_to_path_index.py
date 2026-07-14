@@ -398,7 +398,7 @@ Examples:
     except KeyboardInterrupt:
         print("\n# Interrupted by user", file=sys.stderr)
         sys.exit(130)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # top-level handler
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

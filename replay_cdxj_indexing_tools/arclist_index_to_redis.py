@@ -295,14 +295,14 @@ def run_pipeline(
 
     try:
         # Start arclist-to-path-index process
-        arclist_proc = subprocess.Popen(
+        arclist_proc = subprocess.Popen(  # pylint: disable=consider-using-with
             arclist_cmd,
             stdout=subprocess.PIPE,
             stderr=sys.stderr,
         )
 
         # Start path-index-to-redis process, reading from arclist-to-path-index stdout
-        redis_proc = subprocess.Popen(
+        redis_proc = subprocess.Popen(  # pylint: disable=consider-using-with
             redis_cmd,
             stdin=arclist_proc.stdout,
             stderr=sys.stderr,

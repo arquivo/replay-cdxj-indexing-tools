@@ -163,7 +163,7 @@ def format_cdxj_line(surt_key: str, timestamp: str, json_data: Optional[dict]) -
         >>> print(line.strip())
         pt,arquivo)/ 20231115120000 {"url": "https://arquivo.pt/", "status": "200"}
     """
-    if json_data:
+    if json_data:  # pylint: disable=no-else-return  # else makes both branches explicit
         # Use separators to minimize whitespace (compact JSON)
         json_str = json.dumps(json_data, ensure_ascii=False, separators=(",", ":"))
         return f"{surt_key} {timestamp} {json_str}\n"

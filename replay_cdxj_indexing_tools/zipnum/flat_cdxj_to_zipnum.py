@@ -227,7 +227,7 @@ def cdxj_to_zipnum(
 
     # Helper function to generate shard path
     def get_shard_path(shard_num: int, is_single: bool = False) -> str:
-        if is_single:
+        if is_single:  # pylint: disable=no-else-return  # else makes both branches explicit
             # For single shard, use simple naming without numbering
             return os.path.join(output_dir, f"{base}.cdx.gz")
         else:

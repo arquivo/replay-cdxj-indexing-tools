@@ -245,9 +245,9 @@ def open_index_file(path: str):
     Returns:
         File handle (text mode)
     """
-    if path == "-":
+    if path == "-":  # pylint: disable=no-else-return  # elif chain aids readability
         return sys.stdin
-    elif path.endswith(".gz"):  # pylint: disable=no-else-return  # elif chain aids readability
+    elif path.endswith(".gz"):
         return gzip.open(path, "rt", encoding="utf-8")
     else:
         return open(path, "r", encoding="utf-8")

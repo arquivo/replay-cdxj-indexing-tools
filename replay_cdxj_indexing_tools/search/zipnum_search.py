@@ -337,7 +337,7 @@ def search_zipnum_data_block(
             # Decompress the block
             try:
                 decompressed_data = gzip.decompress(compressed_data)
-            except Exception as decompress_error:
+            except Exception as decompress_error:  # pylint: disable=broad-exception-caught
                 if verbose:
                     error_msg = f"Failed to decompress block at offset {offset}: {decompress_error}"
                     print(f"  Warning: {error_msg}", file=sys.stderr)
@@ -433,7 +433,7 @@ def search_shard_blocks(
                 # Decompress the block
                 try:
                     decompressed_data = gzip.decompress(compressed_data)
-                except Exception as decompress_error:
+                except Exception as decompress_error:  # pylint: disable=broad-exception-caught
                     if verbose:
                         error_msg = (
                             f"Failed to decompress block at offset {offset}: {decompress_error}"

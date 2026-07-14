@@ -103,7 +103,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
         - field~pattern (regex match)
         - field!~pattern (regex not match)
         """
-        if "!~" in expr:
+        if "!~" in expr:  # pylint: disable=no-else-return  # elif chain for operator priority
             field, pattern = expr.split("!~", 1)
             return {
                 "field": field.strip(),
