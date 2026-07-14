@@ -19,11 +19,7 @@ import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
-from replay_cdxj_indexing_tools.arclist_index_to_redis import (
-    check_dependencies,
-    main,
-    run_pipeline,
-)
+from replay_cdxj_indexing_tools.arclist_index_to_redis import check_dependencies, main, run_pipeline
 
 
 class TestCheckDependencies(unittest.TestCase):
