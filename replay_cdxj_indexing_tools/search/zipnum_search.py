@@ -3,11 +3,14 @@ Binary search implementation for ZipNum format files.
 """
 
 import gzip
+import logging
 import os
 import sys
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Iterator, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 _MAX_BLOCK_READ = 512 * 1024 * 1024  # 512 MB hard cap against crafted .idx files
 
@@ -133,7 +136,14 @@ def search_zipnum_index(
                     right = mid
                     continue
 
-                line_str = line.decode("utf-8", errors="ignore").strip()
+                try:
+                    line_str = line.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    logger.warning(
+                        "Invalid UTF-8 in index file at offset %d, skipping line", fp.tell()
+                    )
+                    right = mid
+                    continue
                 if not line_str:
                     right = mid
                     continue
@@ -197,7 +207,13 @@ def search_zipnum_index(
                     if not line:
                         break
 
-                    line_str = line.decode("utf-8", errors="ignore").strip()
+                    try:
+                        line_str = line.decode("utf-8").strip()
+                    except UnicodeDecodeError:
+                        logger.warning(
+                            "Invalid UTF-8 in index file at offset %d, skipping line", fp.tell()
+                        )
+                        continue
                     if not line_str:
                         continue
 
@@ -238,7 +254,13 @@ def search_zipnum_index(
                 if not line:
                     break
 
-                line_str = line.decode("utf-8", errors="ignore").strip()
+                try:
+                    line_str = line.decode("utf-8").strip()
+                except UnicodeDecodeError:
+                    logger.warning(
+                        "Invalid UTF-8 in index file at offset %d, skipping line", fp.tell()
+                    )
+                    continue
                 if not line_str:
                     continue
 
@@ -322,7 +344,16 @@ def search_zipnum_data_block(
                 return results
 
             # Parse decompressed lines
-            for line in decompressed_data.decode("utf-8", errors="ignore").split("\n"):
+            try:
+                text = decompressed_data.decode("utf-8")
+            except UnicodeDecodeError:
+                logger.warning(
+                    "Invalid UTF-8 in compressed block at offset %d, using replace mode", offset
+                )
+                text = decompressed_data.decode("utf-8", errors="replace")
+            for line in text.split("\n"):
+                if "\ufffd" in line:  # replacement char indicates corrupt data
+                    continue
                 line_str = line.strip()
                 if not line_str:
                     continue
@@ -411,7 +442,17 @@ def search_shard_blocks(
                     continue
 
                 # Parse and filter lines
-                for line in decompressed_data.decode("utf-8", errors="ignore").split("\n"):
+                try:
+                    text = decompressed_data.decode("utf-8")
+                except UnicodeDecodeError:
+                    logger.warning(
+                        "Invalid UTF-8 in compressed block at offset %d, using replace mode",
+                        offset,
+                    )
+                    text = decompressed_data.decode("utf-8", errors="replace")
+                for line in text.split("\n"):
+                    if "\ufffd" in line:  # replacement char indicates corrupt data
+                        continue
                     line_str = line.strip()
                     if not line_str:
                         continue
