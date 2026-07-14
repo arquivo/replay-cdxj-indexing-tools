@@ -29,6 +29,7 @@ def normalize_timestamp(timestamp: str) -> str:
         "20201225" -> "20201225000000"
     """
     if not timestamp.isdigit():
+        logger.warning("Invalid non-numeric timestamp rejected: %r", timestamp)
         raise ValueError(f"Invalid timestamp (must be numeric): {timestamp!r}")
 
     ts = timestamp
@@ -102,6 +103,11 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
         - field!=value (not equal)
         - field~pattern (regex match)
         - field!~pattern (regex not match)
+
+        Security:
+            ReDoS: patterns are validated by _compile_safe_regex() against known
+            catastrophic-backtracking patterns before re.compile(). (CWE-1333)
+            Pattern length is capped at _MAX_PATTERN_LEN chars.
         """
         if "!~" in expr:
             field, pattern = expr.split("!~", 1)

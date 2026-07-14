@@ -508,6 +508,13 @@ def search_zipnum_file(
 
     Yields:
         Matching CDXJ lines one at a time
+
+    Security:
+        Path traversal: .loc file entries and .idx shard names are validated with
+        os.path.realpath() + startswith(base_dir) before any file open. Detected
+        attempts are logged as warnings and raise ValueError. (CWE-22)
+        Trust boundary: base_dir is trusted (caller-supplied); .loc/.idx contents
+        are untrusted. See test_zipnum_path_traversal_* for attack scenarios.
     """
     if verbose:
         print(f"Searching ZipNum: {idx_filepath}", file=sys.stderr)
@@ -552,6 +559,11 @@ def search_zipnum_file(
                 shard_path = os.path.join(base_dir, shard_path)
             resolved = os.path.realpath(shard_path)
             if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
+                logger.warning(
+                    "Path traversal attempt via .loc file: resolved=%r escapes base_dir=%r",
+                    resolved,
+                    resolved_base,
+                )
                 raise ValueError(f"Path traversal detected in .loc file: {shard_path!r}")
             shard_path = resolved
         else:
@@ -561,6 +573,11 @@ def search_zipnum_file(
                 shard_path = os.path.join(base_dir, shard_name)
             resolved = os.path.realpath(shard_path)
             if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
+                logger.warning(
+                    "Path traversal attempt via .idx shard name: resolved=%r escapes base_dir=%r",
+                    resolved,
+                    resolved_base,
+                )
                 raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}")
             shard_path = resolved
 

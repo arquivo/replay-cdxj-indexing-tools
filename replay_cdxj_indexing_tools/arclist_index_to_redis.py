@@ -224,6 +224,14 @@ def run_pipeline(
 
     Returns:
         Exit code (0 for success, non-zero for failure)
+
+    Security:
+        Subprocess timeout: both child processes are hard-killed after
+        _PIPELINE_TIMEOUT seconds (default 3600 s) to prevent indefinite
+        hangs from a stalled Redis write or a slow/malicious arclist source.
+        Callers should pass a tighter timeout for automated/scheduled runs.
+        The pipeline inherits the caller's environment; ensure arclist_folder
+        is not attacker-controlled (CWE-78 / command injection via path).
     """
     start_time = time.time()
 
