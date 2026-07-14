@@ -109,7 +109,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
             catastrophic-backtracking patterns before re.compile(). (CWE-1333)
             Pattern length is capped at _MAX_PATTERN_LEN chars.
         """
-        if "!~" in expr:
+        if "!~" in expr:  # pylint: disable=no-else-return  # elif chain for operator priority
             field, pattern = expr.split("!~", 1)
             return {
                 "field": field.strip(),

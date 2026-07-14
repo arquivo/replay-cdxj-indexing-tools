@@ -154,7 +154,9 @@ def filter_cdxj_by_blocklist(
     temp_blocklist = None
     if blocklist_file is None:
         # Create temporary blocklist file from patterns
-        temp_blocklist = tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt")
+        temp_blocklist = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
+            mode="w", delete=False, suffix=".txt"
+        )
         for pattern in blocklist_patterns:
             temp_blocklist.write(pattern.pattern + "\n")
         temp_blocklist.close()

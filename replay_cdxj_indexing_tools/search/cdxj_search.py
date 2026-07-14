@@ -98,10 +98,10 @@ def search_file(
     try:
         file_type = detect_file_type(filepath)
 
-        if file_type == "cdxj":
+        if file_type == "cdxj":  # pylint: disable=no-else-return  # elif chain; each branch returns
             return iter(search_cdxj_file(filepath, modified_key, use_prefix, verbose))
 
-        elif file_type == "zipnum_idx":  # pylint: disable=no-else-return  # elif chain
+        elif file_type == "zipnum_idx":
             return search_zipnum_file(filepath, modified_key, use_prefix, verbose)
 
         elif file_type == "zipnum_data":
@@ -121,7 +121,7 @@ def search_file(
             return iter(search_cdxj_file(filepath, modified_key, use_prefix, verbose))
 
     except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised; see skip_errors
-        if skip_errors:
+        if skip_errors:  # pylint: disable=no-else-return  # else re-raises; symmetry with if
             print(f"Error processing {filepath}: {e}", file=sys.stderr)
             return iter([])
         else:

@@ -145,9 +145,9 @@ def extract_field_value(
 
     if raw:
         # Raw mode: convert value to string without JSON encoding
-        if isinstance(value, str):
+        if isinstance(value, str):  # pylint: disable=no-else-return  # bool < str ordering
             return value
-        elif isinstance(value, bool):  # pylint: disable=no-else-return  # bool checked before str
+        elif isinstance(value, bool):
             return "true" if value else "false"
         elif value is None:
             return "null"
