@@ -247,7 +247,7 @@ def open_index_file(path: str):
     """
     if path == "-":
         return sys.stdin
-    elif path.endswith(".gz"):
+    elif path.endswith(".gz"):  # pylint: disable=no-else-return  # elif chain aids readability
         return gzip.open(path, "rt", encoding="utf-8")
     else:
         return open(path, "r", encoding="utf-8")
@@ -463,7 +463,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                 deleted = redis_client.delete(redis_key)  # type: ignore[attr-defined]
                 if verbose and deleted:
                     print("# Deleted existing hash key", file=sys.stderr)
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # redis exc varies
                 print(f"Warning: Error clearing hash key: {e}", file=sys.stderr)
 
     # Process each input file
@@ -491,7 +491,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                                 pipe.hset(redis_key, filename, path)
                             pipe.execute()
                             file_submitted += len(batch)
-                        except Exception as e:
+                        except Exception as e:  # pylint: disable=broad-exception-caught  # untyped
                             print(f"Error submitting batch: {e}", file=sys.stderr)
                             file_errors += len(batch)
                     else:
@@ -516,7 +516,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
                             pipe.hset(redis_key, filename, path)
                         pipe.execute()
                         file_submitted += len(batch)
-                    except Exception as e:
+                    except Exception as e:  # pylint: disable=broad-exception-caught  # untyped
                         print(f"Error submitting final batch: {e}", file=sys.stderr)
                         file_errors += len(batch)
                 else:
@@ -537,7 +537,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
         except KeyboardInterrupt:
             print("\n# Interrupted by user", file=sys.stderr)
             break
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught  # catch-all per-file
             print(f"Error processing {input_path}: {e}", file=sys.stderr)
             total_errors += 1
 
@@ -545,7 +545,7 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     if not dry_run:
         try:
             redis_client.close()  # type: ignore[attr-defined]  # object narrowed at runtime
-        except Exception:
+        except Exception:  # pylint: disable=broad-exception-caught  # best-effort close
             pass
 
     # Final statistics
@@ -714,7 +714,7 @@ Redis connection examples:
     except KeyboardInterrupt:
         print("\n# Interrupted by user", file=sys.stderr)
         sys.exit(130)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # top-level handler
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

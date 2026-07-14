@@ -288,7 +288,7 @@ def search_zipnum_index(
                         print(f"  Warning: Skipping invalid index line: {e}", file=sys.stderr)
                     continue
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised after logging
         if verbose:
             print(f"  Error reading index file: {e}", file=sys.stderr)
         raise
@@ -377,7 +377,7 @@ def search_zipnum_data_block(
                         # Passed all matches
                         break
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised after logging
         if verbose:
             print(f"  Error reading data block at offset {offset}: {e}", file=sys.stderr)
         raise
@@ -474,7 +474,7 @@ def search_shard_blocks(
                         elif line_key > search_key:
                             break
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # non-fatal; caller skips
         if verbose:
             print(f"  Error reading shard {shard_path}: {e}", file=sys.stderr)
 
@@ -600,7 +600,7 @@ def search_zipnum_file(
                     for result in future.result():
                         result_count += 1
                         yield result
-                except Exception as e:
+                except Exception as e:  # pylint: disable=broad-exception-caught  # non-fatal shard
                     shard_path = futures[future]
                     if verbose:
                         print(f"  Error processing {shard_path}: {e}", file=sys.stderr)

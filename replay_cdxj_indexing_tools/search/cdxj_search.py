@@ -101,7 +101,7 @@ def search_file(
         if file_type == "cdxj":
             return iter(search_cdxj_file(filepath, modified_key, use_prefix, verbose))
 
-        elif file_type == "zipnum_idx":
+        elif file_type == "zipnum_idx":  # pylint: disable=no-else-return  # elif chain
             return search_zipnum_file(filepath, modified_key, use_prefix, verbose)
 
         elif file_type == "zipnum_data":
@@ -120,7 +120,7 @@ def search_file(
                 )
             return iter(search_cdxj_file(filepath, modified_key, use_prefix, verbose))
 
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised; see skip_errors
         if skip_errors:
             print(f"Error processing {filepath}: {e}", file=sys.stderr)
             return iter([])
@@ -236,7 +236,7 @@ Examples:
             search_key = surt.surt(args.url)
             if args.verbose:
                 print(f"Converted URL to SURT: {args.url} -> {search_key}", file=sys.stderr)
-        except Exception as e:
+        except Exception as e:  # pylint: disable=broad-exception-caught  # surt may raise any type
             print(f"Error converting URL to SURT: {e}", file=sys.stderr)
             sys.exit(1)
     else:
@@ -245,7 +245,7 @@ Examples:
     # Discover files
     try:
         files = discover_files(args.files, args.verbose)
-    except Exception as e:
+    except Exception as e:  # pylint: disable=broad-exception-caught  # discover_files wraps I/O
         print(f"Error discovering files: {e}", file=sys.stderr)
         sys.exit(1)
 
@@ -267,7 +267,7 @@ Examples:
                     i,
                     len(files),
                 )
-            except Exception as e:
+            except Exception as e:  # pylint: disable=broad-exception-caught  # per-file error
                 print(f"Error processing {filepath}: {e}", file=sys.stderr)
                 if not args.skip_errors:
                     sys.exit(1)

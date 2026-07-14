@@ -185,7 +185,7 @@ def filter_cdxj_by_blocklist(
             result = subprocess.run(
                 cmd, stdin=stdin_input, capture_output=True, text=True, check=False
             )
-            with open(output_path, "w") as f:
+            with open(output_path, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
             lines_kept = result.stdout.count("\n")
 
@@ -196,7 +196,7 @@ def filter_cdxj_by_blocklist(
             lines_blocked = 0
         else:
             total_lines = 0
-            with open(input_path, "r") as f:
+            with open(input_path, "r", encoding="utf-8") as f:
                 for _ in f:
                     total_lines += 1
             lines_blocked = total_lines - lines_kept

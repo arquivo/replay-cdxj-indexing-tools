@@ -268,7 +268,7 @@ def convert_arclist_to_path_index(
     # Open input file
     if input_path == "-":
         input_file = sys.stdin
-    else:
+    else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
         input_file = open(input_path, "r", encoding="utf-8")
 
     try:

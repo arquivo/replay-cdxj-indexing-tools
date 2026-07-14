@@ -185,6 +185,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
 
     with contextlib.ExitStack() as stack:
         # Open all input files; ExitStack ensures every handle is closed on exit
+        # pylint: disable-next=unspecified-encoding  # system locale follows caller's environment
         file_handles = [stack.enter_context(open(f, "r", buffering=buffer_size)) for f in files]
 
         # Initialize min-heap with the first line from each file
@@ -214,7 +215,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                     # Add the new line back to the heap if file has more content
                     heapq.heappush(heap, (next_line, idx))
         else:
-            with open(output_file, "w", buffering=buffer_size) as out:
+            with open(output_file, "w", buffering=buffer_size, encoding="utf-8") as out:
                 # Process all lines in sorted order
                 while heap:
                     # Extract the lexicographically smallest line
