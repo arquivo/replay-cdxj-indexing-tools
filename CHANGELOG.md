@@ -2,6 +2,24 @@
 
 <!-- version list -->
 
+## v1.0.1 (2026-07-17)
+
+### Bug Fixes
+
+- **tests**: Apply isort --profile black formatting to test imports
+  ([`fd6bec3`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/fd6bec36336279ae8b12b333ec5ee0f0f5eee771))
+
+### Continuous Integration
+
+- Run semantic-release only after Tests workflow succeeds
+  ([`45abf27`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/45abf27d5f22f77df59499826869aa9eb52535ff))
+
+### Testing
+
+- Add unit tests for arclist_index_to_redis and process_collection_wrapper
+  ([`8c4d0e6`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/8c4d0e6b6fd2dcd0934648555817fe0f46e7c32c))
+
+
 ## v1.0.0 (2026-07-17)
 
 - Initial Release
