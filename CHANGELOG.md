@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.3 (2026-07-20)
+
+### Bug Fixes
+
+- Add input validation for search_key/filters and cached regex compilation (#40 #22)
+  ([`46ef86d`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/46ef86d290fffc08a6ff41e48de959037698e601))
+
+
 ## v1.1.2 (2026-07-20)
 
 ### Bug Fixes
