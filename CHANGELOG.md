@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.1.2 (2026-07-20)
+
+### Bug Fixes
+
+- Add missing targeted pylint inline disables to pass CI
+  ([`b72ea05`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/b72ea0561cda37d3400f17768da5919e7c491f89))
+
+### Chores
+
+- Re-enable targeted pylint checks and add operator guides
+  ([`00a08a9`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/00a08a902c34e31098de80a9872aaf08058be3d4))
+
+
 ## v1.1.1 (2026-07-20)
 
 ### Bug Fixes
