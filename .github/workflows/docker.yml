@@ -5,12 +5,12 @@ on:
     branches:
       - main
       - master
-    tags:
-      - '*'
   pull_request:
     branches:
       - main
       - master
+  release:
+    types: [published]
 
 jobs:
   build-and-push:
