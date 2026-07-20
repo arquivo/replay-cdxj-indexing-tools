@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.1.0 (2026-07-20)
+
+### Continuous Integration
+
+- **docker**: Trigger versioned builds on GitHub Release published
+  ([`c2eafb3`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/c2eafb3065e17b47548797506b25cda1050a0e14))
+
+### Features
+
+- **release**: Enable GitHub Release creation on semantic release
+  ([`fefd802`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/fefd80270f2dbcb025c2ccb6e036fa25926c60c9))
+
+
 ## v1.0.1 (2026-07-17)
 
 ### Bug Fixes
