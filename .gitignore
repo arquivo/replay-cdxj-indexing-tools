@@ -60,3 +60,7 @@ logs/
 
 # Ignore pytest coverage report
 coverage.xml
+
+# AI
+.claude/
+
