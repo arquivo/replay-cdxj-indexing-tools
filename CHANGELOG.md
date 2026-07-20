@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.1.1 (2026-07-20)
+
+### Bug Fixes
+
+- Add audit logging for path traversal/validation and threat model docs
+  ([`822b3cf`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/822b3cf54cb880ebbe6278b92ba0b410d5e72fc4))
+
+
 ## v1.1.0 (2026-07-20)
 
 ### Continuous Integration
