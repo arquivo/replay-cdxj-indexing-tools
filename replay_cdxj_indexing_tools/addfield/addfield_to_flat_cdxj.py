@@ -37,6 +37,13 @@ Pipeline usage (recommended - add fields before merge):
 CUSTOM FIELD FUNCTIONS
 =======================
 
+SECURITY WARNING: --function executes the given Python file's module-level code
+immediately and with the full privileges of this process (equivalent to running
+`python function_path`). It is a trusted-operator-only flag -- never pass a path
+that came from untrusted or remote input. Set the ADDFIELD_PLUGIN_DIR environment
+variable to restrict --function to files inside a specific directory; every load
+is also logged at WARNING level with the resolved absolute path for auditing.
+
 For complex field logic, create a Python file with an addfield() function:
 
     # addfield_func.py
@@ -101,8 +108,17 @@ PYTHON API
 
 import argparse
 import json
+import logging
+import os
 import sys
 from typing import Callable, Dict, Optional, Tuple
+
+logger = logging.getLogger(__name__)
+
+# If set, --function paths must resolve inside this directory (path traversal
+# defense for the plugin-loading feature below). Unset by default to preserve
+# backward compatibility with existing trusted-operator workflows.
+ADDFIELD_PLUGIN_DIR_ENV = "ADDFIELD_PLUGIN_DIR"
 
 
 def parse_cdxj_line(line: str) -> Tuple[str, str, str, Optional[dict]]:
@@ -296,7 +312,20 @@ def load_addfield_function(function_path: str) -> Callable:
 
     Raises:
         IOError: If file cannot be read
+        ValueError: If ADDFIELD_PLUGIN_DIR is set and function_path resolves outside it
         AttributeError: If addfield() function not found in file
+
+    Security:
+        This executes arbitrary Python code at module level (any import, syscall,
+        or network call in the file runs immediately) with the privileges of this
+        process -- equivalent to `python function_path`. --function is a
+        trusted-operator-only flag and must never be wired to untrusted or
+        remotely-supplied input. (CWE-94)
+
+        If the ADDFIELD_PLUGIN_DIR environment variable is set, function_path must
+        resolve inside that directory; escapes are logged and rejected (CWE-22).
+        Every load is logged at WARNING level with the resolved absolute path for
+        audit purposes, regardless of ADDFIELD_PLUGIN_DIR.
 
     Example:
         >>> addfield_func = load_addfield_function('my_addfield.py')
@@ -304,8 +333,38 @@ def load_addfield_function(function_path: str) -> Callable:
     """
     import importlib.util  # pylint: disable=import-outside-toplevel
 
+    resolved_path = os.path.realpath(function_path)
+
+    if not os.path.isfile(resolved_path):
+        raise IOError(f"Cannot load module from {function_path}")
+
+    plugin_dir = os.environ.get(ADDFIELD_PLUGIN_DIR_ENV)
+    if plugin_dir:
+        resolved_plugin_dir = os.path.realpath(plugin_dir)
+        if not (
+            resolved_path == resolved_plugin_dir
+            or resolved_path.startswith(resolved_plugin_dir + os.sep)
+        ):
+            logger.warning(
+                "Rejected --function path outside %s=%r: resolved=%r",
+                ADDFIELD_PLUGIN_DIR_ENV,
+                resolved_plugin_dir,
+                resolved_path,
+            )
+            raise ValueError(
+                f"Function file {resolved_path!r} is outside the allowed plugin "
+                f"directory {resolved_plugin_dir!r} (see {ADDFIELD_PLUGIN_DIR_ENV})"
+            )
+
+    logger.warning(
+        "Executing arbitrary Python code from --function file: %r. This runs "
+        "module-level code with the privileges of this process; only use "
+        "trusted, locally-authored files.",
+        resolved_path,
+    )
+
     # Load module from file
-    spec = importlib.util.spec_from_file_location("addfield_module", function_path)
+    spec = importlib.util.spec_from_file_location("addfield_module", resolved_path)
     if spec is None or spec.loader is None:
         raise IOError(f"Cannot load module from {function_path}")
 
@@ -377,7 +436,11 @@ Custom Field Function File Format:
     field_group.add_argument(
         "--function",
         dest="function_file",
-        help="Python file with addfield(surt_key, timestamp, json_data) function",
+        help=(
+            "Python file with addfield(surt_key, timestamp, json_data) function. "
+            "TRUSTED-OPERATOR-ONLY: executes the file's module-level code with this "
+            "process's privileges. Set ADDFIELD_PLUGIN_DIR to restrict to a directory."
+        ),
     )
 
     parser.add_argument("-v", "--verbose", action="store_true", help="Print statistics to stderr")
