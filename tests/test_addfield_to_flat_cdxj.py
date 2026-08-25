@@ -505,9 +505,7 @@ def wrong_name(surt_key, timestamp, json_data):
         ) as log_context:
             load_addfield_function(func_path)
 
-        self.assertTrue(
-            any("Executing arbitrary Python code" in msg for msg in log_context.output)
-        )
+        self.assertTrue(any("Executing arbitrary Python code" in msg for msg in log_context.output))
         resolved_repr = repr(os.path.realpath(func_path))
         self.assertTrue(any(resolved_repr in msg for msg in log_context.output))
 
