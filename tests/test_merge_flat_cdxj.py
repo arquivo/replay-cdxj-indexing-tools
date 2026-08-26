@@ -301,6 +301,19 @@ class TestGetAllFiles(unittest.TestCase):
             },
         )
 
+    @unittest.skipIf(not hasattr(os, "symlink"), "symlinks not supported")
+    def test_get_directory_skips_symlink(self):
+        """get_all_files() must not follow a symlinked file inside a scanned directory (#79)."""
+        link_path = self.test_path / "evil_link.txt"
+        try:
+            os.symlink(str(self.test_path / "file1.txt"), str(link_path))
+        except (OSError, NotImplementedError):
+            self.skipTest("Cannot create symlinks on this platform")
+
+        files = list(get_all_files([str(self.test_path)]))
+        self.assertEqual(len(files), 8)
+        self.assertNotIn(str(link_path), files)
+
     def test_get_mixed_paths(self):
         """Test getting files from mixed file and directory paths"""
         file1 = str(self.test_path / "file1.txt")

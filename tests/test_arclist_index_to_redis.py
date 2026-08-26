@@ -163,7 +163,7 @@ class TestRunPipeline(unittest.TestCase):
 
     @patch("subprocess.Popen")
     def test_redis_cmd_with_password(self, mock_popen):
-        """path-index-to-redis receives --password when redis_password is provided."""
+        """redis_password is passed via env (REDIS_PASSWORD), never via argv (#78)."""
         mock_popen.side_effect = [self._make_proc(), self._make_proc()]
         run_pipeline(
             arclist_folder="/data/arclists",
@@ -172,8 +172,26 @@ class TestRunPipeline(unittest.TestCase):
         )
 
         redis_cmd = mock_popen.call_args_list[1][0][0]
-        self.assertIn("--password", redis_cmd)
-        self.assertIn("secret", redis_cmd)
+        self.assertNotIn("--password", redis_cmd)
+        self.assertNotIn("secret", redis_cmd)
+
+        redis_env = mock_popen.call_args_list[1][1]["env"]
+        self.assertEqual(redis_env["REDIS_PASSWORD"], "secret")
+
+    @patch("subprocess.Popen")
+    def test_redis_cmd_without_password_no_env_override(self, mock_popen):
+        """REDIS_PASSWORD is not injected into the child env when no password is given."""
+        mock_popen.side_effect = [self._make_proc(), self._make_proc()]
+        run_pipeline(
+            arclist_folder="/data/arclists",
+            redis_key="pathindex:test",
+        )
+
+        redis_cmd = mock_popen.call_args_list[1][0][0]
+        self.assertNotIn("--password", redis_cmd)
+
+        redis_env = mock_popen.call_args_list[1][1]["env"]
+        self.assertNotIn("REDIS_PASSWORD", redis_env)
 
     @patch("subprocess.Popen")
     def test_redis_cmd_with_username(self, mock_popen):
