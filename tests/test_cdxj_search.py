@@ -191,6 +191,11 @@ class TestFilters(unittest.TestCase):
         self.assertFalse(filter_obj.matches(line2))  # Before range
         self.assertFalse(filter_obj.matches(line3))  # After range
 
+    def test_cdxj_filter_rejects_redos_pattern(self):
+        """Regression test for #74: catastrophic-backtracking patterns are rejected."""
+        with self.assertRaises(ValueError):
+            CDXJFilter(filters=["url~(.*a+)+b"])
+
     def test_sort_lines(self):
         """Test sorting CDXJ lines."""
         lines = [

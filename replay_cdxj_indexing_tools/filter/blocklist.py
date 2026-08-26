@@ -67,12 +67,58 @@ PYTHON API
 """
 
 import argparse
+import functools
 import os
 import re
 import subprocess
 import sys
 import tempfile
 from typing import List, Optional, Pattern, Tuple
+
+# Maximum compiled regex pattern length to prevent memory issues
+_MAX_PATTERN_LEN = 1000
+# Patterns known to cause catastrophic backtracking (ReDoS)
+_REDOS_PATTERNS = [
+    re.compile(r"\([^)]+\+\)\+"),  # (x+)+
+    re.compile(r"\([^)]+\*\)\+"),  # (x*)+
+    re.compile(r"\([^)]+\+\)\*"),  # (x+)*
+    re.compile(r"\([^)]+\|[^)]+\)\*"),  # (a|b)*
+    re.compile(r"\([^)]+\|[^)]+\)\+"),  # (a|b)+
+]
+
+
+@functools.lru_cache(maxsize=256)
+def _compile_safe_regex(pattern: str) -> Pattern:
+    """Compile a regex pattern, rejecting patterns known to risk ReDoS. Cached."""
+    if len(pattern) > _MAX_PATTERN_LEN:
+        raise ValueError(f"pattern too long ({len(pattern)} chars, max {_MAX_PATTERN_LEN})")
+    for danger in _REDOS_PATTERNS:
+        if danger.search(pattern):
+            raise ValueError(f"pattern rejected due to ReDoS risk: {pattern!r}")
+    try:
+        return re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"invalid regex pattern: {exc}") from exc
+
+
+def _sanitize_patterns(pattern_strings: List[str]) -> List[str]:
+    """
+    Validate raw pattern strings, dropping (with a warning) any that are
+    invalid regex, too long, or shaped to risk catastrophic backtracking.
+
+    Used as the single choke point before patterns are written to the temp
+    file handed to grep, so a raw blocklist file passed straight through
+    can never bypass validation (see #75).
+    """
+    safe = []
+    for pattern_text in pattern_strings:
+        try:
+            _compile_safe_regex(pattern_text)
+            safe.append(pattern_text)
+        except ValueError as e:
+            print(f"Warning: Rejected blocklist pattern: {pattern_text}", file=sys.stderr)
+            print(f"  Reason: {e}", file=sys.stderr)
+    return safe
 
 
 def load_blocklist(blocklist_path: str) -> List[Pattern]:
@@ -82,6 +128,11 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
     Each line is treated as a regex pattern. Lines starting with # are ignored
     as comments. Empty lines are also ignored.
 
+    Security:
+        Patterns are validated by _compile_safe_regex() against known
+        catastrophic-backtracking shapes before re.compile() (CWE-1333).
+        Pattern length is capped at _MAX_PATTERN_LEN chars.
+
     Args:
         blocklist_path: Path to blocklist file
 
@@ -90,7 +141,6 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
 
     Raises:
         IOError: If file cannot be read
-        re.error: If a pattern is invalid regex
 
     Example:
         >>> patterns = load_blocklist('blocklist.txt')
@@ -107,12 +157,10 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
                 continue
 
             try:
-                # Compile pattern
-                pattern = re.compile(line)
-                patterns.append(pattern)
-            except re.error as e:
-                print(f"Warning: Invalid regex pattern at line {line_num}: {line}", file=sys.stderr)
-                print(f"  Error: {e}", file=sys.stderr)
+                patterns.append(_compile_safe_regex(line))
+            except ValueError as e:
+                print(f"Warning: Rejected pattern at line {line_num}: {line}", file=sys.stderr)
+                print(f"  Reason: {e}", file=sys.stderr)
                 # Continue loading other patterns
 
     return patterns
@@ -138,7 +186,9 @@ def filter_cdxj_by_blocklist(
             (deprecated, use blocklist_file)
         output_path: Output file, or '-' for stdout (default: stdout)
         buffer_size: I/O buffer size in bytes (unused, kept for API compatibility)
-        blocklist_file: Path to blocklist file (preferred for performance)
+        blocklist_file: Path to a raw blocklist file. Its patterns are
+            re-validated (see #75) before use, so this is no longer a
+            trust-the-caller performance shortcut.
 
     Returns:
         Tuple of (lines_kept, lines_blocked)
@@ -150,17 +200,30 @@ def filter_cdxj_by_blocklist(
         ... )
         >>> print(f"Kept {kept} lines, blocked {blocked} lines")
     """
-    # If blocklist_file not provided, create temp file from patterns
-    temp_blocklist = None
-    if blocklist_file is None:
-        # Create temporary blocklist file from patterns
-        temp_blocklist = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
-            mode="w", delete=False, suffix=".txt"
-        )
-        for pattern in blocklist_patterns:
-            temp_blocklist.write(pattern.pattern + "\n")
-        temp_blocklist.close()
-        blocklist_file = temp_blocklist.name
+    # Gather raw pattern text from whichever source was given, then always
+    # sanitize before writing the temp file grep will read. blocklist_file is
+    # NOT trusted directly here (see #75): passing it straight to grep would
+    # bypass any validation performed elsewhere (e.g. by load_blocklist()).
+    if blocklist_file is not None:
+        with open(blocklist_file, "r", encoding="utf-8") as f:
+            pattern_strings = [
+                stripped
+                for line in f
+                for stripped in [line.rstrip("\n\r")]
+                if stripped and not stripped.startswith("#")
+            ]
+    else:
+        pattern_strings = [pattern.pattern for pattern in blocklist_patterns]
+
+    safe_patterns = _sanitize_patterns(pattern_strings)
+
+    temp_blocklist = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
+        mode="w", delete=False, suffix=".txt"
+    )
+    for pattern_text in safe_patterns:
+        temp_blocklist.write(pattern_text + "\n")
+    temp_blocklist.close()
+    blocklist_file = temp_blocklist.name
 
     try:
         # Build grep command
@@ -206,9 +269,8 @@ def filter_cdxj_by_blocklist(
         return lines_kept, lines_blocked
 
     finally:
-        # Cleanup temp file if created
-        if temp_blocklist is not None:
-            os.unlink(temp_blocklist.name)
+        # A sanitized temp blocklist is always created above; clean it up.
+        os.unlink(temp_blocklist.name)
 
 
 def main():

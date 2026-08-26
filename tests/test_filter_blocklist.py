@@ -130,6 +130,27 @@ class TestLoadBlocklist(unittest.TestCase):
 
         self.assertEqual(len(patterns), 4)
 
+    def test_load_rejects_redos_pattern(self):
+        """Regression test for #75: catastrophic-backtracking patterns are rejected."""
+        content = "\n".join(
+            [
+                "^pt,spam,",
+                r"(.*a+)+b",  # ReDoS-shaped pattern, must be dropped
+                "/ads/",
+            ]
+        )
+
+        path = os.path.join(self.temp_dir, "blocklist.txt")
+        with open(path, "w") as f:
+            f.write(content)
+
+        patterns = load_blocklist(path)
+
+        # Only the two safe patterns should survive
+        self.assertEqual(len(patterns), 2)
+        loaded = {pattern.pattern for pattern in patterns}
+        self.assertEqual(loaded, {"^pt,spam,", "/ads/"})
+
 
 class TestFilterCdxjByBlocklist(unittest.TestCase):
     """Test filtering CDXJ records by blocklist patterns."""
@@ -302,6 +323,35 @@ class TestFilterCdxjByBlocklist(unittest.TestCase):
 
         self.assertEqual(kept, 2)
         self.assertEqual(blocked, 0)
+
+    def test_filter_blocklist_file_rejects_redos_pattern(self):
+        """
+        Regression test for #75: a raw blocklist_file passed straight to
+        filter_cdxj_by_blocklist must still be validated, not handed directly
+        to grep. A ReDoS-shaped pattern in the file must be dropped while safe
+        patterns in the same file still apply.
+        """
+        cdxj_lines = [
+            'pt,governo,www)/ 20230615120000 {"url": "..."}\n',
+            'pt,spam,www)/ 20230615120000 {"url": "..."}\n',
+        ]
+
+        input_path = os.path.join(self.temp_dir, "input.cdxj")
+        output_path = os.path.join(self.temp_dir, "output.cdxj")
+        blocklist_path = os.path.join(self.temp_dir, "blocklist.txt")
+
+        with open(input_path, "w") as f:
+            f.writelines(cdxj_lines)
+
+        with open(blocklist_path, "w") as f:
+            f.write("^pt,spam,\n(.*a+)+b\n")
+
+        kept, blocked = filter_cdxj_by_blocklist(
+            input_path, [], output_path, blocklist_file=blocklist_path
+        )
+
+        self.assertEqual(kept, 1)
+        self.assertEqual(blocked, 1)
 
     def test_filter_multiple_pattern_types(self):
         """Filter using combination of different pattern types."""
