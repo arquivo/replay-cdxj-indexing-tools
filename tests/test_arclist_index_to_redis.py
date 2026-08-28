@@ -15,11 +15,17 @@ Test Coverage
 3. TestMain               — CLI argument parsing and run_pipeline delegation
 """
 
+import argparse
 import subprocess
 import unittest
 from unittest.mock import MagicMock, patch
 
-from replay_cdxj_indexing_tools.arclist_index_to_redis import check_dependencies, main, run_pipeline
+from replay_cdxj_indexing_tools.arclist_index_to_redis import (
+    check_dependencies,
+    main,
+    positive_int,
+    run_pipeline,
+)
 
 
 class TestCheckDependencies(unittest.TestCase):
@@ -605,6 +611,69 @@ class TestMain(unittest.TestCase):
         kwargs = mock_run.call_args[1]
         self.assertEqual(kwargs["redis_host"], "redis.arquivo.pt")
         self.assertEqual(kwargs["redis_port"], 6380)
+
+
+class TestPositiveInt(unittest.TestCase):
+    """Tests for the positive_int() argparse type helper (#86)."""
+
+    def test_accepts_positive_values(self):
+        """Positive integers pass through unchanged."""
+        self.assertEqual(positive_int("1"), 1)
+        self.assertEqual(positive_int("500"), 500)
+
+    def test_rejects_zero(self):
+        """Zero is rejected."""
+        with self.assertRaises(argparse.ArgumentTypeError):
+            positive_int("0")
+
+    def test_rejects_negative(self):
+        """Negative values are rejected."""
+        with self.assertRaises(argparse.ArgumentTypeError):
+            positive_int("-1")
+
+    def test_main_rejects_non_positive_batch_size(self):
+        """main() exits (via argparse) when --batch-size is not positive."""
+        with self.assertRaises(SystemExit):
+            main(["-d", "/data/arclists", "-k", "pathindex:test", "--batch-size", "0"])
+
+    def test_main_rejects_non_positive_pool_size(self):
+        """main() exits (via argparse) when --pool-size is not positive."""
+        with self.assertRaises(SystemExit):
+            main(["-d", "/data/arclists", "-k", "pathindex:test", "--pool-size", "-1"])
+
+    def test_main_rejects_non_positive_timeout(self):
+        """main() exits (via argparse) when --timeout is not positive."""
+        with self.assertRaises(SystemExit):
+            main(["-d", "/data/arclists", "-k", "pathindex:test", "--timeout", "0"])
+
+
+class TestTerminateErrorLogged(unittest.TestCase):
+    """Tests that a failure while terminating subprocesses is logged, not swallowed (#84)."""
+
+    @patch("replay_cdxj_indexing_tools.arclist_index_to_redis.log_warning")
+    @patch("subprocess.Popen")
+    def test_terminate_error_is_logged(self, mock_popen, mock_log_warning):
+        """When both terminate() calls raise during a KeyboardInterrupt, the error is logged."""
+        arclist_proc = MagicMock()
+        arclist_proc.stdout = MagicMock()
+        arclist_proc.terminate.side_effect = RuntimeError("terminate failed")
+
+        redis_proc = MagicMock()
+        redis_proc.wait.side_effect = KeyboardInterrupt
+        redis_proc.terminate.side_effect = RuntimeError("terminate failed")
+
+        mock_popen.side_effect = [arclist_proc, redis_proc]
+
+        result = run_pipeline(arclist_folder="/data/arclists", redis_key="pathindex:test")
+
+        self.assertEqual(result, 130)
+        self.assertTrue(
+            any(
+                "Error terminating subprocesses" in call.args[0]
+                for call in mock_log_warning.call_args_list
+            ),
+            f"Expected a 'terminating subprocesses' warning, got: {mock_log_warning.call_args_list}",
+        )
 
 
 if __name__ == "__main__":

@@ -124,6 +124,14 @@ NC = "\033[0m"  # No Color
 _PIPELINE_TIMEOUT = 3600  # 1 hour max for arclist → Redis pipeline
 
 
+def positive_int(value: str) -> int:
+    """argparse type: reject zero/negative integers (#86)."""
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value}")
+    return ivalue
+
+
 def log_info(message: str) -> None:
     """Print info message in blue."""
     print(f"{BLUE}[INFO]{NC} {message}", file=sys.stderr)
@@ -350,8 +358,8 @@ def run_pipeline(
                 arclist_proc.terminate()
             if redis_proc:
                 redis_proc.terminate()
-        except Exception:  # pylint: disable=broad-exception-caught  # best-effort terminate
-            pass
+        except Exception as e:  # pylint: disable=broad-exception-caught  # best-effort terminate
+            log_warning(f"Error terminating subprocesses (non-fatal): {e}")
         return 130
 
     except Exception as e:  # pylint: disable=broad-exception-caught  # catch-all
@@ -443,16 +451,16 @@ argument handling, colored logging, and --clear option support.
     perf_group = parser.add_argument_group("Performance tuning")
     perf_group.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=500,
         help="Number of entries per batch (default: 500)",
     )
     perf_group.add_argument(
-        "--pool-size", type=int, default=10, help="Connection pool size (default: 10)"
+        "--pool-size", type=positive_int, default=10, help="Connection pool size (default: 10)"
     )
     perf_group.add_argument(
         "--timeout",
-        type=int,
+        type=positive_int,
         default=10,
         help="Connection timeout in seconds (default: 10)",
     )

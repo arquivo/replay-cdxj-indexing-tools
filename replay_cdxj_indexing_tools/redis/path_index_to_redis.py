@@ -545,8 +545,8 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     if not dry_run:
         try:
             redis_client.close()  # type: ignore[attr-defined]  # object narrowed at runtime
-        except Exception:  # pylint: disable=broad-exception-caught  # best-effort close
-            pass
+        except Exception as e:  # pylint: disable=broad-exception-caught  # best-effort close
+            print(f"Error closing Redis connection (non-fatal): {e}", file=sys.stderr)
 
     # Final statistics
     elapsed = time.time() - start_time

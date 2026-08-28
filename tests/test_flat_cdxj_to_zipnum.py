@@ -206,6 +206,7 @@ NOTES
 - Compression and decompression are tested to ensure data integrity
 """
 
+import argparse
 import builtins
 import gzip
 import os
@@ -215,9 +216,13 @@ import unittest
 
 # Import the module under test
 from replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum import (
+    _SINGLE_SHARD_SENTINEL_MB,
     cdxj_to_zipnum,
     extract_prejson,
+    main,
     open_input_path,
+    parse_args,
+    positive_int,
     stream_chunks_from_input,
 )
 
@@ -1055,6 +1060,183 @@ class TestCdxjToZipnum(unittest.TestCase):
 
         for fh in opened_handles:
             self.assertTrue(fh.closed, "Shard file handle must be closed after exception")
+
+
+class TestPositiveInt(unittest.TestCase):
+    """Tests for the positive_int() argparse type helper (#86)."""
+
+    def test_accepts_positive_values(self):
+        """Positive integers pass through unchanged."""
+        self.assertEqual(positive_int("1"), 1)
+        self.assertEqual(positive_int("100"), 100)
+
+    def test_rejects_zero(self):
+        """Zero is rejected, since it produces broken downstream behavior (e.g. max_workers=0)."""
+        with self.assertRaises(argparse.ArgumentTypeError):
+            positive_int("0")
+
+    def test_rejects_negative(self):
+        """Negative values are rejected."""
+        with self.assertRaises(argparse.ArgumentTypeError):
+            positive_int("-1")
+
+    def test_parse_args_rejects_non_positive_shard_size(self):
+        """parse_args() exits (via argparse) when --shard-size is not positive."""
+        with self.assertRaises(SystemExit):
+            parse_args(["-i", "in.cdxj", "-o", "out", "--shard-size", "0"])
+
+    def test_parse_args_rejects_non_positive_chunk_size(self):
+        """parse_args() exits (via argparse) when --chunk-size is not positive."""
+        with self.assertRaises(SystemExit):
+            parse_args(["-i", "in.cdxj", "-o", "out", "--chunk-size", "-5"])
+
+    def test_parse_args_rejects_non_positive_workers(self):
+        """parse_args() exits (via argparse) when --workers is not positive."""
+        with self.assertRaises(SystemExit):
+            parse_args(["-i", "in.cdxj", "-o", "out", "--workers", "0"])
+
+    def test_parse_args_accepts_positive_values(self):
+        """parse_args() accepts positive values for shard-size/chunk-size/workers."""
+        args = parse_args(
+            [
+                "-i",
+                "in.cdxj",
+                "-o",
+                "out",
+                "--shard-size",
+                "50",
+                "--chunk-size",
+                "10",
+                "--workers",
+                "2",
+            ]
+        )
+        self.assertEqual(args.shard_size, 50)
+        self.assertEqual(args.chunk_size, 10)
+        self.assertEqual(args.workers, 2)
+
+
+class TestSingleShardSentinel(unittest.TestCase):
+    """Tests for the --single-shard sentinel value (#83)."""
+
+    def setUp(self):
+        self.input_dir = tempfile.mkdtemp()
+        self.output_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.input_dir, ignore_errors=True)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
+
+    def test_sentinel_is_plain_int(self):
+        """The sentinel must be a plain int, not float('inf'), to match shard_size_mb's type."""
+        self.assertIsInstance(_SINGLE_SHARD_SENTINEL_MB, int)
+
+    def test_main_single_shard_uses_int_sentinel(self):
+        """main() with --single-shard passes an int shard size to cdxj_to_zipnum."""
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        with open(input_file, "wb") as f:
+            f.writelines([b"org,example)/ 20200101120000\n"] * 5)
+
+        main(["-i", input_file, "-o", self.output_dir, "--single-shard"])
+
+        base_name = os.path.basename(self.output_dir)
+        shard_file = os.path.join(self.output_dir, f"{base_name}.cdx.gz")
+        self.assertTrue(os.path.exists(shard_file))
+
+
+class TestExceptBlocksLogInsteadOfSwallowing(unittest.TestCase):
+    """Tests that cleanup except blocks log a warning instead of silently passing (#84)."""
+
+    def setUp(self):
+        self.input_dir = tempfile.mkdtemp()
+        self.output_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.input_dir, ignore_errors=True)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
+
+    @staticmethod
+    def _make_fail_once_fdopen():
+        """Return an os.fdopen replacement whose first returned handle's close() raises OSError."""
+        original_fdopen = os.fdopen
+        close_calls = []
+
+        class FailOnceWriter:
+            def __init__(self, fh):
+                self._fh = fh
+
+            def write(self, data):
+                return self._fh.write(data)
+
+            def tell(self):
+                return self._fh.tell()
+
+            def close(self):
+                close_calls.append(1)
+                self._fh.close()
+                if len(close_calls) == 1:
+                    # Simulate a close-time error (e.g. flush failure) that's raised
+                    # after the OS handle has already been released, so a subsequent
+                    # os.replace() on the same path still succeeds.
+                    raise OSError("simulated close failure")
+
+        def wrapped_fdopen(*args, **kwargs):
+            return FailOnceWriter(original_fdopen(*args, **kwargs))
+
+        return wrapped_fdopen
+
+    def test_shard_rotation_close_error_is_logged(self):
+        """An OSError while closing a rotated-out shard file is logged, not swallowed."""
+        import random
+        import unittest.mock as mock
+
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        lines = []
+        for i in range(3000):
+            random_data = "".join(
+                random.choices(
+                    "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", k=200
+                )
+            )
+            lines.append(
+                f'org,example)/{i:06d} 20200101{i:06d} {{"data": "{random_data}"}}\n'.encode()
+            )
+        with open(input_file, "wb") as f:
+            f.writelines(lines)
+
+        with mock.patch("os.fdopen", side_effect=self._make_fail_once_fdopen()):
+            with mock.patch(
+                "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum.logger"
+            ) as mock_logger:
+                # Small shard size (0.1 MB) forces at least one rotation before completion.
+                cdxj_to_zipnum(self.output_dir, input_file, shard_size_mb=0.1, chunk_size=100)
+                self.assertTrue(
+                    mock_logger.warning.called,
+                    "logger.warning should be called when closing a shard file fails",
+                )
+
+    def test_cleanup_close_error_is_logged(self):
+        """An OSError while closing the shard file during error unwind is logged."""
+        import unittest.mock as mock
+
+        input_file = os.path.join(self.input_dir, "leak.cdxj")
+        with open(input_file, "wb") as f:
+            f.writelines([b'pt,example)/ 20200101120000 {"status": "200"}\n'] * 10)
+
+        with mock.patch(
+            "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum.compress_chunk_worker",
+            side_effect=RuntimeError("simulated compression failure"),
+        ):
+            with mock.patch("os.fdopen", side_effect=self._make_fail_once_fdopen()):
+                with mock.patch(
+                    "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum.logger"
+                ) as mock_logger:
+                    with self.assertRaises(RuntimeError):
+                        cdxj_to_zipnum(self.output_dir, input_file, chunk_size=5)
+                    self.assertTrue(
+                        mock_logger.warning.called,
+                        "logger.warning should be called during cleanup after an exception",
+                    )
 
 
 if __name__ == "__main__":

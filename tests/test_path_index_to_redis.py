@@ -699,6 +699,41 @@ class TestSubmitIndexToRedis(unittest.TestCase):
                 # Verify warning was NOT printed when password is provided
                 self.assertNotIn("remote Redis", stderr_output)
 
+    def test_close_error_is_logged_not_raised(self):
+        """
+        A failure while closing the Redis connection is printed to stderr and
+        non-fatal, rather than propagating out of submit_index_to_redis() (#84).
+        """
+        test_file = os.path.join(self.test_dir, "pathindex.txt")
+        with open(test_file, "w") as f:
+            f.write("file001.warc.gz\t/mnt/storage/file001.warc.gz\n")
+
+        mock_redis = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        mock_redis.close.side_effect = OSError("simulated close failure")
+
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.return_value = mock_redis
+
+        captured_stderr = StringIO()
+
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
+            with patch("sys.stderr", captured_stderr):
+                submitted, errors = submit_index_to_redis(
+                    input_paths=[test_file],
+                    redis_key="pathindex:test-collection",
+                    redis_host="localhost",
+                    redis_port=6379,
+                    batch_size=100,
+                    dry_run=False,
+                    verbose=False,
+                )
+
+        self.assertEqual(submitted, 1)
+        self.assertEqual(errors, 0)
+        self.assertIn("Error closing Redis connection", captured_stderr.getvalue())
+
 
 class TestCLIIntegration(unittest.TestCase):
     """
