@@ -35,6 +35,7 @@ dependencies = [
     "pywb>=2.9.1",
     "surt>=0.3.1", # It should be the same version of pywb, but we depend on it directly.
     "redis==2.10.6", # It should be the same version of pywb, but we depend on it directly.
+    "tldextract>=5.0", # Already pulled in transitively by surt/pywb, but we depend on it directly.
 ]
 
 [project.optional-dependencies]
@@ -68,6 +69,12 @@ path-index-to-redis = "replay_cdxj_indexing_tools.redis.path_index_to_redis:main
 arclist-index-to-redis = "replay_cdxj_indexing_tools.arclist_index_to_redis:main"
 cdxj-search = "replay_cdxj_indexing_tools.search.cdxj_search:main"
 cdxj-extract-field = "replay_cdxj_indexing_tools.search.extract_field:main"
+cdxj-stats = "replay_cdxj_indexing_tools.stats.cdxj_stats:main"
+
+[project.entry-points."replay_cdxj_indexing_tools.sinks"]
+mimetype = "replay_cdxj_indexing_tools.stats.sinks.mimetype:MimetypeSink"
+domain-host = "replay_cdxj_indexing_tools.stats.sinks.domain:DomainHostSink"
+domain-etld1 = "replay_cdxj_indexing_tools.stats.sinks.domain:DomainEtld1Sink"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -119,7 +126,7 @@ disable = ["C0111", "R0913", "R0914"]
 files = ["replay_cdxj_indexing_tools"]
 
 [[tool.mypy.overrides]]
-module = ["pywb.*", "surt.*"]
+module = ["pywb.*", "surt.*", "tldextract.*"]
 ignore_missing_imports = true
 
 [tool.semantic_release]
