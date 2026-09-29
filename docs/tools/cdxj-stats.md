@@ -120,12 +120,21 @@ The domain sinks detect this (a `http://` or `https://` URL right after the firs
 
 ## Top-N Filtering
 
-There's no built-in top-N option; every sink exports every row it sees. To keep only the top 100 rows of a sink's output by its count column, use a plain shell pipeline (adjust `-k` to the count column of the sink you're using; fields are 1-indexed for `sort`):
+There's no built-in top-N option; every sink exports every row it sees. To keep only the top 100 rows of a sink's output by its count column, use a plain shell pipeline. Since the default field separator is a tab, tell `sort` about it with `-t$'\t'`, and point `-k` at the count column of the sink you're using (fields are 1-indexed for `sort`):
 
 ```bash
 (head -1 stats/mimetype.csv; tail -n +2 stats/mimetype.csv | sort -t$'\t' -k2 -nr | head -100) \
   > stats/mimetype-top100.csv
 ```
+
+For `domain-host`/`domain-etld1`, `total_captures` is the 3rd column (after `surt` and `domain`), so sort on `-k3` instead:
+
+```bash
+(head -1 stats/domain-host.csv; tail -n +2 stats/domain-host.csv | sort -t$'\t' -k3 -nr | head -100) \
+  > stats/domain-host-top100.csv
+```
+
+If you changed `--field-separator` to something else (e.g. `,`), adjust `-t` to match.
 
 ## Scaling Out
 
