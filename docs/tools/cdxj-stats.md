@@ -58,10 +58,12 @@ cdxj-stats -i index.cdxj \
 
 When `group-by` is set for a sink, its output filename gets a `-<group-by>` suffix, e.g. `stats/domain-host-year.csv`.
 
-### TSV Output
+### TSV Output (default) and CSV Output
+
+Fields are tab-separated by default, since SURT keys contain commas and would otherwise need CSV quoting (which the rest of the output doesn't use, making columns inconsistent). Pass `--field-separator ","` to get plain CSV instead:
 
 ```bash
-cdxj-stats -i index.cdxj --sink domain-host --field-separator "\t" --out-dir stats/
+cdxj-stats -i index.cdxj --sink domain-host --field-separator "," --out-dir stats/
 ```
 
 `--field-separator` applies to every sink's output in the run.
@@ -80,6 +82,8 @@ Output to stderr:
 
 ## Output Format
 
+Columns below are shown comma-separated for readability; the actual default output is tab-separated (see [TSV Output](#tsv-output-default-and-csv-output)).
+
 ### mimetype
 
 ```
@@ -93,20 +97,33 @@ With `group-by=year`: `mime,year,count`.
 ### domain-host / domain-etld1
 
 ```
-domain,total_captures,captures_status_200,oldest_capture,latest_capture
-"pt,exemplo,www)",120,110,20180101000000,20230601000000
+surt,domain,total_captures,captures_status_200,oldest_capture,latest_capture
+pt,exemplo,www),www.exemplo.pt,120,110,20180101000000,20230601000000
 ```
 
-With `group-by=year`: `domain,year,total_captures,captures_status_200,oldest_capture,latest_capture`, one row per (domain, year).
+`surt` is the grouping key in SURT form (full host for `domain-host`, registered domain/eTLD+1 for `domain-etld1`); `domain` is the same key rendered as a normal domain name (e.g. `www.exemplo.pt` or `exemplo.pt`), for readability and for tools that don't parse SURT.
+
+With `group-by=year`: `surt,domain,year,total_captures,captures_status_200,oldest_capture,latest_capture`, one row per (domain, year).
 
 `captures_status_200` counts records whose JSON `status` field is `200`. `oldest_capture`/`latest_capture` are the min/max timestamp seen for that row (within the year, when grouped).
+
+### Non-SURT Keys (thumbnail, youtube-dl, ...)
+
+Some CDXJ lines carry an auxiliary record's raw URL instead of a SURT key, prefixed with a type label, e.g.:
+
+```
+thumbnail:https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/jzo.12603 ...
+```
+
+The domain sinks detect this (a `http://` or `https://` URL right after the first `:`) and derive the host from that URL instead of trying to parse the prefix as SURT, so these records are grouped under the same domain as the page's normal captures. A real SURT host:port (e.g. `pt,exemplo,www:8080)`) is unaffected, since nothing after its `:` looks like a URL.
+
 
 ## Top-N Filtering
 
 There's no built-in top-N option; every sink exports every row it sees. To keep only the top 100 rows of a sink's output by its count column, use a plain shell pipeline (adjust `-k` to the count column of the sink you're using; fields are 1-indexed for `sort`):
 
 ```bash
-(head -1 stats/mimetype.csv; tail -n +2 stats/mimetype.csv | sort -t, -k2 -nr | head -100) \
+(head -1 stats/mimetype.csv; tail -n +2 stats/mimetype.csv | sort -t$'\t' -k2 -nr | head -100) \
   > stats/mimetype-top100.csv
 ```
 
@@ -165,7 +182,7 @@ Options:
 - `--out-dir` (required) - Directory to write one CSV per sink into
 - `--input, -i` - Input CDXJ file (default: stdin)
 - `--sink-<name> key=value ...` - Per-sink options (e.g. `group-by=year`)
-- `--field-separator` - Output field separator for every sink's CSV output (default: `,`)
+- `--field-separator` - Output field separator for every sink's CSV output (default: tab)
 - `--verbose, -v` - Print summary to stderr
 
 ## SURT Order Validation

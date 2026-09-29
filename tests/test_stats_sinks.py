@@ -82,12 +82,14 @@ class TestDomainHostSink(unittest.TestCase):
         # Key change flushes the previous host's accumulated row.
         rows = sink.process("pt,outro,www)/", "20210101000000", {"status": "200"})
         self.assertEqual(
-            list(rows), [("pt,exemplo,www)", "2", "1", "20200101000000", "20200601000000")]
+            list(rows),
+            [("pt,exemplo,www)", "www.exemplo.pt", "2", "1", "20200101000000", "20200601000000")],
         )
 
         final_rows = list(sink.flush())
         self.assertEqual(
-            final_rows, [("pt,outro,www)", "1", "1", "20210101000000", "20210101000000")]
+            final_rows,
+            [("pt,outro,www)", "www.outro.pt", "1", "1", "20210101000000", "20210101000000")],
         )
 
     def test_fieldnames_without_group_by(self):
@@ -95,7 +97,14 @@ class TestDomainHostSink(unittest.TestCase):
         sink.configure()
         self.assertEqual(
             sink.fieldnames(),
-            ("domain", "total_captures", "captures_status_200", "oldest_capture", "latest_capture"),
+            (
+                "surt",
+                "domain",
+                "total_captures",
+                "captures_status_200",
+                "oldest_capture",
+                "latest_capture",
+            ),
         )
         self.assertIsNone(sink.output_suffix())
 
@@ -110,6 +119,7 @@ class TestDomainHostSink(unittest.TestCase):
         self.assertEqual(
             sink.fieldnames(),
             (
+                "surt",
                 "domain",
                 "year",
                 "total_captures",
@@ -120,10 +130,28 @@ class TestDomainHostSink(unittest.TestCase):
         )
         self.assertEqual(sink.output_suffix(), "year")
         self.assertIn(
-            ("pt,exemplo,www)", "2019", "1", "1", "20190101000000", "20190101000000"), rows
+            (
+                "pt,exemplo,www)",
+                "www.exemplo.pt",
+                "2019",
+                "1",
+                "1",
+                "20190101000000",
+                "20190101000000",
+            ),
+            rows,
         )
         self.assertIn(
-            ("pt,exemplo,www)", "2020", "1", "0", "20200601000000", "20200601000000"), rows
+            (
+                "pt,exemplo,www)",
+                "www.exemplo.pt",
+                "2020",
+                "1",
+                "0",
+                "20200601000000",
+                "20200601000000",
+            ),
+            rows,
         )
 
     def test_out_of_order_timestamps_within_same_host_still_tracked(self):
@@ -134,8 +162,40 @@ class TestDomainHostSink(unittest.TestCase):
         sink.process("pt,exemplo,www)/", "20150101000000", {"status": "200"})
 
         rows = list(sink.flush())
-        self.assertEqual(rows[0][3], "20150101000000")  # oldest_capture
-        self.assertEqual(rows[0][4], "20200601000000")  # latest_capture
+        self.assertEqual(rows[0][4], "20150101000000")  # oldest_capture
+        self.assertEqual(rows[0][5], "20200601000000")  # latest_capture
+
+    def test_thumbnail_prefixed_key_uses_url_host(self):
+        sink = DomainHostSink()
+        sink.configure()
+
+        sink.process(
+            "thumbnail:https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/jzo.12603",
+            "20200101000000",
+            {"status": "200"},
+        )
+        rows = list(sink.flush())
+        self.assertEqual(rows[0][0], "com,wiley,onlinelibrary,zslpublications)")
+        self.assertEqual(rows[0][1], "zslpublications.onlinelibrary.wiley.com")
+
+    def test_youtube_dl_prefixed_key_uses_url_host(self):
+        sink = DomainHostSink()
+        sink.configure()
+
+        sink.process(
+            "youtube-dl:https://www.youtube.com/watch?v=abc123", "20200101000000", {"status": "200"}
+        )
+        rows = list(sink.flush())
+        self.assertEqual(rows[0][0], "com,youtube,www)")
+        self.assertEqual(rows[0][1], "www.youtube.com")
+
+    def test_port_in_surt_key_not_mistaken_for_prefix(self):
+        sink = DomainHostSink()
+        sink.configure()
+
+        sink.process("pt,exemplo,www:8080)/", "20200101000000", {"status": "200"})
+        rows = list(sink.flush())
+        self.assertEqual(rows[0][0], "pt,exemplo,www:8080)")
 
 
 class TestDomainEtld1Sink(unittest.TestCase):
@@ -152,7 +212,8 @@ class TestDomainEtld1Sink(unittest.TestCase):
         final_rows = list(sink.flush())
         self.assertEqual(len(final_rows), 1)
         self.assertEqual(final_rows[0][0], "pt,exemplo,")
-        self.assertEqual(final_rows[0][1], "2")  # total_captures
+        self.assertEqual(final_rows[0][1], "exemplo.pt")
+        self.assertEqual(final_rows[0][2], "2")  # total_captures
 
     def test_multi_label_public_suffix(self):
         """example.co.uk should be grouped as "uk,co,example," not "uk,co,"."""
@@ -163,6 +224,7 @@ class TestDomainEtld1Sink(unittest.TestCase):
         rows = list(sink.flush())
 
         self.assertEqual(rows[0][0], "uk,co,example,")
+        self.assertEqual(rows[0][1], "example.co.uk")
 
     def test_distinct_registered_domains_flush_separately(self):
         sink = DomainEtld1Sink()
@@ -173,7 +235,8 @@ class TestDomainEtld1Sink(unittest.TestCase):
 
         rows = sink.process("pt,outro,www)/", "20200101000000", {"status": "200"})
         self.assertEqual(
-            list(rows), [("pt,exemplo,", "1", "1", "20200101000000", "20200101000000")]
+            list(rows),
+            [("pt,exemplo,", "exemplo.pt", "1", "1", "20200101000000", "20200101000000")],
         )
 
     def test_same_host_repeated_uses_cached_etld1_key(self):
@@ -185,7 +248,20 @@ class TestDomainEtld1Sink(unittest.TestCase):
 
         self.assertEqual(sink._last_host_key, "pt,exemplo,www)")  # pylint: disable=protected-access
         rows = list(sink.flush())
-        self.assertEqual(rows[0][1], "2")
+        self.assertEqual(rows[0][2], "2")
+
+    def test_thumbnail_prefixed_key_uses_url_host(self):
+        sink = DomainEtld1Sink()
+        sink.configure()
+
+        sink.process(
+            "thumbnail:https://zslpublications.onlinelibrary.wiley.com/doi/full/10.1111/jzo.12603",
+            "20200101000000",
+            {"status": "200"},
+        )
+        rows = list(sink.flush())
+        self.assertEqual(rows[0][0], "com,wiley,")
+        self.assertEqual(rows[0][1], "wiley.com")
 
 
 if __name__ == "__main__":

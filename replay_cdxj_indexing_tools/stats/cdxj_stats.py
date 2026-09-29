@@ -31,12 +31,14 @@ COMMAND-LINE USAGE
       --sink-domain-host group-by=year \\
       --out-dir stats/
 
-    # TSV output instead of CSV
-    cdxj-stats -i index.cdxj --sink domain-host --field-separator "\\t" --out-dir stats/
+    # CSV output instead of the default TSV
+    cdxj-stats -i index.cdxj --sink domain-host --field-separator "," --out-dir stats/
 
 Output: one file per sink under --out-dir, named "<sink>.csv" or
 "<sink>-<group-by>.csv" when group-by is configured for that sink (e.g.
-"domain-host-year.csv").
+"domain-host-year.csv"). Fields are tab-separated by default (so SURT keys,
+which contain commas, don't need CSV quoting); use --field-separator to
+change this.
 
 TOP-N
 =====
@@ -46,7 +48,8 @@ only the top 100 rows of a sink's output by its count column, use a plain
 shell pipeline (fields are 0-indexed after the header, so adjust -k to the
 count column of the sink you're using):
 
-    (head -1 stats/mimetype.csv; tail -n +2 stats/mimetype.csv | sort -t, -k2 -nr | head -100) \\
+    (head -1 stats/mimetype.csv
+     tail -n +2 stats/mimetype.csv | sort -t$'\\t' -k2 -nr | head -100) \\
       > stats/mimetype-top100.csv
 
 SCALING OUT
@@ -142,8 +145,8 @@ Examples:
     parser.add_argument("--out-dir", required=True, help="Directory to write one CSV per sink into")
     parser.add_argument(
         "--field-separator",
-        default=",",
-        help="Output field separator for every sink's CSV output (default: ,)",
+        default="\t",
+        help="Output field separator for every sink's CSV output (default: tab)",
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print summary to stderr")
     return parser
@@ -154,7 +157,7 @@ def run(
     sink_names: List[str],
     out_dir: str,
     sink_options: Optional[Dict[str, Dict[str, str]]] = None,
-    field_separator: str = ",",
+    field_separator: str = "\t",
     verbose: bool = False,
 ) -> Dict[str, int]:
     """Run cdxj-stats and return {sink_name: rows_written}."""

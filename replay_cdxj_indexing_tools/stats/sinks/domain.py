@@ -10,10 +10,37 @@ Registered as the "domain-host" and "domain-etld1" sink entry points.
 """
 
 from typing import Dict, Iterable, List, Optional, Sequence
+from urllib.parse import urlparse
 
 import tldextract
 
 _VALID_GROUP_BY = (None, "year", "collection")
+
+
+def _host_key_from_surt(key: str) -> str:
+    """
+    Derive the SURT host key ("tld,domain,sub)") from a record's key.
+
+    Most CDXJ keys are already SURT-encoded ("pt,exemplo,www)/path..."). Some
+    lines instead carry an auxiliary record's raw URL prefixed with a type
+    label, e.g. "thumbnail:https://example.com/..." or
+    "youtube-dl:https://example.com/...". For those, the host is derived from
+    the URL following the prefix instead (detected by the "http(s)://" that
+    follows the colon, so a real SURT host:port like "pt,exemplo,www:8080)"
+    isn't mistaken for one).
+    """
+    colon_idx = key.find(":")
+    if colon_idx != -1 and key[colon_idx + 1 :].startswith(("http://", "https://")):
+        hostname = (urlparse(key[colon_idx + 1 :]).hostname or "").lower()
+        if hostname:
+            return ",".join(reversed(hostname.split("."))) + ")"
+    return key.split(")", 1)[0] + ")"
+
+
+def _surt_host_to_domain(surt_host_key: str) -> str:
+    """Convert a SURT host/eTLD+1 key (e.g. "pt,exemplo,www)" or "pt,exemplo,") back to a
+    normal domain (e.g. "www.exemplo.pt" or "exemplo.pt")."""
+    return ".".join(reversed(surt_host_key.rstrip(",)").split(",")))
 
 
 class _Bucket:  # pylint: disable=too-few-public-methods
@@ -87,9 +114,10 @@ class _DomainSinkBase:
     def _drain(self) -> Iterable[Sequence[str]]:
         assert self._current_key is not None
         current_key = self._current_key
+        domain = _surt_host_to_domain(current_key)
         for group_key in sorted(self._buckets, key=lambda g: (g is None, g)):
             bucket = self._buckets[group_key]
-            row: List[str] = [current_key]
+            row: List[str] = [current_key, domain]
             if self.group_by is not None:
                 row.append(group_key or "")
             row.extend(
@@ -103,7 +131,7 @@ class _DomainSinkBase:
             yield tuple(row)
 
     def fieldnames(self) -> Sequence[str]:
-        fields = ["domain"]
+        fields = ["surt", "domain"]
         if self.group_by is not None:
             fields.append(self.group_by)
         fields.extend(["total_captures", "captures_status_200", "oldest_capture", "latest_capture"])
@@ -117,7 +145,7 @@ class DomainHostSink(_DomainSinkBase):
     """Groups captures by full SURT host, e.g. "pt,exemplo,www)"."""
 
     def _key_for(self, surt_key: str) -> str:
-        return surt_key.split(")", 1)[0] + ")"
+        return _host_key_from_surt(surt_key)
 
 
 class DomainEtld1Sink(_DomainSinkBase):
@@ -129,12 +157,12 @@ class DomainEtld1Sink(_DomainSinkBase):
         self._last_etld1_key: Optional[str] = None
 
     def _key_for(self, surt_key: str) -> str:
-        host_key = surt_key.split(")", 1)[0] + ")"
+        host_key = _host_key_from_surt(surt_key)
 
         if host_key == self._last_host_key and self._last_etld1_key is not None:
             return self._last_etld1_key
 
-        hostname = ".".join(reversed(host_key[:-1].split(",")))
+        hostname = _surt_host_to_domain(host_key)
         extracted = tldextract.extract(hostname)
         registered_domain = extracted.top_domain_under_public_suffix or hostname
         etld1_key = ",".join(reversed(registered_domain.split("."))) + ","

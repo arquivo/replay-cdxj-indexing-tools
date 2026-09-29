@@ -80,9 +80,9 @@ class TestRun(unittest.TestCase):
         self.assertTrue(os.path.exists(out_path))
         with open(out_path, encoding="utf-8") as f:
             content = f.read()
-        self.assertIn("mime,count", content)
-        self.assertIn("text/html,3", content)
-        self.assertIn("image/png,1", content)
+        self.assertIn("mime\tcount", content)
+        self.assertIn("text/html\t3", content)
+        self.assertIn("image/png\t1", content)
 
     def test_group_by_suffixes_output_filename(self):
         run(
@@ -111,20 +111,19 @@ class TestRun(unittest.TestCase):
             self.assertTrue(os.path.exists(os.path.join(self.out_dir, filename)), sink_name)
 
         # exemplo.pt has two hosts (blog, www) but a single registered domain.
-        # The domain field is CSV-quoted since it contains the delimiter itself.
         with open(os.path.join(self.out_dir, "domain-etld1.csv"), encoding="utf-8") as f:
-            self.assertIn('"pt,exemplo,",3,2', f.read())
+            self.assertIn("pt,exemplo,\texemplo.pt\t3\t2", f.read())
 
     def test_custom_field_separator(self):
         run(
             input_file=self.input_path,
             sink_names=["mimetype"],
             out_dir=self.out_dir,
-            field_separator="\t",
+            field_separator=",",
         )
         with open(os.path.join(self.out_dir, "mimetype.csv"), encoding="utf-8") as f:
             content = f.read()
-        self.assertIn("mime\tcount", content)
+        self.assertIn("mime,count", content)
 
     def test_unknown_sink_raises(self):
         with self.assertRaises(ValueError):
