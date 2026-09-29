@@ -44,20 +44,22 @@ TOP-N
 =====
 
 There's no built-in top-N filtering; sinks export every row they see. To keep
-only the top 100 rows of a sink's output by its count column, use a plain
+only the top N rows of a sink's output by its count column, use a plain
 shell pipeline. Fields are tab-separated by default, so tell sort about it
 with -t$'\\t', and point -k at the count column of the sink you're using
-(1-indexed):
+(1-indexed). Set N to whatever cutoff you want (e.g. 100, 10000):
 
+    N=10000
     (head -1 stats/mimetype.csv
-     tail -n +2 stats/mimetype.csv | sort -t$'\\t' -k2 -nr | head -100) \\
-      > stats/mimetype-top100.csv
+     tail -n +2 stats/mimetype.csv | sort -t$'\\t' -k2 -nr | head -n "$N") \\
+      > "stats/mimetype-top${N}.csv"
 
     # domain-host/domain-etld1: total_captures is the 3rd column (after
     # surt and domain)
+    N=10000
     (head -1 stats/domain-host.csv
-     tail -n +2 stats/domain-host.csv | sort -t$'\\t' -k3 -nr | head -100) \\
-      > stats/domain-host-top100.csv
+     tail -n +2 stats/domain-host.csv | sort -t$'\\t' -k3 -nr | head -n "$N") \\
+      > "stats/domain-host-top${N}.csv"
 
 SCALING OUT
 ===========
