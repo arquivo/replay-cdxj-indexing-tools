@@ -126,8 +126,6 @@ Test against multiple Python versions using Docker containers:
 
 ```bash
 # Test on specific Python version
-make ci-py38   # Python 3.8
-make ci-py39   # Python 3.9
 make ci-py310  # Python 3.10
 make ci-py311  # Python 3.11
 make ci-py312  # Python 3.12

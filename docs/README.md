@@ -193,7 +193,7 @@ arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 make ci
 
 # Test on specific Python version (Docker)
-make ci-py38
+make ci-py310
 
 # Test all Python versions in parallel
 make --jobs 10 ci-all

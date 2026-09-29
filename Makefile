@@ -199,14 +199,6 @@ define run_ci_version
 	fi
 endef
 
-ci-py38: ## Run full CI checks in Python 3.8 container
-	$(call run_ci_version,3.8)
-.PHONY: ci-py38
-
-ci-py39: ## Run full CI checks in Python 3.9 container
-	$(call run_ci_version,3.9)
-.PHONY: ci-py39
-
 ci-py310: ## Run full CI checks in Python 3.10 container
 	$(call run_ci_version,3.10)
 .PHONY: ci-py310
@@ -219,7 +211,7 @@ ci-py312: ## Run full CI checks in Python 3.12 container
 	$(call run_ci_version,3.12)
 .PHONY: ci-py312
 
-ci-all: ci-py38 ci-py39 ci-py310 ci-py311 ci-py312 ## Run full CI checks on all Python versions
+ci-all: ci-py310 ci-py311 ci-py312 ## Run full CI checks on all Python versions
 	@echo ""
 	@echo "=========================================="
 	@echo "✓ All Python versions passed CI checks!"

@@ -1,7 +1,7 @@
 # CDXJ Incremental Indexing Tools
 
 [![Tests](https://github.com/arquivo/replay-cdxj-indexing-tools/actions/workflows/tests.yml/badge.svg)](https://github.com/arquivo/replay-cdxj-indexing-tools/actions/workflows/tests.yml)
-[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 Tools for processing web archive CDXJ indexes at scale. Features parallel indexing, efficient merging, content filtering, and ZipNum conversion for pywb.
