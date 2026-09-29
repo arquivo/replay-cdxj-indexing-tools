@@ -65,4 +65,4 @@ coverage.xml
 .claude/
 
 # Ignore statistics directory
-stats/
+/stats/
