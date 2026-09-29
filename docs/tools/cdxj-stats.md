@@ -127,6 +127,20 @@ merge-flat-cdxj - /data/indexes_cdx/*.cdxj | \
 
 This requires bash (for `>(...)` process substitution). Each process parses every line independently, so total CPU-seconds increase roughly with the number of sinks — but wall-clock time drops proportionally as long as spare cores are available, since the work is now spread across processes instead of serialized in one.
 
+Each branch's `--sink`/`--sink-<name>` options are independent, so the same pattern also covers running a sink's plain and `group-by=year` variants side by side. A single `cdxj-stats` process can't run the same sink twice with different options (one instance per name in `--sink`), so give the normal and year-grouped variant of each sink its own branch — 6 branches for 3 sinks:
+
+```bash
+merge-flat-cdxj - /data/indexes_cdx/*.cdxj | \
+  tee >(cdxj-stats --sink mimetype --out-dir stats/) \
+      >(cdxj-stats --sink mimetype --sink-mimetype group-by=year --out-dir stats/) \
+      >(cdxj-stats --sink domain-host --out-dir stats/) \
+      >(cdxj-stats --sink domain-host --sink-domain-host group-by=year --out-dir stats/) \
+      >(cdxj-stats --sink domain-etld1 --out-dir stats/) | \
+  cdxj-stats --sink domain-etld1 --sink-domain-etld1 group-by=year --out-dir stats/
+```
+
+This produces `mimetype.csv`, `mimetype-year.csv`, `domain-host.csv`, `domain-host-year.csv`, `domain-etld1.csv`, and `domain-etld1-year.csv` in one pass, using one core per branch.
+
 ## Python API
 
 ```python
