@@ -114,6 +114,19 @@ There's no built-in top-N option; every sink exports every row it sees. To keep 
 
 `cdxj-stats` intentionally does not parallelize sinks within one process: a multi-year corpus should only be read/decompressed once, and the domain sinks' streaming flush-on-key-change logic depends on strictly ordered, single-threaded delivery. To speed up a very large run, shard the corpus (by year or collection) and run several `cdxj-stats` processes in parallel, one per shard, each writing to its own `--out-dir`; then sum the resulting per-sink CSVs (e.g. with a small pandas/awk groupby) to get full-corpus totals.
 
+### Running Sinks in Parallel via `tee`
+
+If a single run is CPU-bound on one core (e.g. piping a large merge directly into `cdxj-stats` with several `--sink` names), fan the stream out to one `cdxj-stats` process per sink using `tee` and process substitution, so each sink's parsing runs on its own core:
+
+```bash
+merge-flat-cdxj - /data/indexes_cdx/*.cdxj | \
+  tee >(cdxj-stats --sink mimetype --out-dir stats/) \
+      >(cdxj-stats --sink domain-host --out-dir stats/) | \
+  cdxj-stats --sink domain-etld1 --out-dir stats/
+```
+
+This requires bash (for `>(...)` process substitution). Each process parses every line independently, so total CPU-seconds increase roughly with the number of sinks — but wall-clock time drops proportionally as long as spare cores are available, since the work is now spread across processes instead of serialized in one.
+
 ## Python API
 
 ```python
