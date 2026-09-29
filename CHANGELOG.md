@@ -2,6 +2,22 @@
 
 <!-- version list -->
 
+## v1.1.4 (2026-09-29)
+
+### Bug Fixes
+
+- **ci**: Stop chown's exit code from masking make ci's real result
+  ([`0798dce`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/0798dcec6e406cc8c311df67fcc3bc8fec5f4709))
+
+### Chores
+
+- Add .claude to .gitignore
+  ([`3956d77`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/3956d774463dec38663d05245bf77631fb2cdc6a))
+
+- Drop support for EOL Python 3.8 and 3.9
+  ([`98b5dd5`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/98b5dd51a04f84dec59853cb9121c1e26ae3646b))
+
+
 ## v1.1.3 (2026-07-20)
 
 ### Bug Fixes
