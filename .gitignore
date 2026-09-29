@@ -64,3 +64,5 @@ coverage.xml
 # AI
 .claude/
 
+# Ignore statistics directory
+stats/
