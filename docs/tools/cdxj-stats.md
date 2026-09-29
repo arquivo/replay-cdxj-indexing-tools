@@ -130,6 +130,8 @@ For `domain-host`/`domain-etld1`, `total_captures` is the 3rd column (after `sur
 
 ```bash
 N=10000; (head -1 stats/domain-host.csv; tail -n +2 stats/domain-host.csv | sort -t$'\t' -k3 -nr | head -n "$N") > "stats/domain-host-top${N}.csv"
+
+N=10000; (head -1 stats/domain-etld1.csv; tail -n +2 stats/domain-etld1.csv | sort -t$'\t' -k3 -nr | head -n "$N") > "stats/domain-etld1-top${N}.csv"
 ```
 
 If you changed `--field-separator` to something else (e.g. `,`), adjust `-t` to match.

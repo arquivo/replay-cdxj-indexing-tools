@@ -61,6 +61,11 @@ with -t$'\\t', and point -k at the count column of the sink you're using
      tail -n +2 stats/domain-host.csv | sort -t$'\\t' -k3 -nr | head -n "$N") \\
       > "stats/domain-host-top${N}.csv"
 
+    N=10000
+    (head -1 stats/domain-etld1.csv
+     tail -n +2 stats/domain-etld1.csv | sort -t$'\\t' -k3 -nr | head -n "$N") \\
+      > "stats/domain-etld1-top${N}.csv"
+
 SCALING OUT
 ===========
 
