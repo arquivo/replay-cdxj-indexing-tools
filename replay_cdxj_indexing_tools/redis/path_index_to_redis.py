@@ -191,6 +191,7 @@ Author: Ivo Branco
 
 import argparse
 import gzip
+import os
 import sys
 import time
 from typing import Dict, Iterator, List, Optional, Tuple
@@ -633,7 +634,9 @@ Redis connection examples:
     redis_conn.add_argument("--db", type=int, default=0, help="Redis database number (default: 0)")
     redis_conn.add_argument(
         "--password",
-        help="Redis password (optional). "
+        default=os.environ.get("REDIS_PASSWORD"),
+        help="Redis password (optional). Defaults to the REDIS_PASSWORD env var if set "
+        "(preferred, since CLI arguments are visible to other users via ps/proc). "
         "REQUIRED for remote connections (security risk without auth).",
     )
     redis_conn.add_argument("--username", help="Redis username for ACL (optional)")

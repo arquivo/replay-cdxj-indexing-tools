@@ -109,6 +109,7 @@ Author: Ivo Branco
 """
 
 import argparse
+import os
 import subprocess
 import sys
 import time
@@ -232,6 +233,9 @@ def run_pipeline(
         Callers should pass a tighter timeout for automated/scheduled runs.
         The pipeline inherits the caller's environment; ensure arclist_folder
         is not attacker-controlled (CWE-78 / command injection via path).
+        redis_password is passed to path-index-to-redis via the REDIS_PASSWORD
+        environment variable rather than argv, since CLI arguments are visible
+        to other users on the host via `ps aux` / /proc/<pid>/cmdline (#78).
     """
     start_time = time.time()
 
@@ -281,8 +285,6 @@ def run_pipeline(
         str(timeout),
     ]
 
-    if redis_password:
-        redis_cmd.extend(["--password", redis_password])
     if redis_username:
         redis_cmd.extend(["--username", redis_username])
     if redis_socket:
@@ -295,6 +297,14 @@ def run_pipeline(
         redis_cmd.append("--clear")
     if verbose:
         redis_cmd.append("--verbose")
+
+    # Pass the password via the environment rather than argv: CLI arguments
+    # are visible to any user on the host via `ps aux` / /proc/<pid>/cmdline,
+    # while the environment is not (#78). path-index-to-redis reads
+    # REDIS_PASSWORD as a fallback when --password is not given.
+    redis_env = os.environ.copy()
+    if redis_password:
+        redis_env["REDIS_PASSWORD"] = redis_password
 
     # Run pipeline
     if verbose:
@@ -314,6 +324,7 @@ def run_pipeline(
             redis_cmd,
             stdin=arclist_proc.stdout,
             stderr=sys.stderr,
+            env=redis_env,
         )
 
         # Close stdout in parent to allow arclist_proc to receive SIGPIPE if redis_proc exits
@@ -433,7 +444,11 @@ argument handling, colored logging, and --clear option support.
     redis_conn.add_argument("--host", default="localhost", help="Redis host (default: localhost)")
     redis_conn.add_argument("--port", type=int, default=6379, help="Redis port (default: 6379)")
     redis_conn.add_argument("--db", type=int, default=0, help="Redis database number (default: 0)")
-    redis_conn.add_argument("--password", help="Redis password (optional)")
+    redis_conn.add_argument(
+        "--password",
+        default=os.environ.get("REDIS_PASSWORD"),
+        help="Redis password (optional). Defaults to the REDIS_PASSWORD env var if set.",
+    )
     redis_conn.add_argument("--username", help="Redis username for ACL (optional)")
     redis_conn.add_argument("--socket", help="Unix socket path (alternative to host:port)")
     redis_conn.add_argument("--ssl", action="store_true", help="Use SSL/TLS connection")
