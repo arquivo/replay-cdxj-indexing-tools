@@ -494,6 +494,54 @@ def wrong_name(surt_key, timestamp, json_data):
 
         self.assertIn("must define an addfield", str(context.exception))
 
+    def test_load_addfield_function_logs_security_warning(self):
+        """Loading a function file logs an audit warning with its resolved path."""
+        func_path = os.path.join(self.temp_dir, "addfield_func.py")
+        with open(func_path, "w") as f:
+            f.write("def addfield(surt_key, timestamp, json_data):\n    return json_data\n")
+
+        with self.assertLogs(
+            "replay_cdxj_indexing_tools.addfield.addfield_to_flat_cdxj", level="WARNING"
+        ) as log_context:
+            load_addfield_function(func_path)
+
+        self.assertTrue(any("Executing arbitrary Python code" in msg for msg in log_context.output))
+        resolved_repr = repr(os.path.realpath(func_path))
+        self.assertTrue(any(resolved_repr in msg for msg in log_context.output))
+
+    def test_load_addfield_function_rejects_path_outside_plugin_dir(self):
+        """Reject --function paths outside ADDFIELD_PLUGIN_DIR when it is set."""
+        plugin_dir = os.path.join(self.temp_dir, "plugins")
+        os.makedirs(plugin_dir)
+
+        outside_func = os.path.join(self.temp_dir, "outside.py")
+        with open(outside_func, "w") as f:
+            f.write("def addfield(surt_key, timestamp, json_data):\n    return json_data\n")
+
+        with patch.dict(os.environ, {"ADDFIELD_PLUGIN_DIR": plugin_dir}):
+            with self.assertRaises(ValueError) as context:
+                load_addfield_function(outside_func)
+
+        self.assertIn("outside the allowed plugin directory", str(context.exception))
+
+    def test_load_addfield_function_allows_path_inside_plugin_dir(self):
+        """Allow --function paths inside ADDFIELD_PLUGIN_DIR when it is set."""
+        plugin_dir = os.path.join(self.temp_dir, "plugins")
+        os.makedirs(plugin_dir)
+
+        inside_func = os.path.join(plugin_dir, "addfield_func.py")
+        with open(inside_func, "w") as f:
+            f.write(
+                "def addfield(surt_key, timestamp, json_data):\n"
+                "    json_data['ok'] = True\n"
+                "    return json_data\n"
+            )
+
+        with patch.dict(os.environ, {"ADDFIELD_PLUGIN_DIR": plugin_dir}):
+            func = load_addfield_function(inside_func)
+
+        self.assertTrue(func("pt,arquivo)/", "20231115120000", {})["ok"])
+
 
 class TestRealisticScenarios(unittest.TestCase):
     """Test realistic Arquivo.pt field addition scenarios."""
