@@ -123,8 +123,10 @@ in pywb configuration.
 
 """
 
+import argparse
 import concurrent.futures
 import gzip
+import logging
 import os
 import sys
 import tempfile
@@ -132,6 +134,21 @@ from argparse import ArgumentParser
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
+
+logger = logging.getLogger(__name__)
+
+# Sentinel shard size (MB) used for --single-shard: large enough that the
+# ">= target_shard_size" rotation check never triggers, while remaining a
+# plain int so shard_size_mb keeps its declared type (#83).
+_SINGLE_SHARD_SENTINEL_MB = 10 * 1024 * 1024  # 10 TB in MB
+
+
+def positive_int(value: str) -> int:
+    """argparse type: reject zero/negative integers (#86)."""
+    ivalue = int(value)
+    if ivalue <= 0:
+        raise argparse.ArgumentTypeError(f"must be a positive integer, got {value}")
+    return ivalue
 
 
 def open_input_path(path: str) -> Union[BinaryIO, gzip.GzipFile]:
@@ -310,8 +327,8 @@ def cdxj_to_zipnum(
                             # Close current shard file
                             try:
                                 current_raw_fh.close()
-                            except Exception:  # pylint: disable=broad-exception-caught  # nonfatal
-                                pass
+                            except OSError as exc:  # nonfatal: os.replace below still runs
+                                logger.warning("Error closing shard file (non-fatal): %s", exc)
                             os.replace(current_temp_path, created_shards[current_shard])
 
                             # Move to next shard and open new file with larger buffer
@@ -368,13 +385,15 @@ def cdxj_to_zipnum(
         else:
             try:
                 current_raw_fh.close()
-            except Exception:  # pylint: disable=broad-exception-caught  # best-effort close
-                pass
+            except OSError as exc:  # best-effort close while already unwinding an error
+                logger.warning("Error closing shard file during cleanup (non-fatal): %s", exc)
             if current_temp_path and os.path.exists(current_temp_path):
                 try:
                     os.unlink(current_temp_path)
-                except Exception:  # pylint: disable=broad-exception-caught  # best-effort cleanup
-                    pass
+                except OSError as exc:  # best-effort cleanup
+                    logger.warning(
+                        "Error removing temp shard file %s (non-fatal): %s", current_temp_path, exc
+                    )
 
     # If only one shard was created, rename it to use simple naming (no numbering)
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
@@ -411,7 +430,7 @@ def parse_args(argv=None):
     p.add_argument(
         "-s",
         "--shard-size",
-        type=int,
+        type=positive_int,
         default=100,
         help=(
             "Target size in MB for each shard file (default: 100MB, same as WARC files). "
@@ -426,7 +445,11 @@ def parse_args(argv=None):
         ),
     )
     p.add_argument(
-        "-c", "--chunk-size", type=int, default=3000, help="Lines per chunk (default: 3000)"
+        "-c",
+        "--chunk-size",
+        type=positive_int,
+        default=3000,
+        help="Lines per chunk (default: 3000)",
     )
     p.add_argument(
         "--compress-level",
@@ -440,7 +463,7 @@ def parse_args(argv=None):
     )
     p.add_argument(
         "--workers",
-        type=int,
+        type=positive_int,
         default=4,
         help=(
             "Number of parallel compression workers (default: 4). "
@@ -471,8 +494,9 @@ def main(argv=None):
     Parses arguments and calls cdxj_to_zipnum with appropriate parameters.
     """
     args = parse_args(argv)
-    # If single-shard mode, use a very large shard size to ensure everything fits in one shard
-    shard_size = float("inf") if args.single_shard else args.shard_size
+    # If single-shard mode, use a sentinel shard size (in MB, not float("inf"))
+    # so shard_size_mb keeps its declared int type — see _SINGLE_SHARD_SENTINEL_MB (#83).
+    shard_size = _SINGLE_SHARD_SENTINEL_MB if args.single_shard else args.shard_size
     cdxj_to_zipnum(
         args.output,
         args.input,
