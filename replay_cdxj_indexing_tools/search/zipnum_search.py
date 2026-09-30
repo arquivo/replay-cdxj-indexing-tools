@@ -182,69 +182,30 @@ def search_zipnum_index(
             if verbose:
                 print(f"  Binary search completed in {iterations} iterations", file=sys.stderr)
 
-            # Determine starting position
-            if found_pos is None:
-                # No exact match found in binary search
-                # Binary search gives us left boundary - scan back a bit to ensure
-                # we don't miss blocks where surt_key < search_key
-                check_start = max(0, left - 10000)  # Check up to 10KB back
-                fp.seek(check_start)
-                if check_start > 0:
-                    fp.readline()
+            # Determine a safe starting position for the linear scan below. The .idx file
+            # only records a sparse "boundary" key per block (the first record's key in
+            # each ~3000-line chunk -- see flat_cdxj_to_zipnum.extract_prejson), so the
+            # block that actually contains search_key usually has a boundary key strictly
+            # less than search_key. Back up a bounded window from where the binary search
+            # converged so the scan is guaranteed to pass through that block.
+            anchor_hint = found_pos if found_pos is not None else left
+            check_start = max(0, anchor_hint - 10000)  # 10KB back, generous vs. index line size
+            fp.seek(check_start)
+            if check_start > 0:
+                fp.readline()  # skip partial line
+            start_pos = fp.tell()
 
-                start_pos = fp.tell()
-            else:
-                # Found a match, scan backwards to find first match
-                check_start = max(0, found_pos - 10000)
-                fp.seek(check_start)
-                if check_start > 0:
-                    fp.readline()
-
-                first_match_pos = None
-                while fp.tell() < file_size:
-                    line_start = fp.tell()
-                    line = fp.readline()
-                    if not line:
-                        break
-
-                    try:
-                        line_str = line.decode("utf-8").strip()
-                    except UnicodeDecodeError:
-                        logger.warning(
-                            "Invalid UTF-8 in index file at offset %d, skipping line", fp.tell()
-                        )
-                        continue
-                    if not line_str:
-                        continue
-
-                    try:
-                        surt_key, _, _, _, _ = parse_idx_line(line_str)
-
-                        if match_prefix:
-                            is_match = surt_key.startswith(search_key) or surt_key < search_key
-                        else:
-                            is_match = surt_key <= search_key
-
-                        if is_match:
-                            if first_match_pos is None:
-                                first_match_pos = line_start
-                        elif surt_key > search_key:
-                            break
-
-                        if line_start > found_pos + 1000:
-                            break
-                    except ValueError:
-                        continue
-
-                start_pos = first_match_pos if first_match_pos is not None else found_pos
-
-            # Collect all matching blocks from start position
+            # Collect matching blocks starting from start_pos. Blocks are sorted by
+            # boundary key, so at most one preceding block (boundary key before the match
+            # range) can possibly contain the earliest matching record; it is tracked as
+            # anchor_block and only kept if we actually reach or pass the match range.
+            # Every boundary key that itself matches is appended directly, and the scan
+            # stops for good the first time a non-matching key sorts after the match range.
+            # (Appending every preceding block unconditionally was the bug in #73: it
+            # returned all blocks with key <= search_key instead of just the last one.)
             fp.seek(start_pos)
 
-            # If start_pos is in the middle of the file, skip the partial line
-            if start_pos > 0:
-                fp.readline()
-
+            anchor_block = None
             while True:
                 pos = fp.tell()
                 if pos >= file_size:
@@ -266,27 +227,36 @@ def search_zipnum_index(
 
                 try:
                     surt_key, shard_name, offset, length, _shard_num = parse_idx_line(line_str)
-
-                    if match_prefix:
-                        if surt_key.startswith(search_key):
-                            matching_blocks.append((surt_key, shard_name, offset, length))
-                        elif surt_key < search_key:
-                            matching_blocks.append((surt_key, shard_name, offset, length))
-                        else:
-                            # surt_key > search_key and doesn't start with prefix
-                            # Stop immediately - no more matches possible
-                            break
-                    else:
-                        if surt_key <= search_key:
-                            matching_blocks.append((surt_key, shard_name, offset, length))
-                        else:
-                            # surt_key > search_key - stop immediately
-                            break
-
                 except ValueError as e:
                     if verbose:
                         print(f"  Warning: Skipping invalid index line: {e}", file=sys.stderr)
                     continue
+
+                if match_prefix:
+                    in_range = surt_key.startswith(search_key)
+                else:
+                    in_range = surt_key == search_key
+
+                if in_range:
+                    if anchor_block is not None:
+                        matching_blocks.append(anchor_block)
+                        anchor_block = None
+                    matching_blocks.append((surt_key, shard_name, offset, length))
+                elif surt_key < search_key:
+                    # Candidate block preceding the match range -- only the last one seen
+                    # before we enter (or pass) the range can contain a matching record.
+                    anchor_block = (surt_key, shard_name, offset, length)
+                else:
+                    # surt_key > search_key and it isn't in range: permanently past it,
+                    # since index entries are sorted. Keep the pending anchor: its range
+                    # may still extend up to (but not including) this key.
+                    if anchor_block is not None:
+                        matching_blocks.append(anchor_block)
+                        anchor_block = None
+                    break
+
+            if anchor_block is not None:
+                matching_blocks.append(anchor_block)
 
     except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised after logging
         if verbose:

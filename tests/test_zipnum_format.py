@@ -194,6 +194,42 @@ class TestZipNumFormat(unittest.TestCase):
         )
         self.assertEqual(len(results), 0)
 
+    def test_zipnum_exact_search_non_boundary_key(self):
+        """Exact-match search for a key that is NOT a block's boundary key.
+
+        Regression test for issue #73: the .idx file only stores a sparse boundary
+        key per block (the first record of each chunk), so most real records --
+        like "com,example)/about" here -- are never a literal .idx key. The block
+        containing them must still be found via its boundary key even though that
+        boundary key is strictly less than the search key.
+        """
+        results = list(
+            search_zipnum_file(
+                self.idx_file, "com,example)/about", match_prefix=False, verbose=False
+            )
+        )
+        self.assertEqual(len(results), 1)
+        self.assertIn("com,example)/about", results[0])
+
+    def test_search_zipnum_index_does_not_over_include_preceding_blocks(self):
+        """Only the single preceding block (if any) should be returned as a candidate,
+        not every earlier block whose key sorts before the search key.
+
+        Regression test for issue #73: the old code appended every block satisfying
+        surt_key <= search_key (exact) or surt_key < search_key (prefix), which for
+        an index with many chunks would return all of them instead of just the one
+        block that can actually contain the searched-for key.
+        """
+        blocks = search_zipnum_index(self.idx_file, "org,example)/", match_prefix=False)
+        # Only the immediately preceding block ("com,test)/") and the exact match
+        # itself ("org,example)/") are valid candidates -- "com,example)/" is not,
+        # since its range ends at "com,test)/" and cannot contain "org,example)/".
+        self.assertEqual(len(blocks), 2)
+        keys = [b[0] for b in blocks]
+        self.assertNotIn("com,example)/", keys)
+        self.assertIn("com,test)/", keys)
+        self.assertIn("org,example)/", keys)
+
     def test_zipnum_multiple_shards_prefix(self):
         """Test prefix search across multiple shards."""
         # Search for 'com,' which should match both com,example and com,test
