@@ -58,6 +58,16 @@ cdxj-stats -i index.cdxj \
 
 When `group-by` is set for a sink, its output filename gets a `-<group-by>` suffix, e.g. `stats/domain-host-year.csv`.
 
+A `--sink-<name>` block consumes every following `key=value` token and ends at the next token starting with `-`, so ordinary flags can appear on either side of it:
+
+```bash
+# both of these are equivalent
+cdxj-stats --sink-mimetype group-by=year -i index.cdxj --sink mimetype --out-dir stats/
+cdxj-stats -i index.cdxj --sink mimetype --sink-mimetype group-by=year --out-dir stats/
+```
+
+A token inside a sink block that doesn't start with `-` and has no `=` is rejected, since it can only be a malformed sink option.
+
 ### TSV Output (default) and CSV Output
 
 Fields are tab-separated by default, since SURT keys contain commas and would otherwise need CSV quoting (which the rest of the output doesn't use, making columns inconsistent). Pass `--field-separator ","` to get plain CSV instead:

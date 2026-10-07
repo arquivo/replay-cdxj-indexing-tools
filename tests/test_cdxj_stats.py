@@ -58,6 +58,28 @@ class TestExtractSinkOptions(unittest.TestCase):
         with self.assertRaises(ValueError):
             extract_sink_options(["--sink-mimetype", "not-a-kv"])
 
+    def test_single_dash_flag_ends_the_sink_option_block(self):
+        """A sink block must not swallow -i and friends, whatever the order."""
+        options, remaining = extract_sink_options(
+            ["--sink", "mimetype", "--sink-mimetype", "group-by=year", "-i", "index.cdxj"]
+        )
+        self.assertEqual(options, {"mimetype": {"group-by": "year"}})
+        self.assertEqual(remaining, ["--sink", "mimetype", "-i", "index.cdxj"])
+
+    def test_sink_options_parse_the_same_in_either_order(self):
+        before = extract_sink_options(
+            ["-i", "index.cdxj", "--sink-mimetype", "group-by=year", "--out-dir", "x"]
+        )
+        after = extract_sink_options(
+            ["--sink-mimetype", "group-by=year", "-i", "index.cdxj", "--out-dir", "x"]
+        )
+        self.assertEqual(before[0], after[0])
+        self.assertEqual(sorted(before[1]), sorted(after[1]))
+
+    def test_option_value_may_contain_a_dash(self):
+        options, _ = extract_sink_options(["--sink-mimetype", "group-by=year", "label=a-b"])
+        self.assertEqual(options, {"mimetype": {"group-by": "year", "label": "a-b"}})
+
 
 class TestLoadSinks(unittest.TestCase):
     """Test that built-in sinks are discoverable via entry points."""
