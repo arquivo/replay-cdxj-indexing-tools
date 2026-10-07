@@ -214,8 +214,10 @@ def run(
         if input_file == "-":
             infile = sys.stdin
         else:
-            # pylint: disable-next=consider-using-with,unspecified-encoding  # locale
-            infile = open(input_file, "r")
+            # CDXJ is UTF-8 regardless of the process locale; don't let a non-UTF-8
+            # default encoding turn non-ASCII URLs into a UnicodeDecodeError.
+            # pylint: disable-next=consider-using-with
+            infile = open(input_file, "r", encoding="utf-8")
 
         try:
             for line in infile:
