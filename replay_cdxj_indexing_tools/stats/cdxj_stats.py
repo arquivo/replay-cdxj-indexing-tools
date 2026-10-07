@@ -107,6 +107,12 @@ def extract_sink_options(argv: List[str]) -> Tuple[Dict[str, Dict[str, str]], Li
     Sink names are plugin-defined, so these options can't be declared upfront
     with argparse. Returns (sink_options, remaining_argv) where remaining_argv
     can be parsed normally by the standard argparse parser.
+
+    A sink's option block ends at the next token starting with "-", so
+    single-dash flags are left for argparse instead of being swallowed:
+    "--sink-mimetype group-by=year -i index.cdxj" works regardless of order.
+    A non-flag token without "=" is still an error, since it can only be a
+    malformed sink option.
     """
     sink_options: Dict[str, Dict[str, str]] = {}
     remaining: List[str] = []
@@ -118,7 +124,7 @@ def extract_sink_options(argv: List[str]) -> Tuple[Dict[str, Dict[str, str]], Li
             name = token[len("--sink-") :]
             opts = sink_options.setdefault(name, {})
             i += 1
-            while i < len(argv) and not argv[i].startswith("--"):
+            while i < len(argv) and not argv[i].startswith("-"):
                 if "=" not in argv[i]:
                     raise ValueError(
                         f"Invalid option {argv[i]!r} for --sink-{name} (expected key=value)"
