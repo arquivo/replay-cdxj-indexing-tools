@@ -9,11 +9,13 @@ Test Coverage:
 3. End-to-end run() over a fixture CDXJ, writing per-sink CSVs to --out-dir
 4. Output filename suffixing when group-by is configured
 5. Error handling: unknown sink, bad field separator
+6. UTF-8 input decoding independent of the process locale
 """
 
 import os
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from replay_cdxj_indexing_tools.stats.base import load_sinks
 from replay_cdxj_indexing_tools.stats.cdxj_stats import extract_sink_options, run
@@ -24,6 +26,11 @@ pt,exemplo,www)/ 20200101000000 {"mime":"text/html","status":"200"}
 pt,exemplo,www)/img.png 20200601000000 {"mime":"image/png","status":"404"}
 pt,outro,www)/ 20180101000000 {"mime":"text/html","status":"200"}
 """
+
+
+NON_ASCII_FIXTURE = (
+    'pt,exemplo,www)/informação 20200101000000 {"mime":"text/html","status":"200"}\n'
+)
 
 
 class TestExtractSinkOptions(unittest.TestCase):
@@ -137,6 +144,36 @@ class TestRun(unittest.TestCase):
                 out_dir=self.out_dir,
                 field_separator="::",
             )
+
+    def test_input_is_read_as_utf8_regardless_of_locale(self):
+        """CDXJ is UTF-8; reading must not depend on the process default encoding.
+
+        Patching locale doesn't change what open() picks (CPython resolves the
+        default encoding in C), so assert the explicit encoding argument instead.
+        """
+        real_open = open
+        encodings = {}
+
+        def recording_open(file, *args, **kwargs):
+            encodings[os.path.abspath(file)] = kwargs.get("encoding")
+            return real_open(file, *args, **kwargs)
+
+        with patch("builtins.open", side_effect=recording_open):
+            run(input_file=self.input_path, sink_names=["mimetype"], out_dir=self.out_dir)
+
+        self.assertEqual(encodings[os.path.abspath(self.input_path)], "utf-8")
+
+    def test_non_ascii_urls_are_decoded(self):
+        """Non-ASCII URLs (normal in a Portuguese archive) must round-trip."""
+        path = os.path.join(self.temp_dir, "non-ascii.cdxj")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(NON_ASCII_FIXTURE)
+
+        counts = run(input_file=path, sink_names=["domain-host"], out_dir=self.out_dir)
+
+        self.assertEqual(counts, {"domain-host": 1})
+        with open(os.path.join(self.out_dir, "domain-host.csv"), encoding="utf-8") as f:
+            self.assertIn("www.exemplo.pt", f.read())
 
 
 if __name__ == "__main__":
