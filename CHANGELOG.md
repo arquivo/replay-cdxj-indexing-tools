@@ -2,6 +2,53 @@
 
 <!-- version list -->
 
+## v1.2.0 (2026-10-07)
+
+### Bug Fixes
+
+- Scope stats/ gitignore rule to repo root only
+  ([`183393b`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/183393bbd688a1411aacc0d6f4f955bd7a8ea190))
+
+- **cdxj-stats**: Read input file as UTF-8 regardless of process locale
+  ([`28d084d`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/28d084d0aedcd9c95e8306544a71273d5d53a913))
+
+- **cdxj-stats**: Stop sink-option blocks swallowing single-dash flags
+  ([`b4afc64`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/b4afc64a3029c083c9ff1f2f9700ca797c7a0f3e))
+
+- **deps**: Require tldextract>=5.3.0 for top_domain_under_public_suffix
+  ([`24fb993`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/24fb993c8b0ce2a381ccc354d4b4c9cfcc8cdeea))
+
+### Chores
+
+- Ignore stats folder
+  ([`0c54c5b`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/0c54c5bc8e48bc8ff3121188ac7247ea559d7528))
+
+### Documentation
+
+- **cdxj-stats**: Add explicit Top-N example for domain-etld1
+  ([`0a9b6f5`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/0a9b6f5ed081a13dce43ac1131ae5130ef232ba8))
+
+- **cdxj-stats**: Document per-sink parallelism via tee
+  ([`960858c`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/960858c7aba5862a8e1b5602c29d36109114892c))
+
+- **cdxj-stats**: Document running normal + group-by=year in parallel
+  ([`d5c2a21`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/d5c2a21dbb5ec84fb225334558c6e97f28c5f63f))
+
+- **cdxj-stats**: Fix Top-N sort recipe for tab default + domain column shift
+  ([`dbc1962`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/dbc1962b813c50eb736823e6cd7b525d910c4f22))
+
+- **cdxj-stats**: Make Top-N cutoff configurable via N variable
+  ([`a68872a`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/a68872a5f9102d77501a32e3c17e9a51c8f134a6))
+
+### Features
+
+- Add cdxj-stats pluggable capture-statistics tool
+  ([`45c56d6`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/45c56d6e725dabdd584148fd84d896bca63e93e7))
+
+- **cdxj-stats**: Tab-separated output, readable domain column, non-SURT keys
+  ([`4f5df9a`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/4f5df9a88df211b7357c27ccbebb59994aa6a2dc))
+
+
 ## v1.1.4 (2026-09-29)
 
 ### Bug Fixes
