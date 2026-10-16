@@ -83,7 +83,8 @@ Total: 22 tests across 4 test classes
      independent of base name (e.g., idx_name="my-index.idx", loc_name="my-locations.loc")
 
    - test_idx_file_format: Validates .idx file structure with tab-separated fields:
-     <key>\t<shard_name>\t<offset>\t<length>\t<shard_number>
+     <key>\t<shard_name>\t<offset>\t<length>\t<lineno>, where <lineno> is the
+     1-based line number of the entry in the .idx (across all shards)
 
    - test_loc_file_format: Validates .loc file structure with tab-separated fields:
      <shard_name>\t<filepath> (one entry per shard)
@@ -122,8 +123,8 @@ The conversion produces three types of files:
    - Multiple shards: <base>-01.cdx.gz, <base>-02.cdx.gz, ...
 
 2. Index File (.idx): Tab-separated index entries for binary search
-   Format: <cdxj_key>\t<shard_name>\t<byte_offset>\t<byte_length>\t<shard_number>
-   Example: pt,governo,www)/ 20230615120200\tpt-domains-01\t186\t193\t1
+   Format: <cdxj_key>\t<shard_name>\t<byte_offset>\t<byte_length>\t<lineno>
+   Example: pt,governo,www)/ 20230615120200\tpt-domains-01.cdx.gz\t186\t193\t2
 
 3. Location File (.loc): Maps shard names to file paths
    Format: <shard_name.cdx.gz>\t<filepath>
@@ -687,7 +688,7 @@ class TestCdxjToZipnum(unittest.TestCase):
         with open(idx_file, "r") as f:
             first_line = f.readline().strip()
 
-        # Format should be: <key>\t<shard_name>\t<offset>\t<length>\t<shard_number>
+        # Format should be: <key>\t<shard_name>\t<offset>\t<length>\t<lineno>
         parts = first_line.split("\t")
         self.assertEqual(len(parts), 5, f"Index line should have 5 fields, got: {first_line}")
 
@@ -697,7 +698,7 @@ class TestCdxjToZipnum(unittest.TestCase):
         # Verify offset and length are numeric
         self.assertTrue(parts[2].isdigit(), "Offset should be numeric")
         self.assertTrue(parts[3].isdigit(), "Length should be numeric")
-        self.assertTrue(parts[4].isdigit(), "Shard number should be numeric")
+        self.assertEqual(parts[4], "1", "First idx line should have lineno 1")
 
     def test_loc_file_format(self):
         """Test that the .loc file has correct format."""
@@ -867,7 +868,7 @@ class TestCdxjToZipnum(unittest.TestCase):
         maintains the .cdx.gz extension as expected by pywb's ZipNum format.
 
         The .idx file format should be:
-        <key>\t<shard_name.cdx.gz>\t<offset>\t<length>\t<shard_number>
+        <key>\t<shard_name.cdx.gz>\t<offset>\t<length>\t<lineno>
 
         For example:
         - Single shard: pt,example)/ 20200101120000\tarchive.cdx.gz\t0\t150\t1
@@ -912,11 +913,11 @@ class TestCdxjToZipnum(unittest.TestCase):
             part_column.endswith(".cdx.gz"),
             f"Part column should end with .cdx.gz, got: {part_column}",
         )
-        # For single shard, could be either "single-test.cdx.gz" or "single-test-01.cdx.gz"
-        # depending on whether renaming happens after idx writing
-        self.assertIn(
+        # The single shard is renamed to "<base>.cdx.gz" after the idx is written;
+        # the idx must follow the rename or pywb can't resolve it via the .loc
+        self.assertEqual(
             part_column,
-            ["single-test.cdx.gz", "single-test-01.cdx.gz"],
+            "single-test.cdx.gz",
             f"Expected single shard name with .cdx.gz, got: {part_column}",
         )
 
@@ -1055,6 +1056,104 @@ class TestCdxjToZipnum(unittest.TestCase):
 
         for fh in opened_handles:
             self.assertTrue(fh.closed, "Shard file handle must be closed after exception")
+
+    def test_idx_lineno_is_sequential_across_shards(self):
+        """
+        The 5th idx column is the 1-based line number of the entry in the .idx,
+        continuing across shards; it is not the shard number (issue #100).
+        """
+        input_file = os.path.join(self.input_dir, "lineno.cdxj")
+        with open(input_file, "wb") as f:
+            for i in range(500):
+                f.write(f'org,example)/{i:06d} 20200101000000 {{"n": "{i}"}}\n'.encode())
+
+        cdxj_to_zipnum(
+            self.output_dir, input_file, shard_size_mb=0.001, chunk_size=10, base="lineno"
+        )
+
+        with open(os.path.join(self.output_dir, "lineno.idx"), "r", encoding="utf-8") as f:
+            rows = [line.rstrip("\n").split("\t") for line in f]
+
+        self.assertEqual(len(rows), 50)
+        self.assertGreater(len({row[1] for row in rows}), 1, "Test needs multiple shards")
+        self.assertEqual([row[4] for row in rows], [str(n) for n in range(1, len(rows) + 1)])
+
+
+class TestPywbCompatibility(unittest.TestCase):
+    """
+    Read the generated ZipNum back through pywb's own ZipNumIndexSource, the reader
+    used in production, and check every url is found with all of its captures.
+
+    Regression tests for issue #100: pywb uses the 5th idx column (line number) to
+    count the blocks to load, so writing the shard number there made pywb miss urls
+    that start a chunk and truncate urls whose captures span several chunks. And a
+    single-shard idx pointed to "<base>-01.cdx.gz", which is not in the .loc.
+    """
+
+    def setUp(self):
+        self.temp_dir = tempfile.mkdtemp()
+        self.input_file = os.path.join(self.temp_dir, "input.cdxj")
+        self.output_dir = os.path.join(self.temp_dir, "zipnum")
+
+    def tearDown(self):
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def _write_input(self, num_urls, num_multi_captures):
+        """Write num_urls single-capture urls plus one url with many captures."""
+        rows = [
+            f'com,example)/p{i:06d} 20200101000000 {{"url": "http://example.com/p{i:06d}"}}'
+            for i in range(num_urls)
+        ]
+        multi = f"p{num_urls // 2:06d}x"
+        rows += [
+            f"com,example)/{multi} {20100101000000 + t * 100000000} "
+            f'{{"url": "http://example.com/{multi}"}}'
+            for t in range(num_multi_captures)
+        ]
+        rows.sort()
+        with open(self.input_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(rows) + "\n")
+
+        counts = {}
+        for row in rows:
+            path = row.split(" ", 1)[0].split(")/", 1)[1]
+            counts[path] = counts.get(path, 0) + 1
+        return counts
+
+    def _assert_all_found(self, idx_path, counts):
+        from pywb.warcserver.index.zipnum import ZipNumIndexSource
+
+        source = ZipNumIndexSource(idx_path)
+        wrong = {}
+        for path, expected in counts.items():
+            got = len(list(source.load_index({"url": f"http://example.com/{path}"})))
+            if got != expected:
+                wrong[path] = (got, expected)
+        self.assertEqual(wrong, {}, "urls with wrong capture counts: {path: (got, expected)}")
+
+    def test_pywb_finds_every_url_multi_shard(self):
+        """Small chunks over several shards: every chunk start and boundary is exercised."""
+        counts = self._write_input(num_urls=1000, num_multi_captures=45)
+
+        cdxj_to_zipnum(
+            self.output_dir, self.input_file, shard_size_mb=0.002, chunk_size=10, base="test"
+        )
+
+        shards = [f for f in os.listdir(self.output_dir) if f.endswith(".cdx.gz")]
+        self.assertGreater(len(shards), 1, "Test needs multiple shards")
+        self._assert_all_found(os.path.join(self.output_dir, "test.idx"), counts)
+
+    def test_pywb_finds_every_url_single_shard(self):
+        """A single shard is renamed to <base>.cdx.gz; the idx must match the .loc."""
+        counts = self._write_input(num_urls=200, num_multi_captures=25)
+
+        cdxj_to_zipnum(
+            self.output_dir, self.input_file, shard_size_mb=1000, chunk_size=10, base="test"
+        )
+
+        shards = sorted(f for f in os.listdir(self.output_dir) if f.endswith(".cdx.gz"))
+        self.assertEqual(shards, ["test.cdx.gz"])
+        self._assert_all_found(os.path.join(self.output_dir, "test.idx"), counts)
 
 
 if __name__ == "__main__":

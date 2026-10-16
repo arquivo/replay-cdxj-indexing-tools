@@ -125,14 +125,30 @@ Tab-separated index for binary search.
 
 **Format:**
 ```
-<cdxj_key>\t<shard_name.cdx.gz>\t<byte_offset>\t<byte_length>\t<shard_number>
+<cdxj_key>\t<shard_name.cdx.gz>\t<byte_offset>\t<byte_length>\t<lineno>
 ```
+
+`<lineno>` is the line number of the entry in the `.idx`, starting at 1 and continuing
+across shards. It is **not** the shard number: pywb subtracts the `<lineno>` of the first
+and last matching entries to decide how many blocks to load.
 
 **Example:**
 ```
 pt,governo,www)/ 20230615120200	arquivo-01.cdx.gz	186	193	1
-pt,sapo,www)/ 20230615120300	arquivo-01.cdx.gz	379	155	1
+pt,sapo,www)/ 20230615120300	arquivo-01.cdx.gz	379	155	2
 ```
+
+**Indexes built with 1.2.0 or earlier** wrote the shard number in this column, which
+makes pywb miss urls that start a chunk and truncate urls whose captures span several
+chunks ([#100](https://github.com/arquivo/replay-cdxj-indexing-tools/issues/100)).
+Fix them without recompressing the shards by renumbering the `.idx`:
+
+```bash
+awk 'BEGIN{FS=OFS="\t"}{$5=NR}1' index.idx > index.idx.new && mv index.idx.new index.idx
+```
+
+Single-shard indexes from those versions also point to `<base>-01.cdx.gz` instead of
+`<base>.cdx.gz`; fix the 2nd column too (e.g. `sed -i 's/\t<base>-01\.cdx\.gz\t/\t<base>.cdx.gz\t/'`).
 
 ### 3. Location File (.loc)
 

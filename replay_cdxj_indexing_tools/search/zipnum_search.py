@@ -19,13 +19,15 @@ def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
     """
     Parse a ZipNum index line.
 
-    Format: <key>\t<shard_name>\t<offset>\t<length>\t<shard_num>
+    Format: <key>\t<shard_name>\t<offset>\t<length>\t<lineno>
+
+    <lineno> is the 1-based line number of the entry in the .idx file.
 
     Args:
         line: Index line
 
     Returns:
-        Tuple of (surt_key, shard_name, offset, length, shard_num)
+        Tuple of (surt_key, shard_name, offset, length, lineno)
     """
     parts = line.strip().split("\t")
 
@@ -35,10 +37,10 @@ def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
         try:
             offset = int(parts[2])
             length = int(parts[3])
-            shard_num = int(parts[4])
+            lineno = int(parts[4])
         except ValueError as exc:
             raise ValueError(f"Invalid numeric field in index line: {line!r}") from exc
-        return (surt_key, shard_name, offset, length, shard_num)
+        return (surt_key, shard_name, offset, length, lineno)
 
     raise ValueError(f"Invalid index line format: {line!r}")
 
@@ -265,7 +267,7 @@ def search_zipnum_index(
                     continue
 
                 try:
-                    surt_key, shard_name, offset, length, _shard_num = parse_idx_line(line_str)
+                    surt_key, shard_name, offset, length, _lineno = parse_idx_line(line_str)
 
                     if match_prefix:
                         if surt_key.startswith(search_key):

@@ -61,9 +61,11 @@ The tool creates three types of files:
 
 2. Index File (.idx)
    - Tab-separated index for binary search
-   - Format: <key>\\t<shard>\\t<offset>\\t<length>\\t<shard_num>
+   - Format: <key>\\t<shard>\\t<offset>\\t<length>\\t<lineno>
+   - <lineno> is the 1-based line number of the entry in the .idx, counted
+     across all shards (not the shard number); pywb relies on it
    - One entry per chunk (default: every 3000 lines)
-   - Example: pt,governo,www)/ 20230615120200\\tindex-01\\t186\\t193\\t1
+   - Example: pt,governo,www)/ 20230615120200\\tindex-01.cdx.gz\\t186\\t193\\t2
 
 3. Location File (.loc)
    - Maps shard names to file paths
@@ -184,6 +186,27 @@ def compress_chunk_worker(chunk_data: bytes, compress_level: int) -> bytes:
     return gzip.compress(chunk_data, compresslevel=compress_level)
 
 
+def rename_idx_shard(idx_path: str, old_name: str, new_name: str):
+    """Rewrite the shard column (2nd) of an idx file from old_name to new_name, streaming."""
+    idx_dir = os.path.dirname(os.path.abspath(idx_path))
+    tmp_fd, tmp_path = tempfile.mkstemp(dir=idx_dir, suffix=".tmp")
+    try:
+        with (
+            open(idx_path, "r", encoding="utf-8") as src,
+            os.fdopen(tmp_fd, "w", encoding="utf-8", buffering=65536) as dst,
+        ):
+            for line in src:
+                parts = line.split("\t")
+                if len(parts) >= 2 and parts[1] == old_name:
+                    parts[1] = new_name
+                dst.write("\t".join(parts))
+        os.replace(tmp_path, idx_path)
+    except BaseException:
+        if os.path.exists(tmp_path):
+            os.unlink(tmp_path)
+        raise
+
+
 def cdxj_to_zipnum(
     output_dir: str,
     input_path: str,
@@ -247,6 +270,9 @@ def cdxj_to_zipnum(
     # Buffer for idx writes to reduce I/O calls
     idx_buffer = []
     idx_buffer_size = 100  # Write idx in batches of 100 entries
+    # 5th idx column: 1-based line number across all shards. pywb's ZipNum reader
+    # subtracts these to count the blocks to load, so it must not be the shard number.
+    idx_lineno = 0
 
     # Set up parallel compression with thread pool
     try:
@@ -290,9 +316,10 @@ def cdxj_to_zipnum(
                         # Keep .cdx.gz extension in shard name for idx file part column
 
                         # Buffer idx entries to reduce I/O calls
+                        idx_lineno += 1
                         idx_buffer.append(
                             f"{pre}\t{shard_basename}\t{start_offset}\t"
-                            f"{comp_len}\t{current_shard + 1}\n"
+                            f"{comp_len}\t{idx_lineno}\n"
                         )
 
                         if len(idx_buffer) >= idx_buffer_size:
@@ -346,9 +373,9 @@ def cdxj_to_zipnum(
                     # Keep .cdx.gz extension in shard name for idx file part column
 
                     # Buffer idx entries to reduce I/O calls
+                    idx_lineno += 1
                     idx_buffer.append(
-                        f"{pre}\t{shard_basename}\t{start_offset}\t"
-                        f"{comp_len}\t{current_shard + 1}\n"
+                        f"{pre}\t{shard_basename}\t{start_offset}\t{comp_len}\t{idx_lineno}\n"
                     )
 
                     if len(idx_buffer) >= idx_buffer_size:
@@ -380,6 +407,10 @@ def cdxj_to_zipnum(
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
         simple_name = get_shard_path(0, is_single=True)
         os.replace(created_shards[0], simple_name)
+        # The idx was streamed with the numbered name; point it at the renamed shard
+        rename_idx_shard(
+            idx_name, os.path.basename(created_shards[0]), os.path.basename(simple_name)
+        )
         created_shards[0] = simple_name
 
     # Write loc file

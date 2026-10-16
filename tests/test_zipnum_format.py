@@ -58,16 +58,16 @@ class TestZipNumFormat(unittest.TestCase):
             f.write(gzip.compress(shard3_data.encode("utf-8")))
 
         # Create ZipNum index file with proper format
-        # Format: <key>\t<shard_name>\t<offset>\t<length>\t<shard_num>
+        # Format: <key>\t<shard_name>\t<offset>\t<length>\t<lineno>
         self.idx_file = os.path.join(self.test_dir, "test.idx")
         shard1_size = os.path.getsize(self.shard1)
         shard2_size = os.path.getsize(self.shard2)
         shard3_size = os.path.getsize(self.shard3)
 
         with open(self.idx_file, "w") as f:
-            f.write(f"com,example)/\ttest-00.cdx.gz\t0\t{shard1_size}\t0\n")
-            f.write(f"com,test)/\ttest-01.cdx.gz\t0\t{shard2_size}\t1\n")
-            f.write(f"org,example)/\ttest-02.cdx.gz\t0\t{shard3_size}\t2\n")
+            f.write(f"com,example)/\ttest-00.cdx.gz\t0\t{shard1_size}\t1\n")
+            f.write(f"com,test)/\ttest-01.cdx.gz\t0\t{shard2_size}\t2\n")
+            f.write(f"org,example)/\ttest-02.cdx.gz\t0\t{shard3_size}\t3\n")
 
         # Create optional .loc file
         self.loc_file = os.path.join(self.test_dir, "test.loc")
@@ -84,14 +84,14 @@ class TestZipNumFormat(unittest.TestCase):
 
     def test_parse_idx_line(self):
         """Test parsing ZipNum index line format."""
-        line = "com,example)/\tbase-00.cdx.gz\t0\t100\t0"
-        surt_key, shard_name, offset, length, shard_num = parse_idx_line(line)
+        line = "com,example)/\tbase-00.cdx.gz\t0\t100\t1"
+        surt_key, shard_name, offset, length, lineno = parse_idx_line(line)
 
         self.assertEqual(surt_key, "com,example)/")
         self.assertEqual(shard_name, "base-00.cdx.gz")
         self.assertEqual(offset, 0)
         self.assertEqual(length, 100)
-        self.assertEqual(shard_num, 0)
+        self.assertEqual(lineno, 1)
 
     def test_read_loc_file(self):
         """Test reading .loc file."""
