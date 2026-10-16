@@ -106,7 +106,9 @@ com,example)/ 20230102000000	shard-02.cdx.gz	0	48102	2
 com,example)/ 20230103000000	shard-03.cdx.gz	0	52341	3
 ```
 
-Format: `<key>\t<shard_name.cdx.gz>\t<offset>\t<length>\t<shard_num>`
+Format: `<key>\t<shard_name.cdx.gz>\t<offset>\t<length>\t<lineno>`
+
+`<lineno>` is the 1-based line number of the entry in the `.idx` (not the shard number).
 
 #### 2. Shard Files (.cdx.gz)
 

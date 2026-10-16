@@ -44,7 +44,7 @@ ZIPNUM FORMAT
 ZipNum format consists of:
 
 1. Index File (.idx)
-   - Tab-separated: <key>\\t<shard>\\t<offset>\\t<length>\\t<shard_num>
+   - Tab-separated: <key>\\t<shard>\\t<offset>\\t<length>\\t<lineno>
    - Points to compressed chunks in shard files
    - Used to discover which .cdx.gz files to decompress
 
@@ -117,7 +117,7 @@ from typing import List, Optional, Tuple
 
 def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
     """
-    Read .idx file and return list of (key, shard_name, offset, length, shard_num).
+    Read .idx file and return list of (key, shard_name, offset, length, lineno).
     Supports idx_path == '-' for stdin.
 
     Returns entries grouped by shard in order they appear.
@@ -143,9 +143,9 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
             shard_name = parts[1]
             offset = int(parts[2])
             length = int(parts[3])
-            shard_num = int(parts[4])
+            lineno = int(parts[4])
 
-            entries.append((key, shard_name, offset, length, shard_num))
+            entries.append((key, shard_name, offset, length, lineno))
     finally:
         if idx_path != "-":
             fh.close()
