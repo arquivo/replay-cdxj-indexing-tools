@@ -105,9 +105,11 @@ def search_zipnum_index(
             if file_size == 0:
                 return []
 
-            # Binary search to find first potential matching block
+            # Binary search for the last line whose key sorts before search_key.
+            # Invariant: left is 0 or the start of a whole parsed line with a key
+            # < search_key, so in a sorted .idx every line that can match starts at
+            # or after left, whatever the line lengths.
             left, right = 0, file_size
-            found_pos = None
             iterations = 0
             max_iterations = 100  # Safety limit
 
@@ -163,90 +165,18 @@ def search_zipnum_index(
                         file=sys.stderr,
                     )
 
-                # Binary search logic
-                if match_prefix:
-                    if surt_key < search_key:
-                        left = current_pos
-                    else:
-                        right = mid
-                        if surt_key.startswith(search_key):
-                            found_pos = current_pos
+                if surt_key < search_key:
+                    left = current_pos
                 else:
-                    if surt_key < search_key:
-                        left = current_pos
-                    elif surt_key > search_key:
-                        right = mid
-                    else:
-                        # Exact match
-                        found_pos = current_pos
-                        right = mid  # Continue searching left for first occurrence
+                    right = mid
 
             if verbose:
                 print(f"  Binary search completed in {iterations} iterations", file=sys.stderr)
 
-            # Determine starting position
-            if found_pos is None:
-                # No exact match found in binary search
-                # Binary search gives us left boundary - scan back a bit to ensure
-                # we don't miss blocks where surt_key < search_key
-                check_start = max(0, left - 10000)  # Check up to 10KB back
-                fp.seek(check_start)
-                if check_start > 0:
-                    fp.readline()
-
-                start_pos = fp.tell()
-            else:
-                # Found a match, scan backwards to find first match
-                check_start = max(0, found_pos - 10000)
-                fp.seek(check_start)
-                if check_start > 0:
-                    fp.readline()
-
-                first_match_pos = None
-                while fp.tell() < file_size:
-                    line_start = fp.tell()
-                    line = fp.readline()
-                    if not line:
-                        break
-
-                    try:
-                        line_str = line.decode("utf-8").strip()
-                    except UnicodeDecodeError:
-                        logger.warning(
-                            "Invalid UTF-8 in index file at offset %d, skipping line", fp.tell()
-                        )
-                        continue
-                    if not line_str:
-                        continue
-
-                    try:
-                        surt_key, _, _, _, _ = parse_idx_line(line_str)
-
-                        if match_prefix:
-                            is_match = surt_key.startswith(search_key) or surt_key < search_key
-                        else:
-                            is_match = surt_key <= search_key
-
-                        if is_match:
-                            if first_match_pos is None:
-                                first_match_pos = line_start
-                        elif surt_key > search_key:
-                            break
-
-                        if line_start > found_pos + 1000:
-                            break
-                    except ValueError:
-                        continue
-
-                start_pos = first_match_pos if first_match_pos is not None else found_pos
-
-            # Collect all matching blocks from start position
-            fp.seek(start_pos)
-
-            # If start_pos is in the middle of the file, skip the partial line
-            if start_pos > 0:
-                fp.readline()
-
+            # .idx keys are sparse (the first key of each block), so the first match
+            # can sit in the last block whose key sorts before search_key: keep that
+            # one block, then every block whose key is in range.
+            fp.seek(left)
             while True:
                 pos = fp.tell()
                 if pos >= file_size:
@@ -268,27 +198,23 @@ def search_zipnum_index(
 
                 try:
                     surt_key, shard_name, offset, length, _lineno = parse_idx_line(line_str)
-
-                    if match_prefix:
-                        if surt_key.startswith(search_key):
-                            matching_blocks.append((surt_key, shard_name, offset, length))
-                        elif surt_key < search_key:
-                            matching_blocks.append((surt_key, shard_name, offset, length))
-                        else:
-                            # surt_key > search_key and doesn't start with prefix
-                            # Stop immediately - no more matches possible
-                            break
-                    else:
-                        if surt_key <= search_key:
-                            matching_blocks.append((surt_key, shard_name, offset, length))
-                        else:
-                            # surt_key > search_key - stop immediately
-                            break
-
                 except ValueError as e:
                     if verbose:
                         print(f"  Warning: Skipping invalid index line: {e}", file=sys.stderr)
                     continue
+
+                if match_prefix:
+                    in_range = surt_key.startswith(search_key)
+                else:
+                    in_range = surt_key == search_key
+
+                block = (surt_key, shard_name, offset, length)
+                if in_range:
+                    matching_blocks.append(block)
+                elif surt_key < search_key:
+                    matching_blocks = [block]
+                else:
+                    break
 
     except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised after logging
         if verbose:
@@ -498,6 +424,9 @@ def search_zipnum_file(
     Returns results as an iterator to enable unlimited result sets with constant memory usage.
     Results are yielded as they're found from each shard, allowing efficient processing
     of very large result sets without loading everything into memory.
+
+    The .idx must be sorted by byte value (``LC_ALL=C sort``), as written by
+    flat-cdxj-to-zipnum; otherwise matches may be missed.
 
     Args:
         idx_filepath: Path to .idx file
