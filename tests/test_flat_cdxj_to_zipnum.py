@@ -216,9 +216,12 @@ import unittest
 
 # Import the module under test
 from replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum import (
+    _SINGLE_SHARD_SENTINEL_MB,
     cdxj_to_zipnum,
     extract_prejson,
+    main,
     open_input_path,
+    parse_args,
     stream_chunks_from_input,
 )
 
@@ -1154,6 +1157,348 @@ class TestPywbCompatibility(unittest.TestCase):
         shards = sorted(f for f in os.listdir(self.output_dir) if f.endswith(".cdx.gz"))
         self.assertEqual(shards, ["test.cdx.gz"])
         self._assert_all_found(os.path.join(self.output_dir, "test.idx"), counts)
+
+
+class TestNumericArgValidation(unittest.TestCase):
+    """--shard-size/--chunk-size/--workers reject zero and negative values."""
+
+    def test_parse_args_rejects_non_positive_shard_size(self):
+        """parse_args() exits (via argparse) when --shard-size is not positive."""
+        with self.assertRaises(SystemExit):
+            parse_args(["-i", "in.cdxj", "-o", "out", "--shard-size", "0"])
+
+    def test_parse_args_rejects_non_positive_chunk_size(self):
+        """parse_args() exits (via argparse) when --chunk-size is not positive."""
+        with self.assertRaises(SystemExit):
+            parse_args(["-i", "in.cdxj", "-o", "out", "--chunk-size", "-5"])
+
+    def test_parse_args_rejects_non_positive_workers(self):
+        """parse_args() exits (via argparse) when --workers is not positive."""
+        with self.assertRaises(SystemExit):
+            parse_args(["-i", "in.cdxj", "-o", "out", "--workers", "0"])
+
+    def test_parse_args_accepts_positive_values(self):
+        """parse_args() accepts positive values for shard-size/chunk-size/workers."""
+        args = parse_args(
+            [
+                "-i",
+                "in.cdxj",
+                "-o",
+                "out",
+                "--shard-size",
+                "50",
+                "--chunk-size",
+                "10",
+                "--workers",
+                "2",
+            ]
+        )
+        self.assertEqual(args.shard_size, 50)
+        self.assertEqual(args.chunk_size, 10)
+        self.assertEqual(args.workers, 2)
+
+
+class TestSingleShardSentinel(unittest.TestCase):
+    """Tests for the --single-shard sentinel shard size."""
+
+    def test_main_single_shard_passes_int_sentinel(self):
+        """main() --single-shard passes the plain-int sentinel, not float('inf')."""
+        import unittest.mock as mock
+
+        with mock.patch(
+            "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum.cdxj_to_zipnum"
+        ) as mock_convert:
+            main(["-i", "in.cdxj", "-o", "out", "--single-shard"])
+
+        shard_size = mock_convert.call_args.kwargs["shard_size_mb"]
+        self.assertIs(type(shard_size), int)
+        self.assertEqual(shard_size, _SINGLE_SHARD_SENTINEL_MB)
+
+
+class TestTempShardCleanup(unittest.TestCase):
+    """
+    Temp shard files are never left behind or committed truncated, and the
+    root-cause exception is never masked, whatever close()/unlink() raise.
+    """
+
+    MODULE = "replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum"
+    CLOSE_ERRORS = (OSError, ValueError)
+    ROTATING_LINES = 3000
+
+    def setUp(self):
+        self.input_dir = tempfile.mkdtemp()
+        self.output_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        shutil.rmtree(self.input_dir, ignore_errors=True)
+        shutil.rmtree(self.output_dir, ignore_errors=True)
+
+    @staticmethod
+    def _make_fail_once_fdopen(exc):
+        """Return an os.fdopen replacement whose first returned handle's close() raises exc."""
+        original_fdopen = os.fdopen
+        close_calls = []
+
+        class FailOnceWriter:
+            def __init__(self, fh):
+                self._fh = fh
+
+            def write(self, data):
+                return self._fh.write(data)
+
+            def tell(self):
+                return self._fh.tell()
+
+            def close(self):
+                close_calls.append(1)
+                self._fh.close()
+                if len(close_calls) == 1:
+                    raise exc
+
+        def wrapped_fdopen(*args, **kwargs):
+            return FailOnceWriter(original_fdopen(*args, **kwargs))
+
+        return wrapped_fdopen
+
+    @staticmethod
+    def _make_disk_full_on_close_fdopen():
+        """
+        Return an os.fdopen replacement whose handles hit ENOSPC when close()
+        flushes the write buffer: the buffered bytes never reach the file, as
+        with a real disk filling up while a shard is being finalised.
+        """
+        import errno
+        import io
+
+        class DiskFullRaw(io.FileIO):
+            disk_full = False
+
+            def write(self, b):
+                if self.disk_full:
+                    raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+                return super().write(b)
+
+        class DiskFullOnCloseWriter(io.BufferedWriter):
+            def close(self):
+                self.raw.disk_full = True
+                super().close()
+
+        def fake_fdopen(fd, mode="r", buffering=-1):
+            assert mode == "wb"
+            return DiskFullOnCloseWriter(DiskFullRaw(fd, "wb"), buffer_size=buffering)
+
+        return fake_fdopen
+
+    def _tmp_files(self):
+        return [name for name in os.listdir(self.output_dir) if name.endswith(".tmp")]
+
+    def _shard_files(self):
+        return [name for name in os.listdir(self.output_dir) if name.endswith(".cdx.gz")]
+
+    def _write_rotating_input(self):
+        """Write poorly-compressible input so a 0.1 MB shard size forces rotation."""
+        import random
+
+        rng = random.Random(84)
+        alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        with open(input_file, "wb") as f:
+            for i in range(self.ROTATING_LINES):
+                data = "".join(rng.choices(alphabet, k=200))
+                f.write(f'org,example)/{i:06d} 20200101{i:06d} {{"data": "{data}"}}\n'.encode())
+        return input_file
+
+    def _write_small_input(self):
+        input_file = os.path.join(self.input_dir, "small.cdxj")
+        with open(input_file, "wb") as f:
+            f.writelines([b'pt,example)/ 20200101120000 {"status": "200"}\n'] * 10)
+        return input_file
+
+    def _assert_warning(self, log_ctx, text):
+        self.assertTrue(
+            any(text in line for line in log_ctx.output),
+            f"Expected a warning containing {text!r}, got: {log_ctx.output}",
+        )
+
+    def test_rotation_flush_failure_is_fatal(self):
+        """
+        ENOSPC while flushing a rotated-out shard fails the run with that error
+        instead of committing a truncated shard, and removes the temp shard.
+        """
+        import errno
+        import unittest.mock as mock
+
+        input_file = self._write_rotating_input()
+        with mock.patch("os.fdopen", side_effect=self._make_disk_full_on_close_fdopen()):
+            with self.assertRaises(OSError) as raised:
+                cdxj_to_zipnum(self.output_dir, input_file, shard_size_mb=0.1, chunk_size=100)
+
+        self.assertEqual(raised.exception.errno, errno.ENOSPC)
+        self.assertEqual(self._tmp_files(), [])
+        self.assertEqual(self._shard_files(), [], "a truncated shard must not be committed")
+
+    def test_rotation_close_error_keeps_root_cause(self):
+        """
+        Any Exception closing a rotated-out shard propagates unchanged, the temp
+        shard is removed, and the shard is not committed.
+        """
+        import unittest.mock as mock
+
+        input_file = self._write_rotating_input()
+        for exc_type in self.CLOSE_ERRORS:
+            with self.subTest(exc_type=exc_type.__name__):
+                close_error = exc_type("simulated close failure")
+                with mock.patch("os.fdopen", side_effect=self._make_fail_once_fdopen(close_error)):
+                    with self.assertRaises(exc_type) as raised:
+                        cdxj_to_zipnum(
+                            self.output_dir, input_file, shard_size_mb=0.1, chunk_size=100
+                        )
+
+                self.assertIs(raised.exception, close_error)
+                self.assertEqual(self._tmp_files(), [])
+                self.assertEqual(self._shard_files(), [])
+
+    def test_rotation_fdopen_failure_closes_fd_and_removes_temp(self):
+        """
+        If opening the next shard fails, the original error propagates, the fd
+        is closed and the temp file removed, including when fdopen() had already
+        closed the fd itself (as io.open does when it fails after wrapping it).
+        """
+        import unittest.mock as mock
+
+        input_file = self._write_rotating_input()
+        original_fdopen = os.fdopen
+        for fdopen_closes_fd in (False, True):
+            with self.subTest(fdopen_closes_fd=fdopen_closes_fd):
+                shutil.rmtree(self.output_dir)
+                fds = []
+                open_error = MemoryError("simulated fdopen failure")
+
+                def fdopen_failing_on_rotation(fd, *args, **kwargs):
+                    fds.append(fd)
+                    if len(fds) == 2:  # the first shard opens fine; fail opening the second
+                        if fdopen_closes_fd:
+                            os.close(fd)
+                        raise open_error
+                    return original_fdopen(fd, *args, **kwargs)
+
+                with mock.patch("os.fdopen", side_effect=fdopen_failing_on_rotation):
+                    with self.assertRaises(MemoryError) as raised:
+                        cdxj_to_zipnum(
+                            self.output_dir, input_file, shard_size_mb=0.1, chunk_size=100
+                        )
+
+                self.assertIs(raised.exception, open_error)
+                self.assertEqual(len(fds), 2)
+                with self.assertRaises(OSError, msg="the fd of the failed shard was leaked"):
+                    os.fstat(fds[1])
+                self.assertEqual(self._tmp_files(), [])
+
+    def test_cleanup_close_error_is_logged(self):
+        """
+        Any Exception closing the shard while unwinding an error is logged, the
+        temp shard is still removed, and the root-cause exception propagates.
+        """
+        import unittest.mock as mock
+
+        input_file = self._write_small_input()
+        root_cause = RuntimeError("simulated compression failure")
+        for exc_type in self.CLOSE_ERRORS:
+            with self.subTest(exc_type=exc_type.__name__):
+                close_error = exc_type("simulated close failure")
+                with mock.patch(f"{self.MODULE}.compress_chunk_worker", side_effect=root_cause):
+                    with mock.patch(
+                        "os.fdopen", side_effect=self._make_fail_once_fdopen(close_error)
+                    ):
+                        with self.assertLogs(self.MODULE, level="WARNING") as log_ctx:
+                            with self.assertRaises(RuntimeError) as raised:
+                                cdxj_to_zipnum(self.output_dir, input_file, chunk_size=5)
+
+                self.assertIs(raised.exception, root_cause)
+                self._assert_warning(log_ctx, "Error closing shard file during cleanup")
+                self.assertEqual(self._tmp_files(), [])
+
+    def test_cleanup_unlink_error_is_logged(self):
+        """
+        Any Exception removing the temp shard while unwinding an error is logged
+        and the root-cause exception still propagates, also when close() failed too.
+        """
+        import unittest.mock as mock
+
+        input_file = self._write_small_input()
+        root_cause = RuntimeError("simulated compression failure")
+        for exc_type in self.CLOSE_ERRORS:
+            with self.subTest(exc_type=exc_type.__name__):
+                close_error = exc_type("simulated close failure")
+                with mock.patch(f"{self.MODULE}.compress_chunk_worker", side_effect=root_cause):
+                    with mock.patch(
+                        "os.fdopen", side_effect=self._make_fail_once_fdopen(close_error)
+                    ):
+                        with mock.patch(
+                            f"{self.MODULE}.os.unlink",
+                            side_effect=exc_type("simulated unlink failure"),
+                        ) as mock_unlink:
+                            with self.assertLogs(self.MODULE, level="WARNING") as log_ctx:
+                                with self.assertRaises(RuntimeError) as raised:
+                                    cdxj_to_zipnum(self.output_dir, input_file, chunk_size=5)
+
+                self.assertIs(raised.exception, root_cause)
+                mock_unlink.assert_called_once()
+                self._assert_warning(log_ctx, "Error closing shard file during cleanup")
+                self._assert_warning(log_ctx, "Error removing temp shard file")
+
+    def test_final_close_error_propagates_and_removes_temp(self):
+        """
+        A close() failure on the final shard (e.g. ENOSPC) propagates and the
+        unfinished temp shard is not left behind.
+        """
+        import unittest.mock as mock
+
+        input_file = self._write_small_input()
+        for exc_type in self.CLOSE_ERRORS:
+            with self.subTest(exc_type=exc_type.__name__):
+                close_error = exc_type("simulated close failure")
+                with mock.patch("os.fdopen", side_effect=self._make_fail_once_fdopen(close_error)):
+                    with self.assertRaises(exc_type) as raised:
+                        cdxj_to_zipnum(self.output_dir, input_file, chunk_size=5)
+
+                self.assertIs(raised.exception, close_error)
+                self.assertEqual(self._tmp_files(), [])
+
+    def test_called_while_caller_handles_an_exception(self):
+        """
+        Running inside a caller's except block must still commit every shard:
+        each shard listed in .loc exists and all input lines are present.
+        """
+        cases = {
+            "rotating": (self._write_rotating_input(), 0.1, 100, self.ROTATING_LINES),
+            "single": (self._write_small_input(), 100, 5, 10),
+        }
+        for name, (input_file, shard_size_mb, chunk_size, expected_lines) in cases.items():
+            with self.subTest(case=name):
+                shutil.rmtree(self.output_dir)
+                try:
+                    raise KeyError("caller's own exception being handled")
+                except KeyError:
+                    cdxj_to_zipnum(
+                        self.output_dir,
+                        input_file,
+                        shard_size_mb=shard_size_mb,
+                        chunk_size=chunk_size,
+                    )
+
+                base = os.path.basename(self.output_dir)
+                with open(os.path.join(self.output_dir, f"{base}.loc"), encoding="utf-8") as locf:
+                    shards = [line.split("\t")[0] for line in locf if line.strip()]
+                self.assertTrue(shards)
+                total_lines = 0
+                for shard in shards:
+                    shard_path = os.path.join(self.output_dir, shard)
+                    self.assertTrue(os.path.exists(shard_path), f"{shard} listed but missing")
+                    with gzip.open(shard_path, "rb") as gz:
+                        total_lines += sum(1 for _ in gz)
+                self.assertEqual(total_lines, expected_lines)
+                self.assertEqual(self._tmp_files(), [])
 
 
 if __name__ == "__main__":

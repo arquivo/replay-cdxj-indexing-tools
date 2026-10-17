@@ -126,7 +126,9 @@ in pywb configuration.
 """
 
 import concurrent.futures
+import contextlib
 import gzip
+import logging
 import os
 import sys
 import tempfile
@@ -134,6 +136,55 @@ from argparse import ArgumentParser
 from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
+
+from replay_cdxj_indexing_tools.cli_utils import positive_int
+
+logger = logging.getLogger(__name__)
+
+# Sentinel shard size (MB) used for --single-shard: large enough that the
+# ">= target_shard_size" rotation check never triggers, while remaining a
+# plain int so shard_size_mb keeps its declared type.
+_SINGLE_SHARD_SENTINEL_MB = 10 * 1024 * 1024  # 10 TB in MB
+
+
+def _open_temp_shard(output_dir: str) -> Tuple[BinaryIO, str]:
+    """Create a temp shard file in output_dir, opened with a large write buffer."""
+    fd, temp_path = tempfile.mkstemp(dir=output_dir, suffix=".tmp")
+    try:
+        return os.fdopen(fd, "wb", buffering=65536), temp_path
+    except BaseException:
+        # If fdopen() failed after wrapping fd it has already closed it, so an
+        # EBADF here must not mask the original error. Close before removing:
+        # Windows can't delete a file that is still open.
+        with contextlib.suppress(OSError):
+            os.close(fd)
+        _remove_temp_shard(temp_path)
+        raise
+
+
+def _remove_temp_shard(temp_path: str) -> None:
+    """Best-effort removal of a temp shard file; failures are logged, never raised."""
+    if temp_path and os.path.exists(temp_path):
+        try:
+            os.unlink(temp_path)
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # best-effort
+            logger.warning("Error removing temp shard file %s (non-fatal): %s", temp_path, exc)
+
+
+def _discard_temp_shard(fh: BinaryIO, temp_path: str) -> None:
+    """
+    Best-effort close and removal of an unfinished temp shard file.
+
+    Used while an error is already propagating, so it must not mask it: any
+    Exception from close() or unlink() is logged as a warning, and the unlink
+    runs even if close() raised.
+    """
+    try:
+        fh.close()
+    except Exception as exc:  # pylint: disable=broad-exception-caught  # best-effort close
+        logger.warning("Error closing shard file during cleanup (non-fatal): %s", exc)
+    finally:
+        _remove_temp_shard(temp_path)
 
 
 def open_input_path(path: str) -> Union[BinaryIO, gzip.GzipFile]:
@@ -246,7 +297,6 @@ def cdxj_to_zipnum(
 
     # Only keep current shard file handle open (memory efficient)
     current_shard = 0
-    current_raw_fh = None
 
     # Helper function to generate shard path
     def get_shard_path(shard_num: int, is_single: bool = False) -> str:
@@ -257,12 +307,9 @@ def cdxj_to_zipnum(
             return os.path.join(output_dir, f"{base}-{shard_num+1:02d}.cdx.gz")
 
     # Open first shard (we'll rename if it ends up being single shard)
-    # Use larger buffer for better I/O performance
-    current_temp_path: str = ""  # tracks temp file for current shard
     shard_path = get_shard_path(current_shard)
     created_shards.append(shard_path)
-    _tmp_fd, current_temp_path = tempfile.mkstemp(dir=output_dir, suffix=".tmp")
-    current_raw_fh = os.fdopen(_tmp_fd, "wb", buffering=65536)
+    current_raw_fh, current_temp_path = _open_temp_shard(output_dir)
 
     # Iterate chunks in order and write sequentially to shards
     # This maintains the sorted order for binary search
@@ -334,21 +381,18 @@ def cdxj_to_zipnum(
                                 idxf.write("".join(idx_buffer))
                                 idx_buffer.clear()
 
-                            # Close current shard file
-                            try:
-                                current_raw_fh.close()
-                            except Exception:  # pylint: disable=broad-exception-caught  # nonfatal
-                                pass
+                            # Close and commit the current shard. A close() failure
+                            # (e.g. ENOSPC while flushing) leaves the shard truncated
+                            # under idx entries already written, so it is fatal: the
+                            # handler below discards the temp shard and re-raises.
+                            current_raw_fh.close()
                             os.replace(current_temp_path, created_shards[current_shard])
 
-                            # Move to next shard and open new file with larger buffer
+                            # Move to next shard and open a new temp file for it
                             current_shard += 1
                             shard_path = get_shard_path(current_shard)
                             created_shards.append(shard_path)
-                            _tmp_fd, current_temp_path = tempfile.mkstemp(
-                                dir=output_dir, suffix=".tmp"
-                            )
-                            current_raw_fh = os.fdopen(_tmp_fd, "wb", buffering=65536)
+                            current_raw_fh, current_temp_path = _open_temp_shard(output_dir)
 
                 # Process remaining compressed chunks in queue
                 while compression_queue:
@@ -386,22 +430,14 @@ def cdxj_to_zipnum(
                 if idx_buffer:
                     idxf.write("".join(idx_buffer))
 
-    finally:
-        # Close final shard file; propagate close errors on the success path
-        # so callers learn about ENOSPC or other flush failures.
-        if sys.exc_info()[0] is None:
-            current_raw_fh.close()
-            os.replace(current_temp_path, created_shards[current_shard])
-        else:
-            try:
-                current_raw_fh.close()
-            except Exception:  # pylint: disable=broad-exception-caught  # best-effort close
-                pass
-            if current_temp_path and os.path.exists(current_temp_path):
-                try:
-                    os.unlink(current_temp_path)
-                except Exception:  # pylint: disable=broad-exception-caught  # best-effort cleanup
-                    pass
+        # Close and commit the final shard; close errors (e.g. ENOSPC while
+        # flushing) propagate so callers learn about them.
+        current_raw_fh.close()
+        os.replace(current_temp_path, created_shards[current_shard])
+    except BaseException:
+        # Never leave an unfinished temp shard behind; re-raise the original error.
+        _discard_temp_shard(current_raw_fh, current_temp_path)
+        raise
 
     # If only one shard was created, rename it to use simple naming (no numbering)
     if len(created_shards) == 1 and not created_shards[0].endswith(f"{base}.cdx.gz"):
@@ -442,7 +478,7 @@ def parse_args(argv=None):
     p.add_argument(
         "-s",
         "--shard-size",
-        type=int,
+        type=positive_int,
         default=100,
         help=(
             "Target size in MB for each shard file (default: 100MB, same as WARC files). "
@@ -457,7 +493,11 @@ def parse_args(argv=None):
         ),
     )
     p.add_argument(
-        "-c", "--chunk-size", type=int, default=3000, help="Lines per chunk (default: 3000)"
+        "-c",
+        "--chunk-size",
+        type=positive_int,
+        default=3000,
+        help="Lines per chunk (default: 3000)",
     )
     p.add_argument(
         "--compress-level",
@@ -471,7 +511,7 @@ def parse_args(argv=None):
     )
     p.add_argument(
         "--workers",
-        type=int,
+        type=positive_int,
         default=4,
         help=(
             "Number of parallel compression workers (default: 4). "
@@ -502,8 +542,9 @@ def main(argv=None):
     Parses arguments and calls cdxj_to_zipnum with appropriate parameters.
     """
     args = parse_args(argv)
-    # If single-shard mode, use a very large shard size to ensure everything fits in one shard
-    shard_size = float("inf") if args.single_shard else args.shard_size
+    # Warnings from best-effort cleanup go to stderr with a level prefix
+    logging.basicConfig(format="[%(levelname)s] %(message)s")
+    shard_size = _SINGLE_SHARD_SENTINEL_MB if args.single_shard else args.shard_size
     cdxj_to_zipnum(
         args.output,
         args.input,

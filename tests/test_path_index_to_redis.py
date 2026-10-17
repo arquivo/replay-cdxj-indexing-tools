@@ -85,6 +85,7 @@ from unittest.mock import MagicMock, patch
 
 # Import the module under test
 from replay_cdxj_indexing_tools.redis.path_index_to_redis import (
+    main,
     parse_index_line,
     read_index_entries,
     submit_index_to_redis,
@@ -699,6 +700,41 @@ class TestSubmitIndexToRedis(unittest.TestCase):
                 # Verify warning was NOT printed when password is provided
                 self.assertNotIn("remote Redis", stderr_output)
 
+    def test_close_error_is_logged_not_raised(self):
+        """
+        A failure while closing the Redis connection is printed to stderr and
+        non-fatal, rather than propagating out of submit_index_to_redis().
+        """
+        test_file = os.path.join(self.test_dir, "pathindex.txt")
+        with open(test_file, "w") as f:
+            f.write("file001.warc.gz\t/mnt/storage/file001.warc.gz\n")
+
+        mock_redis = MagicMock()
+        mock_pipeline = MagicMock()
+        mock_redis.pipeline.return_value = mock_pipeline
+        mock_redis.close.side_effect = OSError("simulated close failure")
+
+        mock_redis_module = MagicMock()
+        mock_redis_module.Redis.return_value = mock_redis
+
+        captured_stderr = StringIO()
+
+        with patch.dict("sys.modules", {"redis": mock_redis_module}):
+            with patch("sys.stderr", captured_stderr):
+                submitted, errors = submit_index_to_redis(
+                    input_paths=[test_file],
+                    redis_key="pathindex:test-collection",
+                    redis_host="localhost",
+                    redis_port=6379,
+                    batch_size=100,
+                    dry_run=False,
+                    verbose=False,
+                )
+
+        self.assertEqual(submitted, 1)
+        self.assertEqual(errors, 0)
+        self.assertIn("Error closing Redis connection", captured_stderr.getvalue())
+
 
 class TestCLIIntegration(unittest.TestCase):
     """
@@ -755,6 +791,46 @@ class TestCLIIntegration(unittest.TestCase):
         # Missing -k/--redis-key argument
         with self.assertRaises(SystemExit):
             main(["-i", "nonexistent.txt"])
+
+
+class TestNumericArgValidation(unittest.TestCase):
+    """--batch-size/--pool-size/--timeout reject zero and negative values."""
+
+    @patch("replay_cdxj_indexing_tools.redis.path_index_to_redis.submit_index_to_redis")
+    def test_main_rejects_non_positive_values(self, mock_submit):
+        """main() exits with argparse's usage error before connecting to Redis."""
+        for flag in ("--batch-size", "--pool-size", "--timeout"):
+            for value in ("0", "-5"):
+                with self.subTest(flag=flag, value=value):
+                    with patch("sys.stderr", StringIO()) as captured_stderr:
+                        with self.assertRaises(SystemExit) as ctx:
+                            main(["-i", "in.txt", "-k", "pathindex:test", flag, value])
+                    self.assertEqual(ctx.exception.code, 2)
+                    self.assertIn("must be a positive integer", captured_stderr.getvalue())
+        mock_submit.assert_not_called()
+
+    @patch("replay_cdxj_indexing_tools.redis.path_index_to_redis.submit_index_to_redis")
+    def test_main_passes_positive_values(self, mock_submit):
+        """Valid --batch-size/--pool-size/--timeout values reach submit_index_to_redis()."""
+        mock_submit.return_value = (0, 0)
+        main(
+            [
+                "-i",
+                "in.txt",
+                "-k",
+                "pathindex:test",
+                "--batch-size",
+                "7",
+                "--pool-size",
+                "20",
+                "--timeout",
+                "30",
+            ]
+        )
+        kwargs = mock_submit.call_args.kwargs
+        self.assertEqual(kwargs["batch_size"], 7)
+        self.assertEqual(kwargs["pool_size"], 20)
+        self.assertEqual(kwargs["timeout"], 30)
 
 
 if __name__ == "__main__":

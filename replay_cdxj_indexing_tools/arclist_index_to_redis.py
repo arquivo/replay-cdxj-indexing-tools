@@ -114,6 +114,8 @@ import sys
 import time
 from typing import List, Optional
 
+from replay_cdxj_indexing_tools.cli_utils import positive_int
+
 # ANSI color codes for terminal output
 BLUE = "\033[0;34m"
 GREEN = "\033[0;32m"
@@ -350,8 +352,8 @@ def run_pipeline(
                 arclist_proc.terminate()
             if redis_proc:
                 redis_proc.terminate()
-        except Exception:  # pylint: disable=broad-exception-caught  # best-effort terminate
-            pass
+        except Exception as e:  # pylint: disable=broad-exception-caught  # best-effort terminate
+            log_warning(f"Error terminating subprocesses (non-fatal): {e}")
         return 130
 
     except Exception as e:  # pylint: disable=broad-exception-caught  # catch-all
@@ -443,16 +445,16 @@ argument handling, colored logging, and --clear option support.
     perf_group = parser.add_argument_group("Performance tuning")
     perf_group.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=500,
         help="Number of entries per batch (default: 500)",
     )
     perf_group.add_argument(
-        "--pool-size", type=int, default=10, help="Connection pool size (default: 10)"
+        "--pool-size", type=positive_int, default=10, help="Connection pool size (default: 10)"
     )
     perf_group.add_argument(
         "--timeout",
-        type=int,
+        type=positive_int,
         default=10,
         help="Connection timeout in seconds (default: 10)",
     )
