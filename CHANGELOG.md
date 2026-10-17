@@ -2,6 +2,21 @@
 
 <!-- version list -->
 
+## v1.2.3 (2026-10-17)
+
+### Bug Fixes
+
+- **extract-field**: Count missing-field lines as skipped in stats
+  ([#80](https://github.com/arquivo/replay-cdxj-indexing-tools/pull/80),
+  [`e6288ab`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/e6288abda87f557bff6c8b01fe2baeeff8f3ffdf))
+
+### Refactoring
+
+- **search**: Replace always-true elif branches in binary search forward scan
+  ([#88](https://github.com/arquivo/replay-cdxj-indexing-tools/pull/88),
+  [`0404758`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/0404758597fdec349dc5fca869491d0c4e13afbd))
+
+
 ## v1.2.2 (2026-10-17)
 
 ### Bug Fixes
