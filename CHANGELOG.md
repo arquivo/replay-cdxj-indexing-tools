@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.6 (2026-10-17)
+
+### Bug Fixes
+
+- **zipnum**: Share path containment check and accept base dir "/"
+  ([#89](https://github.com/arquivo/replay-cdxj-indexing-tools/pull/89),
+  [`e30b2e0`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/e30b2e003179a90152b49a7eec908592fb2d2b73))
+
+
 ## v1.2.5 (2026-10-17)
 
 ### Bug Fixes
