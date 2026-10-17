@@ -88,6 +88,9 @@ Skip records where the field is missing:
 cat index.cdxj | cdxj-extract-field --field collection --skip-missing
 ```
 
+`--skip-missing` takes precedence over `--default`: if both are given, records
+without the field are skipped and the default is not output.
+
 ### Verbose Mode
 
 Show processing statistics:
@@ -196,7 +199,7 @@ Options:
 - `--input, -i` - Input CDXJ file (default: stdin)
 - `--raw, -r` - Output raw values without JSON encoding
 - `--default, -d` - Default value for missing fields
-- `--skip-missing, -s` - Skip lines with missing field
+- `--skip-missing, -s` - Skip lines with missing field (takes precedence over `--default`)
 - `--verbose, -v` - Print statistics to stderr
 
 ## Field Types
