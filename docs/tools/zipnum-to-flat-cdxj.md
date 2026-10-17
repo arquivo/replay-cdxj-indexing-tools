@@ -445,6 +445,10 @@ cat indexes/index.idx | awk '{print $2}' | \
 
 If .loc file references aren't resolving:
 
+`.loc` entries must resolve inside `--base-dir` (default: the directory of the
+.idx file); entries outside it are rejected. `--base-dir /` accepts absolute
+paths anywhere.
+
 ```bash
 # Check .loc file
 cat indexes/index.loc

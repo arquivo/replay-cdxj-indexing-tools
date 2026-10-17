@@ -37,22 +37,32 @@ within **90 days** of confirmation.
 ### 1. Path Traversal via `.loc` or `.idx` shard names (CWE-22)
 
 **Component:** `replay_cdxj_indexing_tools/search/zipnum_search.py` —
-`search_zipnum_file()`
+`search_zipnum_file()`; `replay_cdxj_indexing_tools/zipnum/zipnum_to_flat_cdxj.py` —
+`resolve_shard_path()`
 
 **Threat:** A crafted `.loc` file or `.idx` shard-name field containing
 `../../` sequences could redirect file opens to arbitrary paths outside the
 intended `base_dir` (e.g., `/etc/passwd`, private key files).
 
 **Mitigation:**
-- Every resolved shard path is checked with `os.path.realpath()` +
-  `startswith(resolved_base + os.sep)` before any `open()` call.
+- Every shard path is checked with `path_safety.resolve_within()` before any
+  `open()` call: both paths go through `os.path.realpath()` and containment is
+  tested with `os.path.commonpath()`. `zipnum-to-flat-cdxj` uses the same check.
 - Symlinks are followed and fully resolved before the check, preventing
-  symlink-escape bypasses.
-- Detected attempts are logged at `WARNING` level (via the module logger)
-  and raise `ValueError` before any file is opened.
-- Shard file handles are opened with `O_NOFOLLOW` where the OS supports it.
+  symlink-escape bypasses. Paths containing NUL bytes, and paths that
+  `realpath()` cannot fully resolve (e.g. symlink loops), are rejected.
+- Rejected paths raise `ValueError` before any file is opened. In
+  `search_zipnum_file()` (cdxj-search) they are also logged at `WARNING` level
+  via the module logger.
+- In `search_zipnum_file()` (cdxj-search), shard file handles are opened with
+  `O_NOFOLLOW` where the OS supports it.
+- A base directory of `/` (explicit `--base-dir /`, or the default when the
+  `.idx` lives in `/`) accepts any absolute path, because the base directory is
+  trusted configuration.
 
-**Tests:** `tests/test_zipnum_path_traversal_*.py`
+**Tests:** `tests/test_path_safety.py`, `test_zipnum_path_traversal_*` in
+`tests/test_cdxj_search.py`, `test_resolve_path_traversal_*` in
+`tests/test_zipnum_to_flat_cdxj.py`
 
 ---
 

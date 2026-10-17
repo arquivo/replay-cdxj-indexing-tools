@@ -233,6 +233,13 @@ class TestResolveShardPath:
         with pytest.raises(ValueError, match="Path traversal detected"):
             resolve_shard_path("test-00", base_dir, loc_map)
 
+    def test_resolve_with_root_base_dir(self, tmp_path):
+        """With --base-dir /, absolute .loc entries are accepted (issue #89)."""
+        shard = str(tmp_path / "test-01.cdx.gz")
+        loc_map = {"test-01": shard}
+
+        assert resolve_shard_path("test-01", "/", loc_map) == os.path.realpath(shard)
+
 
 class TestZipnumToFlatCdxj:
     """Test full conversion from ZipNum to flat CDXJ."""

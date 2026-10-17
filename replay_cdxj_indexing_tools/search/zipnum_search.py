@@ -10,6 +10,8 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Iterator, List, Optional, Tuple
 
+from replay_cdxj_indexing_tools.path_safety import resolve_within
+
 logger = logging.getLogger(__name__)
 
 _MAX_BLOCK_READ = 512 * 1024 * 1024  # 512 MB hard cap against crafted .idx files
@@ -442,7 +444,7 @@ def search_zipnum_file(
 
     Security:
         Path traversal: .loc file entries and .idx shard names are validated with
-        os.path.realpath() + startswith(base_dir) before any file open. Detected
+        path_safety.resolve_within(path, base_dir) before any file open. Detected
         attempts are logged as warnings and raise ValueError. (CWE-22)
         Trust boundary: base_dir is trusted (caller-supplied); .loc/.idx contents
         are untrusted. See test_zipnum_path_traversal_* for attack scenarios.
@@ -487,7 +489,6 @@ def search_zipnum_file(
 
     # Group blocks by shard to minimize file opens
     shard_blocks: Dict[str, List[Tuple[str, int, int]]] = defaultdict(list)
-    resolved_base = os.path.realpath(base_dir)
 
     for surt_key, shard_name, offset, length in blocks:
         # Resolve shard path using .loc file or base_dir
@@ -495,29 +496,23 @@ def search_zipnum_file(
             shard_path = loc_map[shard_name]
             if not os.path.isabs(shard_path):
                 shard_path = os.path.join(base_dir, shard_path)
-            resolved = os.path.realpath(shard_path)
-            if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
-                logger.warning(
-                    "Path traversal attempt via .loc file: resolved=%r escapes base_dir=%r",
-                    resolved,
-                    resolved_base,
-                )
-                raise ValueError(f"Path traversal detected in .loc file: {shard_path!r}")
-            shard_path = resolved
+            try:
+                shard_path = resolve_within(shard_path, base_dir)
+            except ValueError as e:
+                logger.warning("Path traversal attempt via .loc file: %s", e)
+                raise ValueError(f"Path traversal detected in .loc file: {shard_path!r}") from e
         else:
             if not shard_name.endswith(".cdx.gz") and not shard_name.endswith(".cdxj.gz"):
                 shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
             else:
                 shard_path = os.path.join(base_dir, shard_name)
-            resolved = os.path.realpath(shard_path)
-            if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
-                logger.warning(
-                    "Path traversal attempt via .idx shard name: resolved=%r escapes base_dir=%r",
-                    resolved,
-                    resolved_base,
-                )
-                raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}")
-            shard_path = resolved
+            try:
+                shard_path = resolve_within(shard_path, base_dir)
+            except ValueError as e:
+                logger.warning("Path traversal attempt via .idx shard name: %s", e)
+                raise ValueError(
+                    f"Path traversal detected in .idx shard name: {shard_name!r}"
+                ) from e
 
         if not os.path.exists(shard_path):
             if verbose:

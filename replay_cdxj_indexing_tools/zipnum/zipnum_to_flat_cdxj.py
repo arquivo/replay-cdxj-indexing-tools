@@ -115,6 +115,8 @@ import warnings
 from argparse import ArgumentParser
 from typing import List, Optional, Tuple
 
+from replay_cdxj_indexing_tools.path_safety import resolve_within
+
 # Read/write size used when streaming a shard to stdout
 _COPY_BUFSIZE = 256 * 1024
 
@@ -207,25 +209,23 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
 
     Path traversal defense: all resolved paths must remain within base_dir.
     """
-    resolved_base = os.path.realpath(base_dir)
-
     if loc_map and shard_name in loc_map:
         # Use path from .loc file
         loc_path = loc_map[shard_name]
         # If relative, resolve against base_dir
         if not os.path.isabs(loc_path):
             loc_path = os.path.join(base_dir, loc_path)
-        resolved = os.path.realpath(loc_path)
-        if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
-            raise ValueError(f"Path traversal detected in .loc file: {loc_path!r}")
-        return resolved
+        try:
+            return resolve_within(loc_path, base_dir)
+        except ValueError as e:
+            raise ValueError(f"Path traversal detected in .loc file: {loc_path!r}") from e
 
     # Default: shard_name.cdx.gz in base_dir
     shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
-    resolved = os.path.realpath(shard_path)
-    if not (resolved == resolved_base or resolved.startswith(resolved_base + os.sep)):
-        raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}")
-    return resolved
+    try:
+        return resolve_within(shard_path, base_dir)
+    except ValueError as e:
+        raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}") from e
 
 
 def zipnum_to_flat_cdxj(
