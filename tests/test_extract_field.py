@@ -17,6 +17,8 @@ Test Coverage:
 """
 
 import os
+import re
+import sys
 import tempfile
 import unittest
 from io import StringIO
@@ -540,6 +542,103 @@ class TestExtractFieldCLI(unittest.TestCase):
                     self.assertFalse(output.strip().startswith('"'))
         finally:
             os.unlink(temp_file)
+
+
+class TestExtractFieldVerboseStatistics(unittest.TestCase):
+    """Verbose statistics must account for every processed line (issue #80).
+
+    Invariant: Processed == Extracted + Skipped + Errors, for every flag combination.
+    """
+
+    STATS_RE = re.compile(
+        r"Processed: (\d+) \| Extracted: (\d+) \| Skipped: (\d+) \| Errors: (\d+)"
+    )
+
+    # 3 lines, only the first has the "collection" field
+    ONE_OF_THREE = (
+        'com,example)/ 20200101000000 {"collection": "AWP-1"}\n'
+        'com,example)/page1 20200101000000 {"status": "200"}\n'
+        'com,example)/page2 20200101000000 {"status": "404"}\n'
+    )
+
+    # field present, field missing, invalid JSON, no JSON block, malformed line
+    MIXED = (
+        'com,example)/ 20200101000000 {"collection": "AWP-1"}\n'
+        'com,example)/page1 20200101000000 {"status": "200"}\n'
+        "com,example)/page2 20200101000000 {not json}\n"
+        "com,example)/page3 20200101000000\n"
+        "invalidline\n"
+    )
+
+    def _run_cli(self, cdxj_content, *extra_args):
+        """Run the CLI with -v; return (stdout, (processed, extracted, skipped, errors))."""
+        from replay_cdxj_indexing_tools.search.extract_field import main
+
+        with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".cdxj") as f:
+            f.write(cdxj_content)
+            temp_file = f.name
+
+        argv = ["cdxj-extract-field", "-f", "collection", "-i", temp_file, "-v"]
+        argv.extend(extra_args)
+        try:
+            with (
+                patch.object(sys, "argv", argv),
+                patch("sys.stdout", new_callable=StringIO) as mock_stdout,
+                patch("sys.stderr", new_callable=StringIO) as mock_stderr,
+            ):
+                with self.assertRaises(SystemExit) as cm:
+                    main()
+        finally:
+            os.unlink(temp_file)
+
+        self.assertEqual(cm.exception.code, 0)
+        match = self.STATS_RE.search(mock_stderr.getvalue())
+        self.assertIsNotNone(match, mock_stderr.getvalue())
+        stats = tuple(int(n) for n in match.groups())
+        processed, extracted, skipped, errors = stats
+        self.assertEqual(processed, extracted + skipped + errors, stats)
+        return mock_stdout.getvalue(), stats
+
+    def test_missing_field_json_mode_counted_as_skipped(self):
+        """Lines missing the field are counted as skipped in JSON (non-raw) mode too."""
+        stdout, stats = self._run_cli(self.ONE_OF_THREE)
+        self.assertEqual(stats, (3, 1, 2, 0))
+        self.assertEqual(stdout, '"AWP-1"\n')
+
+    def test_skip_missing_default_matrix(self):
+        """Field missing: no flags, --skip-missing, --default, and both.
+
+        --skip-missing takes precedence over --default.
+        """
+        cases = {
+            (): ("AWP-1\n", (3, 1, 2, 0)),
+            ("--skip-missing",): ("AWP-1\n", (3, 1, 2, 0)),
+            ("--default", "unknown"): ("AWP-1\nunknown\nunknown\n", (3, 3, 0, 0)),
+            ("--default", "unknown", "--skip-missing"): ("AWP-1\n", (3, 1, 2, 0)),
+        }
+        for args, (expected_stdout, expected_stats) in cases.items():
+            with self.subTest(args=args):
+                stdout, stats = self._run_cli(self.ONE_OF_THREE, "-r", *args)
+                self.assertEqual(stdout, expected_stdout)
+                self.assertEqual(stats, expected_stats)
+
+    def test_invariant_holds_with_errors_for_all_flag_combinations(self):
+        """Invariant holds with parse errors and lines without a JSON block."""
+        # MIXED: 1 has field, 1 missing field, 1 bad JSON, 1 no JSON, 1 malformed
+        cases = {
+            (): (5, 1, 2, 2),
+            ("-r",): (5, 1, 2, 2),
+            ("--skip-missing",): (5, 1, 2, 2),
+            ("-r", "--skip-missing"): (5, 1, 2, 2),
+            ("--default", "x"): (5, 3, 0, 2),
+            ("-r", "--default", "x"): (5, 3, 0, 2),
+            ("--default", "x", "--skip-missing"): (5, 1, 2, 2),
+            ("-r", "--default", "x", "--skip-missing"): (5, 1, 2, 2),
+        }
+        for args, expected in cases.items():
+            with self.subTest(args=args):
+                _, stats = self._run_cli(self.MIXED, *args)
+                self.assertEqual(stats, expected)
 
 
 if __name__ == "__main__":

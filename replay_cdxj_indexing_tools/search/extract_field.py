@@ -178,7 +178,8 @@ def extract_field_from_cdxj(
         field_name: JSON field name to extract (required)
         raw: Output raw values without JSON encoding (default: False)
         default: Default value for missing fields (default: None)
-        skip_missing: Skip lines with missing field instead of using default (default: False)
+        skip_missing: Skip lines with missing field instead of using default; takes
+            precedence over ``default`` (default: False)
         verbose: Print statistics to stderr (default: False)
         buffer_size: I/O buffer size in bytes (default: 1MB)
 
@@ -215,19 +216,19 @@ def extract_field_from_cdxj(
                     # Parse CDXJ line
                     _, _, _, json_data = parse_cdxj_line(line)
 
-                    # Extract field value
-                    value = extract_field_value(json_data, field_name, raw, default)
+                    # Extract field value (--skip-missing takes precedence over --default)
+                    value = extract_field_value(
+                        json_data, field_name, raw, None if skip_missing else default
+                    )
 
                     # Write output
+                    # Every processed line is counted exactly once:
+                    # processed == extracted + skipped + errors
                     if value is not None:
                         print(value)
                         lines_extracted += 1
-                    elif not skip_missing:
-                        # Default is None and skip_missing is False - still output nothing
-                        # but count as processed (don't error)
-                        pass
                     else:
-                        # skip_missing is True and no value - skip silently
+                        # Field missing and no default (or --skip-missing) - nothing printed
                         lines_skipped += 1
 
                 except (ValueError, json.JSONDecodeError) as e:
