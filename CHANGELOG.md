@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.5 (2026-10-17)
+
+### Bug Fixes
+
+- **zipnum**: Stream shard decompression; --workers is now a no-op
+  ([#77](https://github.com/arquivo/replay-cdxj-indexing-tools/pull/77),
+  [`910e9c4`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/910e9c45330ee16fbb1faeacbca0075ef1030176))
+
+
 ## v1.2.4 (2026-10-17)
 
 ### Bug Fixes
