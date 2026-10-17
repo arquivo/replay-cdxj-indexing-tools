@@ -26,6 +26,7 @@ within **90 days** of confirmation.
 | `.loc` file contents | **Untrusted** | May originate from network or third-party sources |
 | `.idx` file contents (shard names, offsets, lengths) | **Untrusted** | May be crafted by an adversary |
 | Filter expressions (`CDXJFilter` constructor) | **Untrusted** | Passed from HTTP query parameters or CLI |
+| Blocklist file lines (`filter-blocklist -b`) | **Untrusted** | Regex patterns; may come from third parties |
 | Timestamps (`from_ts` / `to_ts`) | **Untrusted** | Validated to digits-only before use |
 | Redis credentials | **Trusted** | Must be supplied by the operator |
 | `arclist_folder` path | **Trusted** | Must not be attacker-controlled |
@@ -67,23 +68,41 @@ intended `base_dir` (e.g., `/etc/passwd`, private key files).
 
 ---
 
-### 2. ReDoS via filter regex patterns (CWE-1333)
+### 2. ReDoS via user-supplied regex patterns (CWE-1333)
 
-**Component:** `replay_cdxj_indexing_tools/search/filters.py` —
-`CDXJFilter._parse_filter()` / `CDXJFilter._compile_safe_regex()`
+**Components:** `replay_cdxj_indexing_tools/regex_safety.py` (shared checks),
+used by `search/filters.py` (`CDXJFilter`, `cdxj-search --filter field~regex`)
+and `filter/blocklist.py` (`filter-blocklist -b blocklist.txt`).
 
-**Threat:** An attacker who controls filter expressions (e.g., via HTTP
-query parameters) could supply a regex pattern that causes catastrophic
-backtracking, tying up the process for an unbounded time and enabling
-denial-of-service.
+**Threat:** Whoever controls a filter expression or a blocklist line could
+supply a regex that backtracks catastrophically (e.g. `(a+)+$`,
+`(a{1,10}){1,10}$`), tying up the process for an unbounded time
+(denial-of-service).
 
-**Mitigation:**
-- `_compile_safe_regex()` rejects patterns longer than `_MAX_PATTERN_LEN`
-  (1 000 chars) before attempting compilation.
-- A set of static structural detectors (`_REDOS_PATTERNS`) rejects patterns
-  matching known catastrophic-backtracking forms: `(x+)+`, `(x*)+`,
-  `(x+)*`, `(a|b)*`, `(a|b)+`.
-- Patterns that fail `re.compile()` are rejected with `ValueError`.
+**Mitigation (defence in depth):**
+- *Denylist heuristic* -- `check_regex_shape()` / `compile_safe_regex()`
+  reject patterns longer than `MAX_PATTERN_LEN` (1 000 chars) and known
+  catastrophic shapes: a group ending in a variable quantifier that is itself
+  repeated (`(x+)+`, `(x*)*`, `(x+){2,}`, `(x{1,10}){1,10}`, `((x+))+`,
+  `(x?){30}`), repeated alternation (`(a|b)*`, `(a|ab){2,}`), and `(?x)` /
+  `(?#...)` which can hide those shapes. This is a heuristic: some slow
+  patterns (e.g. high-degree polynomial ones like `(.*a){20}$`) pass it.
+- *Timeout backstop (filters)* -- every `~`/`!~` match runs under
+  `search_with_time_limit()`, a `SIGALRM`/`setitimer` watchdog (default 1 s
+  per search). A timeout raises `RegexTimeoutError` and `cdxj-search` aborts
+  with exit status 1 instead of skipping the record: skipping would yield
+  silently incomplete results and still let a hostile pattern cost one full
+  timeout per record. The backstop is **not available** (only the denylist
+  applies) on platforms without `SIGALRM` (Windows), outside the main thread,
+  or while another component holds the `ITIMER_REAL` timer.
+- *grep engine (blocklist)* -- blocklist lines are matched by `grep -E`
+  (a DFA-based engine that does not backtrack like Python's `re`), after the
+  same denylist/length check. grep runs with `--` before the input path and a
+  wall-clock limit (`--timeout`, default 3 600 s; exit status 124 on timeout).
+  If every blocklist line is rejected, or grep reports an error, the tool
+  fails with a non-zero exit instead of passing records through unfiltered.
+
+**Tests:** `tests/test_regex_safety.py`
 
 ---
 
@@ -198,7 +217,7 @@ directory runs unrestricted.
 | CWE | Description | Affected component |
 |-----|-------------|-------------------|
 | CWE-22  | Path Traversal | `zipnum_search.search_zipnum_file()` |
-| CWE-1333 | ReDoS | `filters.CDXJFilter._compile_safe_regex()` |
+| CWE-1333 | ReDoS | `regex_safety` (used by `filters.CDXJFilter`, `blocklist`) |
 | CWE-400 | Uncontrolled Resource Consumption | `zipnum_search` block reads; `arclist_index_to_redis` pipeline |
 | CWE-78  | OS Command Injection | `arclist_index_to_redis.run_pipeline()` (mitigated via list args) |
 | CWE-306 | Missing Authentication | `path_index_to_redis.submit_index_to_redis()` remote Redis |

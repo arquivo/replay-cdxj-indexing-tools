@@ -67,44 +67,27 @@ PYTHON API
 """
 
 import argparse
-import functools
 import os
-import re
 import subprocess
 import sys
 import tempfile
 from typing import List, Optional, Pattern, Tuple
 
-# Maximum compiled regex pattern length to prevent memory issues
-_MAX_PATTERN_LEN = 1000
-# Patterns known to cause catastrophic backtracking (ReDoS)
-_REDOS_PATTERNS = [
-    re.compile(r"\([^)]+\+\)\+"),  # (x+)+
-    re.compile(r"\([^)]+\*\)\+"),  # (x*)+
-    re.compile(r"\([^)]+\+\)\*"),  # (x+)*
-    re.compile(r"\([^)]+\|[^)]+\)\*"),  # (a|b)*
-    re.compile(r"\([^)]+\|[^)]+\)\+"),  # (a|b)+
-]
+from replay_cdxj_indexing_tools.regex_safety import check_regex_shape
+from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex as _compile_safe_regex
 
-
-@functools.lru_cache(maxsize=256)
-def _compile_safe_regex(pattern: str) -> Pattern:
-    """Compile a regex pattern, rejecting patterns known to risk ReDoS. Cached."""
-    if len(pattern) > _MAX_PATTERN_LEN:
-        raise ValueError(f"pattern too long ({len(pattern)} chars, max {_MAX_PATTERN_LEN})")
-    for danger in _REDOS_PATTERNS:
-        if danger.search(pattern):
-            raise ValueError(f"pattern rejected due to ReDoS risk: {pattern!r}")
-    try:
-        return re.compile(pattern)
-    except re.error as exc:
-        raise ValueError(f"invalid regex pattern: {exc}") from exc
+# Default wall-clock limit for the grep subprocess, in seconds
+DEFAULT_GREP_TIMEOUT = 3600
+# Exit status on timeout (matches POSIX timeout(1))
+_EXIT_TIMEOUT = 124
 
 
 def _sanitize_patterns(pattern_strings: List[str]) -> List[str]:
     """
     Validate raw pattern strings, dropping (with a warning) any that are
-    invalid regex, too long, or shaped to risk catastrophic backtracking.
+    too long or shaped to risk catastrophic backtracking. Syntax is left to
+    grep: ERE accepts some patterns Python's re rejects, such as the
+    unmatched ")" in SURT prefixes like ``^pt,site,www)/admin/``.
 
     Used as the single choke point before patterns are written to the temp
     file handed to grep, so a raw blocklist file passed straight through
@@ -113,7 +96,7 @@ def _sanitize_patterns(pattern_strings: List[str]) -> List[str]:
     safe = []
     for pattern_text in pattern_strings:
         try:
-            _compile_safe_regex(pattern_text)
+            check_regex_shape(pattern_text)
             safe.append(pattern_text)
         except ValueError as e:
             print(f"Warning: Rejected blocklist pattern: {pattern_text}", file=sys.stderr)
@@ -131,7 +114,7 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
     Security:
         Patterns are validated by _compile_safe_regex() against known
         catastrophic-backtracking shapes before re.compile() (CWE-1333).
-        Pattern length is capped at _MAX_PATTERN_LEN chars.
+        Pattern length is capped at MAX_PATTERN_LEN chars.
 
     Args:
         blocklist_path: Path to blocklist file
@@ -172,6 +155,7 @@ def filter_cdxj_by_blocklist(
     output_path: str = "-",
     buffer_size: int = 1024 * 1024,  # pylint: disable=unused-argument
     blocklist_file: Optional[str] = None,
+    timeout: Optional[float] = DEFAULT_GREP_TIMEOUT,
 ) -> Tuple[int, int]:
     """
     Filter CDXJ records matching blocklist patterns.
@@ -189,9 +173,18 @@ def filter_cdxj_by_blocklist(
         blocklist_file: Path to a raw blocklist file. Its patterns are
             re-validated (see #75) before use, so this is no longer a
             trust-the-caller performance shortcut.
+        timeout: Kill grep and raise subprocess.TimeoutExpired after this
+            many seconds (None or 0 = no limit). Nothing is written on timeout.
 
     Returns:
         Tuple of (lines_kept, lines_blocked)
+
+    Raises:
+        subprocess.TimeoutExpired: grep ran longer than ``timeout``.
+        subprocess.CalledProcessError: grep failed (exit status > 1).
+        ValueError: if patterns were supplied but every one was rejected.
+            Running grep with none of them would pass every record through
+            unfiltered, i.e. publish content the blocklist exists to remove.
 
     Example:
         >>> kept, blocked = filter_cdxj_by_blocklist(
@@ -216,6 +209,11 @@ def filter_cdxj_by_blocklist(
         pattern_strings = [pattern.pattern for pattern in blocklist_patterns]
 
     safe_patterns = _sanitize_patterns(pattern_strings)
+    if pattern_strings and not safe_patterns:
+        raise ValueError(
+            f"all {len(pattern_strings)} blocklist patterns were rejected;"
+            " refusing to pass input through unfiltered"
+        )
 
     temp_blocklist = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
         mode="w", delete=False, suffix=".txt"
@@ -227,7 +225,9 @@ def filter_cdxj_by_blocklist(
 
     try:
         # Build grep command
-        cmd = ["grep", "-a", "-E", "-v", "-f", blocklist_file]
+        # "--" ends option parsing so an input path starting with "-" can
+        # never be read as a grep option.
+        cmd = ["grep", "-a", "-E", "-v", "-f", blocklist_file, "--"]
 
         # Handle input
         if input_path == "-":
@@ -237,22 +237,25 @@ def filter_cdxj_by_blocklist(
             cmd.append(input_path)
             stdin_input = None
 
-        # Handle output and capture for counting
+        result = subprocess.run(
+            cmd,
+            stdin=stdin_input,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout or None,
+        )
+        # grep exits 1 when no line is kept; >1 is an error (e.g. a pattern
+        # grep -E cannot parse). Fail instead of writing partial output.
+        if result.returncode > 1:
+            raise subprocess.CalledProcessError(result.returncode, cmd, stderr=result.stderr)
+
         if output_path == "-":
-            # Output to stdout, capture to count lines
-            result = subprocess.run(
-                cmd, stdin=stdin_input, capture_output=True, text=True, check=False
-            )
             sys.stdout.write(result.stdout)
-            lines_kept = result.stdout.count("\n")
         else:
-            # Output to file, capture to count lines
-            result = subprocess.run(
-                cmd, stdin=stdin_input, capture_output=True, text=True, check=False
-            )
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(result.stdout)
-            lines_kept = result.stdout.count("\n")
+        lines_kept = result.stdout.count("\n")
 
         # Count blocked lines (total - kept)
         # We need to count total lines in input
@@ -311,6 +314,13 @@ Blocklist file format:
         "-o", "--output", default="-", help="Output file, or - for stdout (default: stdout)"
     )
     parser.add_argument("-v", "--verbose", action="store_true", help="Print statistics to stderr")
+    parser.add_argument(
+        "--timeout",
+        type=float,
+        default=DEFAULT_GREP_TIMEOUT,
+        help="Abort if filtering takes longer than this many seconds; 0 = no limit"
+        f" (default: {DEFAULT_GREP_TIMEOUT})",
+    )
 
     args = parser.parse_args()
 
@@ -332,7 +342,7 @@ Blocklist file format:
             print(f"Filtering {args.input}...", file=sys.stderr)
 
         lines_kept, lines_blocked = filter_cdxj_by_blocklist(
-            args.input, patterns, args.output, blocklist_file=args.blocklist
+            args.input, patterns, args.output, blocklist_file=args.blocklist, timeout=args.timeout
         )
 
         # Print statistics
@@ -346,6 +356,15 @@ Blocklist file format:
 
     except KeyboardInterrupt:
         print("\n# Interrupted by user", file=sys.stderr)
+        sys.exit(1)
+    except subprocess.TimeoutExpired as e:
+        print(f"Error: filtering timed out after {e.timeout} seconds", file=sys.stderr)
+        sys.exit(_EXIT_TIMEOUT)
+    except subprocess.CalledProcessError as e:
+        print(f"Error: grep failed (exit {e.returncode}): {e.stderr.strip()}", file=sys.stderr)
+        sys.exit(1)
+    except ValueError as e:
+        print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
     except (IOError, OSError) as e:
         print(f"Error: {e}", file=sys.stderr)

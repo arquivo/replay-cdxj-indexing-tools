@@ -43,6 +43,12 @@ merge-flat-cdxj - *.cdxj | \
 - `-b, --blocklist BLOCKLIST` - Blocklist file with regex patterns (required)
 - `-o, --output OUTPUT` - Output file or `-` for stdout (default: stdout)
 - `-v, --verbose` - Print statistics to stderr
+- `--timeout SECONDS` - Abort (exit status 124) if filtering takes longer; `0` = no limit (default: 3600)
+
+Patterns that are too long or have a catastrophic-backtracking shape such as
+`(a+)+` or `(a{1,10}){1,10}` are rejected with a warning. If **every** pattern
+is rejected, or grep reports an error, the tool exits with status 1 rather than
+passing records through unfiltered. See [SECURITY.md](../../SECURITY.md).
 
 ## How It Works
 

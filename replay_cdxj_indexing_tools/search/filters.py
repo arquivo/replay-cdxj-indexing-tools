@@ -2,40 +2,18 @@
 Filter utilities for CDXJ search results.
 """
 
-import functools
 import json
 import logging
-import re
 from typing import Any, Dict, List, Optional
+
+from replay_cdxj_indexing_tools.regex_safety import DEFAULT_REGEX_TIMEOUT
+from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex as _compile_safe_regex
+from replay_cdxj_indexing_tools.regex_safety import search_with_time_limit
 
 logger = logging.getLogger(__name__)
 
 # Maximum length for a single filter expression (field op value)
 _MAX_FILTER_EXPR_LEN = 2000
-# Maximum compiled regex pattern length to prevent memory issues
-_MAX_PATTERN_LEN = 1000
-# Patterns known to cause catastrophic backtracking (ReDoS)
-_REDOS_PATTERNS = [
-    re.compile(r"\([^)]+\+\)\+"),  # (x+)+
-    re.compile(r"\([^)]+\*\)\+"),  # (x*)+
-    re.compile(r"\([^)]+\+\)\*"),  # (x+)*
-    re.compile(r"\([^)]+\|[^)]+\)\*"),  # (a|b)*
-    re.compile(r"\([^)]+\|[^)]+\)\+"),  # (a|b)+
-]
-
-
-@functools.lru_cache(maxsize=256)
-def _compile_safe_regex(pattern: str, max_len: int = _MAX_PATTERN_LEN) -> re.Pattern:
-    """Compile a regex pattern, rejecting patterns known to risk ReDoS. Cached."""
-    if len(pattern) > max_len:
-        raise ValueError(f"Regex pattern too long ({len(pattern)} chars, max {max_len})")
-    for danger in _REDOS_PATTERNS:
-        if danger.search(pattern):
-            raise ValueError(f"Regex pattern rejected due to ReDoS risk: {pattern!r}")
-    try:
-        return re.compile(pattern)
-    except re.error as exc:
-        raise ValueError(f"Invalid regex pattern: {pattern!r}") from exc
 
 
 def normalize_timestamp(timestamp: str) -> str:
@@ -80,6 +58,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
         from_ts: Optional[str] = None,
         to_ts: Optional[str] = None,
         filters: Optional[List[str]] = None,
+        regex_timeout: Optional[float] = DEFAULT_REGEX_TIMEOUT,
     ):
         """
         Initialize filter.
@@ -88,7 +67,11 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
             from_ts: Start timestamp (flexible format)
             to_ts: End timestamp (flexible format)
             filters: List of filter expressions (e.g., "status=200", "mime~text/.*")
+            regex_timeout: Per-search time budget in seconds for ``~``/``!~``
+                rules (None or 0 disables it). On timeout, matches() raises
+                RegexTimeoutError instead of silently dropping the record.
         """
+        self.regex_timeout = regex_timeout
         self.from_ts = normalize_timestamp(from_ts) if from_ts else None
         self.to_ts = normalize_timestamp(to_ts) if to_ts else None
         self.filter_rules = []
@@ -117,7 +100,8 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
         Security:
             ReDoS: patterns are validated by _compile_safe_regex() against known
             catastrophic-backtracking patterns before re.compile(). (CWE-1333)
-            Pattern length is capped at _MAX_PATTERN_LEN chars.
+            Pattern length is capped at MAX_PATTERN_LEN chars. Matching time
+            is bounded in matches() (see regex_safety.search_with_time_limit).
         """
         if "!~" in expr:  # pylint: disable=no-else-return  # elif chain for operator priority
             field, pattern = expr.split("!~", 1)
@@ -153,6 +137,12 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
 
         Returns:
             True if line matches all filters
+
+        Raises:
+            RegexTimeoutError: a regex rule exceeded ``regex_timeout``. The
+                whole run should be aborted: skipping the record would yield
+                silently incomplete output, and an attacker-chosen pattern
+                could still cost one full timeout per record.
         """
         # pylint: disable=too-many-return-statements
         parts = line.strip().split(" ", 2)
@@ -198,10 +188,12 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
                     if field_value_str == value:
                         return False
                 elif op == "~":
-                    if not rule["regex"].search(field_value_str):
+                    if not search_with_time_limit(
+                        rule["regex"], field_value_str, self.regex_timeout
+                    ):
                         return False
                 elif op == "!~":
-                    if rule["regex"].search(field_value_str):
+                    if search_with_time_limit(rule["regex"], field_value_str, self.regex_timeout):
                         return False
 
         return True
