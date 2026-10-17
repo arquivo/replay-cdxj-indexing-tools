@@ -195,6 +195,8 @@ import sys
 import time
 from typing import Dict, Iterator, List, Optional, Tuple
 
+from replay_cdxj_indexing_tools.cli_utils import positive_int
+
 
 def parse_index_line(line: str) -> Optional[Dict[str, str]]:
     """
@@ -545,8 +547,8 @@ def submit_index_to_redis(  # pylint: disable=unexpected-keyword-arg
     if not dry_run:
         try:
             redis_client.close()  # type: ignore[attr-defined]  # object narrowed at runtime
-        except Exception:  # pylint: disable=broad-exception-caught  # best-effort close
-            pass
+        except Exception as e:  # pylint: disable=broad-exception-caught  # best-effort close
+            print(f"Error closing Redis connection (non-fatal): {e}", file=sys.stderr)
 
     # Final statistics
     elapsed = time.time() - start_time
@@ -645,16 +647,16 @@ Redis connection examples:
     perf_group = parser.add_argument_group("Performance tuning")
     perf_group.add_argument(
         "--batch-size",
-        type=int,
+        type=positive_int,
         default=500,
         help="Number of entries per batch (default: 500)",
     )
     perf_group.add_argument(
-        "--pool-size", type=int, default=10, help="Connection pool size (default: 10)"
+        "--pool-size", type=positive_int, default=10, help="Connection pool size (default: 10)"
     )
     perf_group.add_argument(
         "--timeout",
-        type=int,
+        type=positive_int,
         default=10,
         help="Connection timeout in seconds (default: 10)",
     )
@@ -682,9 +684,6 @@ Redis connection examples:
     # Validate arguments
     if not args.inputs:
         parser.error("At least one input file must be specified with -i/--input")
-
-    if args.batch_size < 1:
-        parser.error("Batch size must be at least 1")
 
     # Run submission
     try:

@@ -13,6 +13,9 @@ Test Coverage
 2. TestRunPipeline        — Popen pipeline construction, argument building,
                             exit-code propagation, timeout, interrupts
 3. TestMain               — CLI argument parsing and run_pipeline delegation
+4. TestNumericArgValidation — --batch-size/--pool-size/--timeout reject 0
+                            and negative values
+5. TestTerminateErrorLogged — subprocess terminate() failures are logged
 """
 
 import subprocess
@@ -605,6 +608,54 @@ class TestMain(unittest.TestCase):
         kwargs = mock_run.call_args[1]
         self.assertEqual(kwargs["redis_host"], "redis.arquivo.pt")
         self.assertEqual(kwargs["redis_port"], 6380)
+
+
+class TestNumericArgValidation(unittest.TestCase):
+    """Numeric CLI options reject zero and negative values."""
+
+    def test_main_rejects_non_positive_batch_size(self):
+        """main() exits (via argparse) when --batch-size is not positive."""
+        with self.assertRaises(SystemExit):
+            main(["-d", "/data/arclists", "-k", "pathindex:test", "--batch-size", "0"])
+
+    def test_main_rejects_non_positive_pool_size(self):
+        """main() exits (via argparse) when --pool-size is not positive."""
+        with self.assertRaises(SystemExit):
+            main(["-d", "/data/arclists", "-k", "pathindex:test", "--pool-size", "-1"])
+
+    def test_main_rejects_non_positive_timeout(self):
+        """main() exits (via argparse) when --timeout is not positive."""
+        with self.assertRaises(SystemExit):
+            main(["-d", "/data/arclists", "-k", "pathindex:test", "--timeout", "0"])
+
+
+class TestTerminateErrorLogged(unittest.TestCase):
+    """Tests that a failure while terminating subprocesses is logged, not swallowed."""
+
+    @patch("replay_cdxj_indexing_tools.arclist_index_to_redis.log_warning")
+    @patch("subprocess.Popen")
+    def test_terminate_error_is_logged(self, mock_popen, mock_log_warning):
+        """When both terminate() calls raise during a KeyboardInterrupt, the error is logged."""
+        arclist_proc = MagicMock()
+        arclist_proc.stdout = MagicMock()
+        arclist_proc.terminate.side_effect = RuntimeError("terminate failed")
+
+        redis_proc = MagicMock()
+        redis_proc.wait.side_effect = KeyboardInterrupt
+        redis_proc.terminate.side_effect = RuntimeError("terminate failed")
+
+        mock_popen.side_effect = [arclist_proc, redis_proc]
+
+        result = run_pipeline(arclist_folder="/data/arclists", redis_key="pathindex:test")
+
+        self.assertEqual(result, 130)
+        self.assertTrue(
+            any(
+                "Error terminating subprocesses" in call.args[0]
+                for call in mock_log_warning.call_args_list
+            ),
+            f"Expected a 'terminating subprocesses' warning, got: {mock_log_warning.call_args_list}",
+        )
 
 
 if __name__ == "__main__":
