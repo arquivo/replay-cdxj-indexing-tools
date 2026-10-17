@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.1 (2026-10-17)
+
+### Bug Fixes
+
+- **zipnum**: Write idx line number in 5th column, not shard number
+  ([`668d37d`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/668d37dcf971e0fdb331f447ab32539fb563fab9))
+
+
 ## v1.2.0 (2026-10-07)
 
 ### Bug Fixes
