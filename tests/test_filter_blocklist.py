@@ -130,12 +130,12 @@ class TestLoadBlocklist(unittest.TestCase):
 
         self.assertEqual(len(patterns), 4)
 
-    def test_load_rejects_redos_pattern(self):
-        """Regression test for #75: catastrophic-backtracking patterns are rejected."""
+    def test_load_invalid_pattern_fails_closed(self):
+        """An invalid line fails the whole load instead of being dropped."""
         content = "\n".join(
             [
                 "^pt,spam,",
-                r"(.*a+)+b",  # ReDoS-shaped pattern, must be dropped
+                r"^pt,(spam",  # invalid regex
                 "/ads/",
             ]
         )
@@ -144,12 +144,8 @@ class TestLoadBlocklist(unittest.TestCase):
         with open(path, "w") as f:
             f.write(content)
 
-        patterns = load_blocklist(path)
-
-        # Only the two safe patterns should survive
-        self.assertEqual(len(patterns), 2)
-        loaded = {pattern.pattern for pattern in patterns}
-        self.assertEqual(loaded, {"^pt,spam,", "/ads/"})
+        with self.assertRaisesRegex(ValueError, "line 2:"):
+            load_blocklist(path)
 
 
 class TestFilterCdxjByBlocklist(unittest.TestCase):

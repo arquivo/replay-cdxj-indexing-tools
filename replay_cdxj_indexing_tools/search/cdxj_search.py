@@ -214,6 +214,7 @@ Examples:
 Exit status:
   0    success
   1    error
+  2    invalid command-line arguments
   124  a --filter regex match exceeded its time limit (output is incomplete)
         """,
     )

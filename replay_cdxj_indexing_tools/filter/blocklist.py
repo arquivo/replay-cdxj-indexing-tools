@@ -52,7 +52,8 @@ PYTHON API
         filter_cdxj_by_blocklist,
     )
 
-    # Load blocklist patterns
+    # Load blocklist patterns (raises ValueError if any line is not a
+    # valid Python regex; pass blocklist_file= for grep-only syntax)
     patterns = load_blocklist('blocklist.txt')
 
     # Filter CDXJ
@@ -75,8 +76,6 @@ import sys
 import tempfile
 from typing import List, Optional, Pattern, Tuple
 
-from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex
-
 # Exit status on timeout (matches POSIX timeout(1))
 _EXIT_TIMEOUT = 124
 
@@ -86,6 +85,10 @@ GREP_MAX_PATTERN_LEN = 10000
 # Largest repeat count accepted in {n}, {n,} and {n,m} (same as RE_DUP_MAX
 # in POSIX's minimum limits)
 GREP_MAX_REPEAT = 255
+# Largest product of repeat counts across nested groups, e.g. 4 * 255 for
+# "(x{255}){4}". grep expands a bounded repeat into that many copies of its
+# operand, so nested repeats multiply; 1024 leaves room for real patterns.
+GREP_MAX_REPEAT_COST = 1024
 
 _REPEAT_COUNTS = re.compile(r"\{(\d*)(?:,(\d*))?\}")
 
@@ -110,11 +113,12 @@ def check_grep_pattern(pattern: str) -> None:
     """
     Reject a blocklist line containing constructs that are expensive for
     ``grep -E``: back-references (``\\1``-``\\9``), repeat counts above
-    GREP_MAX_REPEAT, or more than GREP_MAX_PATTERN_LEN characters.
+    GREP_MAX_REPEAT, nested bounded repeats whose combined repeat cost is
+    above GREP_MAX_REPEAT_COST, or more than GREP_MAX_PATTERN_LEN characters.
 
     grep's matcher is mostly DFA-based, so the Python-oriented backtracking
     checks in regex_safety do not apply here (and would reject common SURT
-    idioms). Syntax is left to grep.
+    idioms). Syntax is left to grep. These checks are not exhaustive.
 
     Raises:
         ValueError: with the reason, if the line is rejected.
@@ -122,27 +126,46 @@ def check_grep_pattern(pattern: str) -> None:
     if len(pattern) > GREP_MAX_PATTERN_LEN:
         raise ValueError(f"longer than {GREP_MAX_PATTERN_LEN} characters ({len(pattern)})")
 
-    # Drop escape pairs (e.g. a literal "\\{") and bracket expressions, where
-    # "{" is literal, before looking at repeat counts.
-    unescaped = []
+    # groups[-1] is the largest repeat cost seen so far in the innermost open
+    # group; last is the repeat cost of the atom just before the current char.
+    groups = [1]
+    last = 1
     i = 0
     while i < len(pattern):
         char = pattern[i]
         if char == "\\" and i + 1 < len(pattern):
             if pattern[i + 1] in "123456789":
                 raise ValueError("back-references are expensive for grep")
-            i += 2
+            i, last = i + 2, 1  # escape pairs (e.g. a literal "\\{") are atoms
             continue
         if char == "[":
-            i = _skip_bracket_expression(pattern, i)
+            # "{" is literal inside a bracket expression
+            i, last = _skip_bracket_expression(pattern, i), 1
             continue
-        unescaped.append(char)
+        if char == "(":
+            groups.append(1)
+            last = 1
+        elif char == ")" and len(groups) > 1:
+            last = groups.pop()
+            groups[-1] = max(groups[-1], last)
+        elif char == "{" and (match := _REPEAT_COUNTS.match(pattern, i)):
+            counts = [int(count) for count in match.groups() if count]
+            if any(count > GREP_MAX_REPEAT for count in counts):
+                raise ValueError(f"repeat counts above {GREP_MAX_REPEAT} are expensive for grep")
+            last *= max(counts + [1])
+            if last > GREP_MAX_REPEAT_COST:
+                raise ValueError(
+                    "nested bounded repeats are expensive for grep"
+                    f" (combined repeat cost above {GREP_MAX_REPEAT_COST})"
+                )
+            groups[-1] = max(groups[-1], last)
+            i = match.end()
+            continue
+        elif char == "|":
+            last = 1
+        elif char not in "*+?":
+            last = 1  # any other char is a one-character atom
         i += 1
-
-    for match in _REPEAT_COUNTS.finditer("".join(unescaped)):
-        counts = [int(count) for count in match.groups() if count]
-        if any(count > GREP_MAX_REPEAT for count in counts):
-            raise ValueError(f"repeat counts above {GREP_MAX_REPEAT} are expensive for grep")
 
 
 def _skip_bracket_expression(pattern: str, start: int) -> int:
@@ -192,22 +215,16 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
     Each line is treated as a regex pattern. Lines starting with # are ignored
     as comments. Empty lines are also ignored.
 
-    For library use only: the CLI hands the file to grep instead (see
-    filter_cdxj_by_blocklist), whose syntax and checks differ.
-
-    Security:
-        Patterns are validated by compile_safe_regex() against known
-        catastrophic-backtracking shapes before re.compile() (CWE-1333).
-        Pattern length is capped at MAX_PATTERN_LEN chars. Rejected
-        patterns are skipped with a warning.
-
-    Args:
-        blocklist_path: Path to blocklist file
-
-    Returns:
-        List of compiled regex patterns
+    The patterns are meant to be passed to filter_cdxj_by_blocklist(), which
+    runs them through grep after checking each one with check_grep_pattern().
+    Lines must also be valid Python regexes; a blocklist that relies on
+    grep-only syntax (such as an unescaped ")" in a SURT prefix) should be
+    passed to filter_cdxj_by_blocklist() with blocklist_file= instead.
 
     Raises:
+        ValueError: listing every line that is not a valid Python regex.
+            Loading fails as a whole, because filtering with part of a
+            blocklist would publish the records the invalid lines target.
         IOError: If file cannot be read
 
     Example:
@@ -215,12 +232,17 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
         >>> print(f"Loaded {len(patterns)} patterns")
     """
     patterns = []
+    invalid = []
     for line_num, line in _read_pattern_lines(blocklist_path):
         try:
-            patterns.append(compile_safe_regex(line))
-        except ValueError as e:
-            print(f"Warning: Rejected pattern at line {line_num}: {line}", file=sys.stderr)
-            print(f"  Reason: {e}", file=sys.stderr)
+            patterns.append(re.compile(line))
+        except re.error as e:
+            invalid.append(f"  line {line_num}: {e}")
+    if invalid:
+        raise ValueError(
+            f"{len(invalid)} blocklist line(s) are not valid regexes; refusing to"
+            " load an incomplete blocklist:\n" + "\n".join(invalid)
+        )
     return patterns
 
 
@@ -242,7 +264,8 @@ def filter_cdxj_by_blocklist(
     Args:
         input_path: Input CDXJ file, or '-' for stdin
         blocklist_patterns: List of compiled regex Pattern objects to block
-            (deprecated, use blocklist_file)
+            (deprecated, use blocklist_file). Each pattern's text is checked
+            (see check_grep_pattern) before use.
         output_path: Output file, or '-' for stdout (default: stdout)
         buffer_size: I/O buffer size in bytes (unused, kept for API compatibility)
         blocklist_file: Path to a raw blocklist file. Every line is checked
@@ -385,6 +408,7 @@ Blocklist file format:
 Exit status:
   0    success
   1    error, including a rejected blocklist line (no output is written)
+  2    invalid command-line arguments
   124  --timeout expired (no output is written)
         """,
     )
@@ -401,6 +425,7 @@ Exit status:
         "--timeout",
         type=_seconds,
         default=0,
+        metavar="SECONDS",
         help="Abort if filtering takes longer than this many seconds, including time"
         " spent waiting for input on stdin (default: 0 = no limit)",
     )

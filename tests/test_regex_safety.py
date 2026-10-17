@@ -19,7 +19,11 @@ from unittest import mock
 
 from replay_cdxj_indexing_tools import regex_safety
 from replay_cdxj_indexing_tools.filter import blocklist
-from replay_cdxj_indexing_tools.filter.blocklist import check_grep_pattern, filter_cdxj_by_blocklist
+from replay_cdxj_indexing_tools.filter.blocklist import (
+    check_grep_pattern,
+    filter_cdxj_by_blocklist,
+    load_blocklist,
+)
 from replay_cdxj_indexing_tools.regex_safety import (
     RegexTimeoutError,
     check_regex_shape,
@@ -271,6 +275,15 @@ ACCEPTED_LINES = [
     _long_alternation(),
 ]
 
+# ACCEPTED_LINES written as valid Python regexes, for load_blocklist()
+LIBRARY_LINES = [
+    "^pt,my(-[a-z]+)*,www\\)/",
+    "^com,example(,[a-z0-9-]+)*\\)/private/",
+    "^pt,ip\\)/[0-9]+(\\.[0-9]+)+/",
+    "^pt,site,www\\)/(ads|tracking)+",
+    _long_alternation(),
+]
+
 # Records targeted by ACCEPTED_LINES, in the same order
 TARGETED_RECORDS = [
     'pt,my-blog-site,www)/ 20230615120000 {"url": "..."}\n',
@@ -288,7 +301,11 @@ REJECTED_LINES = [
     ("^pt,(echo),\\1\\)/", 'pt,echo,echo)/ 20230615120000 {"url": "..."}\n'),
     ("^pt,z{0,300}rep,", 'pt,rep,www)/ 20230615120000 {"url": "..."}\n'),
     ("^pt,long,|" + "x" * 10000, 'pt,long,www)/ 20230615120000 {"url": "..."}\n'),
+    ("^pt,(n{0,40}){0,40}est,", 'pt,nest,www)/ 20230615120000 {"url": "..."}\n'),
 ]
+
+# Matches every record targeted by REJECTED_LINES
+REJECTED_TARGETS = "^pt,(echo|rep|long|nest),"
 
 
 class TestGrepPatternCheck(unittest.TestCase):
@@ -313,6 +330,24 @@ class TestGrepPatternCheck(unittest.TestCase):
         for pattern in ["\\\\\\1", "x{256}", "x{,300}", "x{300,}", "[a]{1,300}"]:
             with self.subTest(pattern=pattern):
                 with self.assertRaises(ValueError):
+                    check_grep_pattern(pattern)
+
+    def test_nested_repeat_cost(self):
+        accepted = [
+            "x{255}",
+            "(ab{1,10}){1,20}",
+            "(x{255}){4}",
+            "((a{10}){10}){10}",
+            "(a{30}|b){30}",
+        ]
+        for pattern in accepted:
+            with self.subTest(pattern=pattern):
+                check_grep_pattern(pattern)
+        rejected = ["(x{255}){5}", "(x{0,100}){0,100}", "((a{10}){10}){11}", "x{10}{10}{11}"]
+        rejected += ["(a{40}|b){40}", "^pt,(([a-z]{1,8}\\.){1,8}){1,20}x"]
+        for pattern in rejected:
+            with self.subTest(pattern=pattern):
+                with self.assertRaisesRegex(ValueError, "combined repeat cost"):
                     check_grep_pattern(pattern)
 
 
@@ -355,7 +390,7 @@ class TestBlocklistHardening(unittest.TestCase):
         return 0, stderr.getvalue()
 
     def test_blocklist_idioms_block_their_records(self):
-        self._write_blocklist(*ACCEPTED_LINES, "^pt,(echo|rep|long),")
+        self._write_blocklist(*ACCEPTED_LINES, REJECTED_TARGETS)
         kept, blocked = self._filter()
         self.assertEqual((kept, blocked), (1, self.total - 1))
         self.assertEqual(self._output(), KEPT_RECORD)
@@ -373,6 +408,44 @@ class TestBlocklistHardening(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(f"line {line_num}:", stderr)
                 self.assertFalse(os.path.exists(self.output_path))
+
+    def test_library_path_applies_blocklist_idioms(self):
+        self._write_blocklist(*LIBRARY_LINES, REJECTED_TARGETS)
+        kept, blocked = filter_cdxj_by_blocklist(
+            self.input_path, load_blocklist(self.blocklist_path), self.output_path
+        )
+        self.assertEqual((kept, blocked), (1, self.total - 1))
+        self.assertEqual(self._output(), KEPT_RECORD)
+
+    def test_library_path_fails_closed(self):
+        line_num = len(LIBRARY_LINES) + 1
+        for pattern, _record in REJECTED_LINES:
+            with self.subTest(pattern=pattern[:40]):
+                self._write_blocklist(*LIBRARY_LINES, pattern)
+                patterns = load_blocklist(self.blocklist_path)
+                with self.assertRaisesRegex(ValueError, f"pattern {line_num}:"):
+                    filter_cdxj_by_blocklist(self.input_path, patterns, self.output_path)
+                self.assertFalse(os.path.exists(self.output_path))
+
+    def test_load_blocklist_fails_closed_on_invalid_regex(self):
+        self._write_blocklist("^pt,spam,", "^pt,site,www)/admin/", "/ads/", "[unclosed")
+        with self.assertRaises(ValueError) as ctx:
+            load_blocklist(self.blocklist_path)
+        self.assertIn("line 2:", str(ctx.exception))
+        self.assertIn("line 4:", str(ctx.exception))
+        self.assertNotIn("line 1:", str(ctx.exception))
+
+    def test_documented_python_api_example(self):
+        """The PYTHON API example in the module docstring, end to end."""
+        with open(self.input_path, "w", encoding="utf-8") as f:
+            f.write('pt,spam,www)/ 20230615120000 {"url": "..."}\n')
+            f.write('pt,evil,www)/ 20230615120000 {"url": "..."}\n')
+            f.write(KEPT_RECORD)
+        self._write_blocklist("# comment", "^pt,spam,", "^pt,(evil|bad)+,")
+        patterns = load_blocklist(self.blocklist_path)
+        kept, blocked = filter_cdxj_by_blocklist(self.input_path, patterns, self.output_path)
+        self.assertEqual((kept, blocked), (1, 2))
+        self.assertEqual(self._output(), KEPT_RECORD)
 
     def test_checked_lines_not_raw_file_reach_grep(self):
         """Blank and comment lines and a BOM are stripped before grep sees the file."""

@@ -108,10 +108,15 @@ unbounded time (denial-of-service).
   mostly DFA-based. The Python-oriented denylist does not apply (it would
   reject common SURT idioms); instead `check_grep_pattern()` rejects the few
   constructs that are expensive for grep: back-references, repeat counts above
-  255, and lines longer than 10 000 characters. If **any** line is rejected
-  the tool fails closed: it exits 1, writes no output and reports each
-  rejected line number and reason on stderr, since filtering with part of the
-  blocklist would publish the records the rejected lines target. grep also
+  255, nested bounded repeats (their combined repeat cost is capped), and
+  lines longer than 10 000 characters. These checks are not exhaustive; set
+  `--timeout` when blocklist lines are not fully trusted. If **any** line is
+  rejected the tool fails closed: it exits 1, writes no output and reports
+  each rejected line number and reason on stderr, since filtering with part of
+  the blocklist would publish the records the rejected lines target. The
+  library path fails closed too: `load_blocklist()` raises `ValueError` if any
+  line is not a valid Python regex, and `filter_cdxj_by_blocklist()` applies
+  the same grep checks to every pattern it is given. grep also
   fails closed on its own errors (including being killed by a signal), runs
   with `--` before the input path, and can be bounded with the optional
   `--timeout` (default: no limit; the clock includes time spent waiting on

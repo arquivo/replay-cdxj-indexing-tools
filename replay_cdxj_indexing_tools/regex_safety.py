@@ -1,9 +1,8 @@
 """
 Shared safeguards for user-supplied Python regular expressions (CWE-1333,
-ReDoS), used by ``search/filters.py`` (``--filter field~regex``) and by
-``filter/blocklist.py``'s ``load_blocklist()`` library helper. (The
-filter-blocklist CLI hands patterns to grep instead, which has its own
-checks.) Two layers:
+ReDoS), used by ``search/filters.py`` (``--filter field~regex``).
+(filter-blocklist hands its patterns to grep instead, which has its own
+checks in ``filter/blocklist.py``.) Two layers:
 
 1. ``check_regex_shape()`` / ``compile_safe_regex()`` -- a length cap plus a
    heuristic denylist of pattern shapes known to cause catastrophic

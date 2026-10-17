@@ -9,7 +9,7 @@ Filter CDXJ records matching regex patterns in a blocklist file. Use this to rem
 ### Basic Syntax
 
 ```bash
-filter-blocklist -i INPUT -b BLOCKLIST [-o OUTPUT] [-v]
+filter-blocklist -i INPUT -b BLOCKLIST [-o OUTPUT] [-v] [--timeout SECONDS]
 ```
 
 ### Examples
@@ -47,15 +47,17 @@ merge-flat-cdxj - *.cdxj | \
 
 Every blocklist line is checked before grep runs. A line is rejected if it
 uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
-a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
-characters. If **any** line is rejected, the tool fails closed: it exits with
+a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, nested bounded repeats
+whose combined repeat cost is above a fixed cap, or more than 10 000
+characters. These checks are not exhaustive; set `--timeout` when blocklist
+lines are not fully trusted. If **any** line is rejected, the tool fails closed: it exits with
 status 1, writes no output, and reports each rejected line number and reason
 on stderr. Filtering with only part of a blocklist would publish the records
 the rejected lines target. A grep error also exits 1 without writing output.
 See [SECURITY.md](../../SECURITY.md).
 
 Exit status: `0` success, `1` error (including a rejected blocklist line),
-`124` `--timeout` expired.
+`2` invalid command-line arguments, `124` `--timeout` expired.
 
 ## How It Works
 
@@ -165,7 +167,9 @@ from replay_cdxj_indexing_tools.utils.filter_blocklist import (
     filter_cdxj_by_blocklist,
 )
 
-# Load patterns from file
+# Load patterns from file. Raises ValueError, listing the line numbers, if
+# any line is not a valid Python regex: nothing is filtered with a partial
+# blocklist.
 patterns = load_blocklist('blocklist.txt')
 print(f"Loaded {len(patterns)} patterns")
 
@@ -178,6 +182,18 @@ kept, blocked = filter_cdxj_by_blocklist(
 
 print(f"Kept: {kept} lines")
 print(f"Blocked: {blocked} lines")
+```
+
+`filter_cdxj_by_blocklist()` checks every pattern it sends to grep (see
+above) and raises `ValueError` if any is rejected. Patterns from
+`load_blocklist()` must be valid Python regexes; a blocklist that relies on
+grep-only syntax, such as an unescaped `)` in a SURT prefix, can be passed as
+a file instead:
+
+```python
+kept, blocked = filter_cdxj_by_blocklist(
+    'input.cdxj', [], 'output.cdxj', blocklist_file='blocklist.txt'
+)
 ```
 
 ### Manual Pattern Creation
