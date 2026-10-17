@@ -212,13 +212,13 @@ def binary_search_file(
         if match_prefix:
             if line_key.startswith(search_key):
                 results.append(line_str)
-            elif not line_key.startswith(search_key):
+            else:
                 # We've passed all matching lines
                 break
         else:
             if line_key == search_key:
                 results.append(line_str)
-            elif line_key != search_key:
+            else:
                 # We've passed all matching lines
                 break
 
