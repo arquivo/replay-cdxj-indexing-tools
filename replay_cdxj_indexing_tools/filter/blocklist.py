@@ -434,9 +434,8 @@ Exit status:
         print(f"Error: filtering timed out after {e.timeout} seconds", file=sys.stderr)
         sys.exit(_EXIT_TIMEOUT)
     except subprocess.CalledProcessError as e:
-        print(
-            f"Error: grep failed (exit {e.returncode}): {(e.stderr or "").strip()}", file=sys.stderr
-        )
+        grep_stderr = (e.stderr or "").strip()
+        print(f"Error: grep failed (exit {e.returncode}): {grep_stderr}", file=sys.stderr)
         sys.exit(1)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
