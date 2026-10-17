@@ -6,9 +6,11 @@ import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from replay_cdxj_indexing_tools.regex_safety import DEFAULT_REGEX_TIMEOUT
-from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex as _compile_safe_regex
-from replay_cdxj_indexing_tools.regex_safety import search_with_time_limit
+from replay_cdxj_indexing_tools.regex_safety import (
+    DEFAULT_REGEX_TIMEOUT,
+    compile_safe_regex,
+    search_with_time_limit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +100,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
         - field!~pattern (regex not match)
 
         Security:
-            ReDoS: patterns are validated by _compile_safe_regex() against known
+            ReDoS: patterns are validated by compile_safe_regex() against known
             catastrophic-backtracking patterns before re.compile(). (CWE-1333)
             Pattern length is capped at MAX_PATTERN_LEN chars. Matching time
             is bounded in matches() (see regex_safety.search_with_time_limit).
@@ -109,7 +111,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
                 "field": field.strip(),
                 "op": "!~",
                 "value": pattern.strip(),
-                "regex": _compile_safe_regex(pattern.strip()),
+                "regex": compile_safe_regex(pattern.strip()),
             }
         elif "~" in expr:  # pylint: disable=no-else-return  # elif order
             field, pattern = expr.split("~", 1)
@@ -117,7 +119,7 @@ class CDXJFilter:  # pylint: disable=too-few-public-methods
                 "field": field.strip(),
                 "op": "~",
                 "value": pattern.strip(),
-                "regex": _compile_safe_regex(pattern.strip()),
+                "regex": compile_safe_regex(pattern.strip()),
             }
         elif "!=" in expr:
             field, value = expr.split("!=", 1)

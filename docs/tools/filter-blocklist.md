@@ -43,12 +43,19 @@ merge-flat-cdxj - *.cdxj | \
 - `-b, --blocklist BLOCKLIST` - Blocklist file with regex patterns (required)
 - `-o, --output OUTPUT` - Output file or `-` for stdout (default: stdout)
 - `-v, --verbose` - Print statistics to stderr
-- `--timeout SECONDS` - Abort (exit status 124) if filtering takes longer; `0` = no limit (default: 3600)
+- `--timeout SECONDS` - Abort (exit status 124, no output) if filtering takes longer; the clock includes time spent waiting for input on stdin (default: `0` = no limit)
 
-Patterns that are too long or have a catastrophic-backtracking shape such as
-`(a+)+` or `(a{1,10}){1,10}` are rejected with a warning. If **every** pattern
-is rejected, or grep reports an error, the tool exits with status 1 rather than
-passing records through unfiltered. See [SECURITY.md](../../SECURITY.md).
+Every blocklist line is checked before grep runs. A line is rejected if it
+uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
+a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
+characters. If **any** line is rejected, the tool fails closed: it exits with
+status 1, writes no output, and reports each rejected line number and reason
+on stderr. Filtering with only part of a blocklist would publish the records
+the rejected lines target. A grep error also exits 1 without writing output.
+See [SECURITY.md](../../SECURITY.md).
+
+Exit status: `0` success, `1` error (including a rejected blocklist line),
+`124` `--timeout` expired.
 
 ## How It Works
 
@@ -398,24 +405,37 @@ https://www\.spam\.pt/     # Correct - matches JSON format
 
 ### Invalid Regex Patterns
 
-If blocklist contains invalid regex:
+If grep cannot parse a blocklist line, nothing is written and the tool exits 1:
 
 ```
-Warning: Invalid regex pattern at line 5: [invalid(
-  Error: unbalanced parenthesis
+Error: grep failed (exit 2): grep: /tmp/tmpXXXX.txt:1: Unmatched [, [^, [:, [., or [=
 ```
 
-**Solution:** Fix the pattern or comment it out.
+The line number counts pattern lines only (blank and comment lines are
+skipped). **Solution:** Fix the pattern or comment it out.
+
+### Rejected Patterns
+
+If a line uses a construct that is expensive for grep, nothing is written and
+the tool exits 1:
+
+```
+Error: 1 blocklist pattern(s) rejected; refusing to filter with an incomplete blocklist:
+  line 5: back-references are expensive for grep
+```
+
+**Solution:** Rewrite the line without that construct.
 
 ### Empty Blocklist
 
-If blocklist is empty or has only comments:
+If blocklist is empty or has only comments, every record is kept and a warning
+is printed:
 
 ```
-Warning: No patterns loaded from blocklist
+Warning: No patterns in blocklist
 ```
 
-**Solution:** Ensure blocklist has at least one valid pattern.
+**Solution:** Ensure blocklist has at least one pattern.
 
 ### Pattern Too Broad
 

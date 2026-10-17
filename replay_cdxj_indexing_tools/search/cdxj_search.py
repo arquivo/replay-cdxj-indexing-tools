@@ -15,6 +15,9 @@ from replay_cdxj_indexing_tools.search.file_discovery import detect_file_type, d
 from replay_cdxj_indexing_tools.search.filters import CDXJFilter, deduplicate_lines, sort_lines
 from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
 
+# Exit status when a regex filter times out (matches POSIX timeout(1))
+_EXIT_TIMEOUT = 124
+
 
 def apply_match_type(search_key: str, match_type: str) -> tuple:
     """
@@ -207,6 +210,11 @@ Examples:
 
   # Search with glob pattern
   cdxj-search --url http://example.com /data/RAQ*.cdxj
+
+Exit status:
+  0    success
+  1    error
+  124  a --filter regex match exceeded its time limit (output is incomplete)
         """,
     )
 
@@ -325,7 +333,7 @@ Examples:
             _write_results(results, args)
     except RegexTimeoutError as e:
         print(f"Error: {e} (aborting; output is incomplete)", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(_EXIT_TIMEOUT)
 
 
 if __name__ == "__main__":

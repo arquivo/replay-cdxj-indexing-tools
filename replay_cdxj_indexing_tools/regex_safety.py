@@ -1,19 +1,21 @@
 """
-Shared safeguards for user-supplied regular expressions (CWE-1333, ReDoS).
-
-Used by ``search/filters.py`` (``--filter field~regex``) and
-``filter/blocklist.py`` (blocklist files). Two layers:
+Shared safeguards for user-supplied Python regular expressions (CWE-1333,
+ReDoS), used by ``search/filters.py`` (``--filter field~regex``) and by
+``filter/blocklist.py``'s ``load_blocklist()`` library helper. (The
+filter-blocklist CLI hands patterns to grep instead, which has its own
+checks.) Two layers:
 
 1. ``check_regex_shape()`` / ``compile_safe_regex()`` -- a length cap plus a
    heuristic denylist of pattern shapes known to cause catastrophic
-   backtracking. It is a cheap
-   first line of defence, not a proof of safety: some slow patterns (e.g.
-   high-degree polynomial ones such as ``(.*a){20}$``) still get through.
-2. ``search_with_time_limit()`` -- an execution-time backstop around
-   ``re.search()`` built on ``SIGALRM``/``setitimer`` (stdlib only).
+   backtracking. It is a cheap first line of defence and is not
+   exhaustive; the time limit below is the primary bound.
+2. ``search_with_time_limit()`` -- an execution-time limit around each
+   ``re.search()`` call, built on ``SIGALRM``/``setitimer`` (stdlib only).
+   It bounds every single search, not a whole run.
 
-Backstop limitations (documented degraded behaviour -- the regex then runs
-without a time bound and only the denylist applies):
+Time-limit limitations (documented degraded behaviour -- the regex then runs
+without a time bound and only the denylist applies; a warning is logged once
+per process):
 
 * platforms without ``signal.setitimer``/``SIGALRM`` (e.g. Windows);
 * calls made outside the main thread (signals are only delivered there);
@@ -21,6 +23,10 @@ without a time bound and only the denylist applies):
   armed (it is left untouched rather than silently broken);
 * when the current ``SIGALRM`` handler was not installed from Python and so
   could not be restored afterwards.
+
+Library, threaded or server embedders should wrap their matching loop in
+``regex_time_limit()`` on the main thread, or bound the work at the process
+level (e.g. a worker process with a deadline).
 """
 
 import contextlib
@@ -30,7 +36,7 @@ import re
 import signal
 import threading
 import time
-from typing import Iterator, Optional
+from typing import Iterator, Optional, Set
 
 logger = logging.getLogger(__name__)
 
@@ -65,8 +71,7 @@ def check_regex_shape(pattern: str, max_len: int = MAX_PATTERN_LEN) -> None:
     """
     Reject a pattern that is too long or has a known ReDoS shape.
 
-    Does not check syntax, so it also suits patterns for other engines
-    (``grep -E`` accepts e.g. an unmatched ``)`` that Python rejects).
+    Syntax is not checked here; see compile_safe_regex().
 
     Raises:
         ValueError: if the pattern is too long or ReDoS-shaped.
@@ -112,9 +117,17 @@ class _Watchdog:  # pylint: disable=too-few-public-methods
 
 
 _STATE = _Watchdog()
+# Degraded-mode reasons already logged (warn once per process, not per call)
+_WARNED: Set[str] = set()
 # Bound once: these run on every guarded search
 _get_ident = threading.get_ident
 _monotonic = time.monotonic
+
+
+def _warn_once(reason: str) -> None:
+    if reason not in _WARNED:
+        _WARNED.add(reason)
+        logger.warning("regex time limit disabled: %s", reason)
 
 
 def _on_alarm(_signum, _frame):
@@ -138,13 +151,19 @@ def regex_time_limit() -> Iterator[bool]:
         the module docstring for when that happens).
     """
     if _STATE.thread_ident is not None:
+        # Nested scope: active only on the thread that owns the watchdog
         yield _get_ident() == _STATE.thread_ident
         return
-    if (
-        not hasattr(signal, "setitimer")
-        or threading.current_thread() is not threading.main_thread()
-        or signal.getsignal(signal.SIGALRM) is None
-    ):
+    if not hasattr(signal, "setitimer"):
+        _warn_once("signal.setitimer is not available on this platform")
+        yield False
+        return
+    if threading.current_thread() is not threading.main_thread():
+        _warn_once("not running in the main thread")
+        yield False
+        return
+    if signal.getsignal(signal.SIGALRM) is None:
+        _warn_once("the current SIGALRM handler was not installed from Python")
         yield False
         return
 
@@ -154,7 +173,7 @@ def regex_time_limit() -> Iterator[bool]:
         # Someone else owns ITIMER_REAL; hand it back rather than break it.
         signal.setitimer(signal.ITIMER_REAL, *previous_timer)
         signal.signal(signal.SIGALRM, previous_handler)
-        logger.warning("ITIMER_REAL already in use; regex time limit disabled")
+        _warn_once("ITIMER_REAL is already in use")
         yield False
         return
 
@@ -190,6 +209,7 @@ def search_with_time_limit(
                 return search_with_time_limit(regex, text, timeout)
             return regex.search(text)
     if owner != _get_ident():
+        _warn_once("not running in the main thread")
         return regex.search(text)  # signals only reach the main thread
 
     _STATE.deadline = _monotonic() + timeout

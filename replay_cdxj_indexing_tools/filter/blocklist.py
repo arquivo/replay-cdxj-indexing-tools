@@ -67,54 +67,139 @@ PYTHON API
 """
 
 import argparse
+import math
 import os
+import re
 import subprocess
 import sys
 import tempfile
 from typing import List, Optional, Pattern, Tuple
 
-from replay_cdxj_indexing_tools.regex_safety import check_regex_shape
-from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex as _compile_safe_regex
+from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex
 
-# Default wall-clock limit for the grep subprocess, in seconds
-DEFAULT_GREP_TIMEOUT = 3600
 # Exit status on timeout (matches POSIX timeout(1))
 _EXIT_TIMEOUT = 124
 
+# Longest blocklist line accepted for grep. Generous on purpose: real
+# blocklists contain long host alternations.
+GREP_MAX_PATTERN_LEN = 10000
+# Largest repeat count accepted in {n}, {n,} and {n,m} (same as RE_DUP_MAX
+# in POSIX's minimum limits)
+GREP_MAX_REPEAT = 255
 
-def _sanitize_patterns(pattern_strings: List[str]) -> List[str]:
-    """
-    Validate raw pattern strings, dropping (with a warning) any that are
-    too long or shaped to risk catastrophic backtracking. Syntax is left to
-    grep: ERE accepts some patterns Python's re rejects, such as the
-    unmatched ")" in SURT prefixes like ``^pt,site,www)/admin/``.
+_REPEAT_COUNTS = re.compile(r"\{(\d*)(?:,(\d*))?\}")
 
-    Used as the single choke point before patterns are written to the temp
-    file handed to grep, so a raw blocklist file passed straight through
-    can never bypass validation (see #75).
+
+def _read_pattern_lines(path: str) -> List[Tuple[int, str]]:
     """
-    safe = []
-    for pattern_text in pattern_strings:
+    Return ``(line_number, pattern)`` for every non-blank, non-comment line.
+
+    Read as UTF-8, ignoring a leading byte-order mark so it does not become
+    part of the first pattern.
+    """
+    lines = []
+    with open(path, "r", encoding="utf-8-sig") as f:
+        for line_num, line in enumerate(f, 1):
+            line = line.rstrip("\n\r")
+            if line and not line.startswith("#"):
+                lines.append((line_num, line))
+    return lines
+
+
+def check_grep_pattern(pattern: str) -> None:
+    """
+    Reject a blocklist line containing constructs that are expensive for
+    ``grep -E``: back-references (``\\1``-``\\9``), repeat counts above
+    GREP_MAX_REPEAT, or more than GREP_MAX_PATTERN_LEN characters.
+
+    grep's matcher is mostly DFA-based, so the Python-oriented backtracking
+    checks in regex_safety do not apply here (and would reject common SURT
+    idioms). Syntax is left to grep.
+
+    Raises:
+        ValueError: with the reason, if the line is rejected.
+    """
+    if len(pattern) > GREP_MAX_PATTERN_LEN:
+        raise ValueError(f"longer than {GREP_MAX_PATTERN_LEN} characters ({len(pattern)})")
+
+    # Drop escape pairs (e.g. a literal "\\{") and bracket expressions, where
+    # "{" is literal, before looking at repeat counts.
+    unescaped = []
+    i = 0
+    while i < len(pattern):
+        char = pattern[i]
+        if char == "\\" and i + 1 < len(pattern):
+            if pattern[i + 1] in "123456789":
+                raise ValueError("back-references are expensive for grep")
+            i += 2
+            continue
+        if char == "[":
+            i = _skip_bracket_expression(pattern, i)
+            continue
+        unescaped.append(char)
+        i += 1
+
+    for match in _REPEAT_COUNTS.finditer("".join(unescaped)):
+        counts = [int(count) for count in match.groups() if count]
+        if any(count > GREP_MAX_REPEAT for count in counts):
+            raise ValueError(f"repeat counts above {GREP_MAX_REPEAT} are expensive for grep")
+
+
+def _skip_bracket_expression(pattern: str, start: int) -> int:
+    """Return the index just past the bracket expression opening at ``start``."""
+    i = start + 1
+    if i < len(pattern) and pattern[i] == "^":
+        i += 1
+    if i < len(pattern) and pattern[i] == "]":
+        i += 1  # a leading "]" is literal
+    while i < len(pattern):
+        if pattern[i] == "[" and i + 1 < len(pattern) and pattern[i + 1] in ":.=":
+            close = pattern.find(pattern[i + 1] + "]", i + 2)
+            if close != -1:
+                i = close + 2
+                continue
+        if pattern[i] == "]":
+            return i + 1
+        i += 1
+    return i  # unterminated: grep reports the syntax error
+
+
+def _check_grep_patterns(patterns: List[Tuple[int, str]], source: str) -> None:
+    """
+    Fail closed if any blocklist line is rejected: filtering with only part
+    of a blocklist would publish the records the rejected lines target.
+
+    Raises:
+        ValueError: listing every rejected line number and reason.
+    """
+    rejected = []
+    for line_num, pattern in patterns:
         try:
-            check_regex_shape(pattern_text)
-            safe.append(pattern_text)
+            check_grep_pattern(pattern)
         except ValueError as e:
-            print(f"Warning: Rejected blocklist pattern: {pattern_text}", file=sys.stderr)
-            print(f"  Reason: {e}", file=sys.stderr)
-    return safe
+            rejected.append(f"  {source} {line_num}: {e}")
+    if rejected:
+        raise ValueError(
+            f"{len(rejected)} blocklist pattern(s) rejected; refusing to filter"
+            " with an incomplete blocklist:\n" + "\n".join(rejected)
+        )
 
 
 def load_blocklist(blocklist_path: str) -> List[Pattern]:
     """
-    Load blocklist patterns from file.
+    Load blocklist patterns from file as compiled Python regexes.
 
     Each line is treated as a regex pattern. Lines starting with # are ignored
     as comments. Empty lines are also ignored.
 
+    For library use only: the CLI hands the file to grep instead (see
+    filter_cdxj_by_blocklist), whose syntax and checks differ.
+
     Security:
-        Patterns are validated by _compile_safe_regex() against known
+        Patterns are validated by compile_safe_regex() against known
         catastrophic-backtracking shapes before re.compile() (CWE-1333).
-        Pattern length is capped at MAX_PATTERN_LEN chars.
+        Pattern length is capped at MAX_PATTERN_LEN chars. Rejected
+        patterns are skipped with a warning.
 
     Args:
         blocklist_path: Path to blocklist file
@@ -130,22 +215,12 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
         >>> print(f"Loaded {len(patterns)} patterns")
     """
     patterns = []
-
-    with open(blocklist_path, "r", encoding="utf-8") as f:
-        for line_num, line in enumerate(f, 1):
-            line = line.rstrip("\n\r")
-
-            # Skip empty lines and comments
-            if not line or line.startswith("#"):
-                continue
-
-            try:
-                patterns.append(_compile_safe_regex(line))
-            except ValueError as e:
-                print(f"Warning: Rejected pattern at line {line_num}: {line}", file=sys.stderr)
-                print(f"  Reason: {e}", file=sys.stderr)
-                # Continue loading other patterns
-
+    for line_num, line in _read_pattern_lines(blocklist_path):
+        try:
+            patterns.append(compile_safe_regex(line))
+        except ValueError as e:
+            print(f"Warning: Rejected pattern at line {line_num}: {line}", file=sys.stderr)
+            print(f"  Reason: {e}", file=sys.stderr)
     return patterns
 
 
@@ -155,7 +230,7 @@ def filter_cdxj_by_blocklist(
     output_path: str = "-",
     buffer_size: int = 1024 * 1024,  # pylint: disable=unused-argument
     blocklist_file: Optional[str] = None,
-    timeout: Optional[float] = DEFAULT_GREP_TIMEOUT,
+    timeout: Optional[float] = None,
 ) -> Tuple[int, int]:
     """
     Filter CDXJ records matching blocklist patterns.
@@ -170,21 +245,21 @@ def filter_cdxj_by_blocklist(
             (deprecated, use blocklist_file)
         output_path: Output file, or '-' for stdout (default: stdout)
         buffer_size: I/O buffer size in bytes (unused, kept for API compatibility)
-        blocklist_file: Path to a raw blocklist file. Its patterns are
-            re-validated (see #75) before use, so this is no longer a
-            trust-the-caller performance shortcut.
+        blocklist_file: Path to a raw blocklist file. Every line is checked
+            (see check_grep_pattern) before use.
         timeout: Kill grep and raise subprocess.TimeoutExpired after this
-            many seconds (None or 0 = no limit). Nothing is written on timeout.
+            many seconds, including time spent waiting for input on stdin
+            (None or 0 = no limit). Nothing is written on timeout.
 
     Returns:
         Tuple of (lines_kept, lines_blocked)
 
     Raises:
         subprocess.TimeoutExpired: grep ran longer than ``timeout``.
-        subprocess.CalledProcessError: grep failed (exit status > 1).
-        ValueError: if patterns were supplied but every one was rejected.
-            Running grep with none of them would pass every record through
-            unfiltered, i.e. publish content the blocklist exists to remove.
+        subprocess.CalledProcessError: grep failed (an error status, or
+            killed by a signal). Nothing is written.
+        ValueError: if any blocklist line is rejected. Nothing is written:
+            filtering without it would publish the records it targets.
 
     Example:
         >>> kept, blocked = filter_cdxj_by_blocklist(
@@ -193,41 +268,28 @@ def filter_cdxj_by_blocklist(
         ... )
         >>> print(f"Kept {kept} lines, blocked {blocked} lines")
     """
-    # Gather raw pattern text from whichever source was given, then always
-    # sanitize before writing the temp file grep will read. blocklist_file is
-    # NOT trusted directly here (see #75): passing it straight to grep would
-    # bypass any validation performed elsewhere (e.g. by load_blocklist()).
+    # Always check the pattern text and hand grep a fresh file holding only
+    # the checked lines; a raw blocklist_file is never passed to grep (#75).
     if blocklist_file is not None:
-        with open(blocklist_file, "r", encoding="utf-8") as f:
-            pattern_strings = [
-                stripped
-                for line in f
-                for stripped in [line.rstrip("\n\r")]
-                if stripped and not stripped.startswith("#")
-            ]
+        patterns = _read_pattern_lines(blocklist_file)
+        source = "line"
     else:
-        pattern_strings = [pattern.pattern for pattern in blocklist_patterns]
+        patterns = [(num, p.pattern) for num, p in enumerate(blocklist_patterns, 1)]
+        source = "pattern"
+    _check_grep_patterns(patterns, source)
 
-    safe_patterns = _sanitize_patterns(pattern_strings)
-    if pattern_strings and not safe_patterns:
-        raise ValueError(
-            f"all {len(pattern_strings)} blocklist patterns were rejected;"
-            " refusing to pass input through unfiltered"
-        )
-
-    temp_blocklist = tempfile.NamedTemporaryFile(  # pylint: disable=consider-using-with
-        mode="w", delete=False, suffix=".txt"
-    )
-    for pattern_text in safe_patterns:
-        temp_blocklist.write(pattern_text + "\n")
-    temp_blocklist.close()
-    blocklist_file = temp_blocklist.name
-
+    temp_path = None
     try:
-        # Build grep command
+        with tempfile.NamedTemporaryFile(
+            mode="w", encoding="utf-8", delete=False, suffix=".txt"
+        ) as temp_blocklist:
+            temp_path = temp_blocklist.name
+            for _, pattern_text in patterns:
+                temp_blocklist.write(pattern_text + "\n")
+
         # "--" ends option parsing so an input path starting with "-" can
         # never be read as a grep option.
-        cmd = ["grep", "-a", "-E", "-v", "-f", blocklist_file, "--"]
+        cmd = ["grep", "-a", "-E", "-v", "-f", temp_path, "--"]
 
         # Handle input
         if input_path == "-":
@@ -245,9 +307,10 @@ def filter_cdxj_by_blocklist(
             check=False,
             timeout=timeout or None,
         )
-        # grep exits 1 when no line is kept; >1 is an error (e.g. a pattern
-        # grep -E cannot parse). Fail instead of writing partial output.
-        if result.returncode > 1:
+        # grep exits 0 when lines were kept and 1 when none were. Anything
+        # else is an error (e.g. a pattern grep -E cannot parse) or, if
+        # negative, death by a signal: fail instead of writing partial output.
+        if result.returncode not in (0, 1):
             raise subprocess.CalledProcessError(result.returncode, cmd, stderr=result.stderr)
 
         if output_path == "-":
@@ -272,8 +335,19 @@ def filter_cdxj_by_blocklist(
         return lines_kept, lines_blocked
 
     finally:
-        # A sanitized temp blocklist is always created above; clean it up.
-        os.unlink(temp_blocklist.name)
+        if temp_path is not None:
+            os.unlink(temp_path)
+
+
+def _seconds(value: str) -> float:
+    """argparse type: a finite, non-negative number of seconds."""
+    try:
+        seconds = float(value)
+    except ValueError:
+        seconds = math.nan
+    if not math.isfinite(seconds) or seconds < 0:
+        raise argparse.ArgumentTypeError(f"must be a finite number >= 0, got {value!r}")
+    return seconds
 
 
 def main():
@@ -303,6 +377,15 @@ Blocklist file format:
     # Block specific content
     /ads/
     "mime": "application/x-shockwave-flash"
+
+  Every line is checked before grep runs. If any line is rejected (it uses
+  a construct that is expensive for grep), nothing is written and the
+  rejected line numbers are reported on stderr.
+
+Exit status:
+  0    success
+  1    error, including a rejected blocklist line (no output is written)
+  124  --timeout expired (no output is written)
         """,
     )
 
@@ -316,33 +399,23 @@ Blocklist file format:
     parser.add_argument("-v", "--verbose", action="store_true", help="Print statistics to stderr")
     parser.add_argument(
         "--timeout",
-        type=float,
-        default=DEFAULT_GREP_TIMEOUT,
-        help="Abort if filtering takes longer than this many seconds; 0 = no limit"
-        f" (default: {DEFAULT_GREP_TIMEOUT})",
+        type=_seconds,
+        default=0,
+        help="Abort if filtering takes longer than this many seconds, including time"
+        " spent waiting for input on stdin (default: 0 = no limit)",
     )
 
     args = parser.parse_args()
 
     try:
-        # Load blocklist
-        if args.verbose:
-            print(f"Loading blocklist from {args.blocklist}...", file=sys.stderr)
-
-        patterns = load_blocklist(args.blocklist)
+        if not _read_pattern_lines(args.blocklist):
+            print("Warning: No patterns in blocklist", file=sys.stderr)
 
         if args.verbose:
-            print(f"Loaded {len(patterns)} blocklist patterns", file=sys.stderr)
-
-        if len(patterns) == 0:
-            print("Warning: No patterns loaded from blocklist", file=sys.stderr)
-
-        # Filter
-        if args.verbose:
-            print(f"Filtering {args.input}...", file=sys.stderr)
+            print(f"Filtering {args.input} with {args.blocklist}...", file=sys.stderr)
 
         lines_kept, lines_blocked = filter_cdxj_by_blocklist(
-            args.input, patterns, args.output, blocklist_file=args.blocklist, timeout=args.timeout
+            args.input, [], args.output, blocklist_file=args.blocklist, timeout=args.timeout
         )
 
         # Print statistics
@@ -361,7 +434,9 @@ Blocklist file format:
         print(f"Error: filtering timed out after {e.timeout} seconds", file=sys.stderr)
         sys.exit(_EXIT_TIMEOUT)
     except subprocess.CalledProcessError as e:
-        print(f"Error: grep failed (exit {e.returncode}): {e.stderr.strip()}", file=sys.stderr)
+        print(
+            f"Error: grep failed (exit {e.returncode}): {(e.stderr or "").strip()}", file=sys.stderr
+        )
         sys.exit(1)
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)

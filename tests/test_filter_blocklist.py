@@ -324,12 +324,12 @@ class TestFilterCdxjByBlocklist(unittest.TestCase):
         self.assertEqual(kept, 2)
         self.assertEqual(blocked, 0)
 
-    def test_filter_blocklist_file_rejects_redos_pattern(self):
+    def test_filter_blocklist_file_rejected_line_fails_closed(self):
         """
         Regression test for #75: a raw blocklist_file passed straight to
-        filter_cdxj_by_blocklist must still be validated, not handed directly
-        to grep. A ReDoS-shaped pattern in the file must be dropped while safe
-        patterns in the same file still apply.
+        filter_cdxj_by_blocklist must still be checked, not handed directly
+        to grep. A rejected line fails the whole run (no output), since
+        filtering without it would publish the records it targets.
         """
         cdxj_lines = [
             'pt,governo,www)/ 20230615120000 {"url": "..."}\n',
@@ -344,14 +344,11 @@ class TestFilterCdxjByBlocklist(unittest.TestCase):
             f.writelines(cdxj_lines)
 
         with open(blocklist_path, "w") as f:
-            f.write("^pt,spam,\n(.*a+)+b\n")
+            f.write("^pt,spam,\n^pt,(governo),\\1\n")
 
-        kept, blocked = filter_cdxj_by_blocklist(
-            input_path, [], output_path, blocklist_file=blocklist_path
-        )
-
-        self.assertEqual(kept, 1)
-        self.assertEqual(blocked, 1)
+        with self.assertRaisesRegex(ValueError, "line 2:"):
+            filter_cdxj_by_blocklist(input_path, [], output_path, blocklist_file=blocklist_path)
+        self.assertFalse(os.path.exists(output_path))
 
     def test_filter_multiple_pattern_types(self):
         """Filter using combination of different pattern types."""

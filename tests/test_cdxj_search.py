@@ -978,39 +978,39 @@ class TestInputValidation(unittest.TestCase):
         f = CDXJFilter(filters=["status=200"])
         self.assertEqual(len(f.filter_rules), 1)
 
-    # --- _compile_safe_regex caching (issue #22) ---
+    # --- compile_safe_regex caching (issue #22) ---
 
     def test_compile_safe_regex_is_cached(self):
-        """_compile_safe_regex must return the same compiled object on repeated calls."""
-        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+        """compile_safe_regex must return the same compiled object on repeated calls."""
+        from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex
 
-        result1 = _compile_safe_regex("text/.*")
-        result2 = _compile_safe_regex("text/.*")
-        self.assertIs(result1, result2, "_compile_safe_regex should return cached object")
+        result1 = compile_safe_regex("text/.*")
+        result2 = compile_safe_regex("text/.*")
+        self.assertIs(result1, result2, "compile_safe_regex should return cached object")
 
     def test_compile_safe_regex_cache_info(self):
         """lru_cache must report at least one hit after calling with the same pattern twice."""
-        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+        from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex
 
-        _compile_safe_regex.cache_clear()
-        _compile_safe_regex("image/.*")
-        _compile_safe_regex("image/.*")
-        info = _compile_safe_regex.cache_info()
+        compile_safe_regex.cache_clear()
+        compile_safe_regex("image/.*")
+        compile_safe_regex("image/.*")
+        info = compile_safe_regex.cache_info()
         self.assertGreaterEqual(info.hits, 1)
 
     def test_compile_safe_regex_rejects_too_long(self):
-        """_compile_safe_regex must reject patterns longer than _MAX_PATTERN_LEN."""
-        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+        """compile_safe_regex must reject patterns longer than MAX_PATTERN_LEN."""
+        from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex
 
         with self.assertRaises(ValueError):
-            _compile_safe_regex("a" * 1001)
+            compile_safe_regex("a" * 1001)
 
     def test_compile_safe_regex_rejects_redos(self):
-        """_compile_safe_regex must reject patterns with ReDoS structure."""
-        from replay_cdxj_indexing_tools.search.filters import _compile_safe_regex
+        """compile_safe_regex must reject patterns with ReDoS structure."""
+        from replay_cdxj_indexing_tools.regex_safety import compile_safe_regex
 
         with self.assertRaises(ValueError):
-            _compile_safe_regex("(a+)+")
+            compile_safe_regex("(a+)+")
 
 
 if __name__ == "__main__":

@@ -70,37 +70,52 @@ intended `base_dir` (e.g., `/etc/passwd`, private key files).
 
 ### 2. ReDoS via user-supplied regex patterns (CWE-1333)
 
-**Components:** `replay_cdxj_indexing_tools/regex_safety.py` (shared checks),
-used by `search/filters.py` (`CDXJFilter`, `cdxj-search --filter field~regex`)
-and `filter/blocklist.py` (`filter-blocklist -b blocklist.txt`).
+**Components:** `replay_cdxj_indexing_tools/regex_safety.py` (Python `re`
+checks, used by `search/filters.py`: `CDXJFilter`, `cdxj-search --filter
+field~regex`) and `filter/blocklist.py` (`filter-blocklist -b blocklist.txt`,
+matched by grep).
 
 **Threat:** Whoever controls a filter expression or a blocklist line could
-supply a regex that backtracks catastrophically (e.g. `(a+)+$`,
-`(a{1,10}){1,10}$`), tying up the process for an unbounded time
-(denial-of-service).
+supply a regex that is very expensive to match, tying up the process for an
+unbounded time (denial-of-service).
 
 **Mitigation (defence in depth):**
-- *Denylist heuristic* -- `check_regex_shape()` / `compile_safe_regex()`
-  reject patterns longer than `MAX_PATTERN_LEN` (1 000 chars) and known
-  catastrophic shapes: a group ending in a variable quantifier that is itself
-  repeated (`(x+)+`, `(x*)*`, `(x+){2,}`, `(x{1,10}){1,10}`, `((x+))+`,
-  `(x?){30}`), repeated alternation (`(a|b)*`, `(a|ab){2,}`), and `(?x)` /
-  `(?#...)` which can hide those shapes. This is a heuristic: some slow
-  patterns (e.g. high-degree polynomial ones like `(.*a){20}$`) pass it.
-- *Timeout backstop (filters)* -- every `~`/`!~` match runs under
-  `search_with_time_limit()`, a `SIGALRM`/`setitimer` watchdog (default 1 s
-  per search). A timeout raises `RegexTimeoutError` and `cdxj-search` aborts
-  with exit status 1 instead of skipping the record: skipping would yield
-  silently incomplete results and still let a hostile pattern cost one full
-  timeout per record. The backstop is **not available** (only the denylist
-  applies) on platforms without `SIGALRM` (Windows), outside the main thread,
-  or while another component holds the `ITIMER_REAL` timer.
-- *grep engine (blocklist)* -- blocklist lines are matched by `grep -E`
-  (a DFA-based engine that does not backtrack like Python's `re`), after the
-  same denylist/length check. grep runs with `--` before the input path and a
-  wall-clock limit (`--timeout`, default 3 600 s; exit status 124 on timeout).
-  If every blocklist line is rejected, or grep reports an error, the tool
-  fails with a non-zero exit instead of passing records through unfiltered.
+- *Denylist heuristic (filters)* -- `check_regex_shape()` /
+  `compile_safe_regex()` reject patterns longer than `MAX_PATTERN_LEN`
+  (1 000 chars) and known catastrophic-backtracking shapes: a group ending in
+  a variable quantifier that is itself repeated (`(x+)+`, `(x+){2,}`,
+  `(x{1,10}){1,10}`, ...), repeated alternation (`(a|b)*`), and `(?x)` /
+  `(?#...)`, which can hide those shapes. The heuristic is not exhaustive;
+  the time limit is the primary bound.
+- *Time limit (filters)* -- every `~`/`!~` match runs under
+  `search_with_time_limit()`, a `SIGALRM`/`setitimer` watchdog. The limit
+  (default 1 s) applies to each search, not to the whole run. A timeout
+  raises `RegexTimeoutError` and `cdxj-search` aborts with exit status 124
+  instead of skipping the record: skipping would yield silently incomplete
+  results and still let a hostile pattern cost one full timeout per record.
+  The time limit is **not active** (only the denylist applies; a warning is
+  logged once per process) when:
+  - `setitimer`/`SIGALRM` is unavailable (e.g. Windows);
+  - matching runs outside the main thread;
+  - another component already has an `ITIMER_REAL`/`alarm()` timer armed
+    (it is left untouched);
+  - the current `SIGALRM` handler was not installed from Python.
+
+  Library, threaded or server embedders should wrap their matching loop in
+  `regex_time_limit()` on the main thread, or bound the work at the process
+  level (e.g. a worker process with a deadline).
+- *grep (blocklist)* -- blocklist lines are matched by `grep -E`, which is
+  mostly DFA-based. The Python-oriented denylist does not apply (it would
+  reject common SURT idioms); instead `check_grep_pattern()` rejects the few
+  constructs that are expensive for grep: back-references, repeat counts above
+  255, and lines longer than 10 000 characters. If **any** line is rejected
+  the tool fails closed: it exits 1, writes no output and reports each
+  rejected line number and reason on stderr, since filtering with part of the
+  blocklist would publish the records the rejected lines target. grep also
+  fails closed on its own errors (including being killed by a signal), runs
+  with `--` before the input path, and can be bounded with the optional
+  `--timeout` (default: no limit; the clock includes time spent waiting on
+  stdin; exit status 124 on timeout).
 
 **Tests:** `tests/test_regex_safety.py`
 
@@ -217,7 +232,7 @@ directory runs unrestricted.
 | CWE | Description | Affected component |
 |-----|-------------|-------------------|
 | CWE-22  | Path Traversal | `zipnum_search.search_zipnum_file()` |
-| CWE-1333 | ReDoS | `regex_safety` (used by `filters.CDXJFilter`, `blocklist`) |
+| CWE-1333 | ReDoS | `regex_safety` (used by `filters.CDXJFilter`), `blocklist.check_grep_pattern` |
 | CWE-400 | Uncontrolled Resource Consumption | `zipnum_search` block reads; `arclist_index_to_redis` pipeline |
 | CWE-78  | OS Command Injection | `arclist_index_to_redis.run_pipeline()` (mitigated via list args) |
 | CWE-306 | Missing Authentication | `path_index_to_redis.submit_index_to_redis()` remote Redis |

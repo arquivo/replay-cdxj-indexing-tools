@@ -88,8 +88,9 @@ cdxj-search --url http://example.com /data/indexes/
   - `field~pattern` - Regex match
   - `field!~pattern` - Regex not match
   - Regex patterns with a catastrophic-backtracking shape (e.g. `(a+)+`) are
-    rejected. A regex match that runs for more than 1 second aborts the search
-    with exit status 1 (on Unix; see [SECURITY.md](../../SECURITY.md)).
+    rejected. A single regex match that runs for more than 1 second aborts the
+    search with exit status 124 and incomplete output (on Unix, in the main
+    thread; see [SECURITY.md](../../SECURITY.md)).
 
 Common fields: `status`, `mime`, `digest`, `length`
 
