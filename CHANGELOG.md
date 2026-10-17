@@ -2,6 +2,15 @@
 
 <!-- version list -->
 
+## v1.2.4 (2026-10-17)
+
+### Bug Fixes
+
+- **zipnum**: Keep only the anchor block before ZipNum search matches
+  ([#73](https://github.com/arquivo/replay-cdxj-indexing-tools/pull/73),
+  [`a779275`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/a77927578388fd1546180d33b285f9234f642af1))
+
+
 ## v1.2.3 (2026-10-17)
 
 ### Bug Fixes
