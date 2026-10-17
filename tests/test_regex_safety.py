@@ -332,22 +332,48 @@ class TestGrepPatternCheck(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     check_grep_pattern(pattern)
 
-    def test_nested_repeat_cost(self):
-        accepted = [
-            "x{255}",
-            "(ab{1,10}){1,20}",
-            "(x{255}){4}",
-            "((a{10}){10}){10}",
-            "(a{30}|b){30}",
+    def test_bounded_repeat_size(self):
+        """Bounded repeats are capped by the size they expand to, per line."""
+        accepted = {
+            "x{255}": 255,
+            "a{,}": 1,
+            "x{2,}": 2,
+            "x*y+z?": 0,
+            ".{255}": 4 * 255,
+            "(ab{1,10}){1,20}": 20 * 11,
+            "(x{255}){4}": 4 * 255,
+            "((a{10}){10}){10}": 1000,
+            "(a{30}|b){30}": 30 * 31,
+            "x{0}(ab|c){3}": 3 * 3,
+            "\\{9}\\.{9}[a-z]{9}": 18,  # "\\{" is a literal
+            "a){255}": 255,  # an unmatched ")" is a literal
+            "[^a]{9}[[:x]{9}": 18,  # "[:" without ":]" is literal in a bracket
+            "^pt,(sapo|publico),": 0,
+        }
+        for pattern, size in accepted.items():
+            with self.subTest(pattern=pattern):
+                self.assertEqual(check_grep_pattern(pattern), size)
+        one_repeat = [
+            "(x{255}){5}",
+            "(x{0,100}){0,100}",
+            "((a{10}){10}){11}",
+            "x{10}{10}{11}",
+            "(a{40}|b){40}",
+            "((a{255})b){5}",
+            "(abcdefgh){200}",  # a wide repeated group
+            "(.{0,32}){0,32}",
+            "^pt,(([a-z]{1,8}\\.){1,8}){1,20}x",
         ]
-        for pattern in accepted:
+        for pattern in one_repeat:
             with self.subTest(pattern=pattern):
-                check_grep_pattern(pattern)
-        rejected = ["(x{255}){5}", "(x{0,100}){0,100}", "((a{10}){10}){11}", "x{10}{10}{11}"]
-        rejected += ["(a{40}|b){40}", "^pt,(([a-z]{1,8}\\.){1,8}){1,20}x"]
-        for pattern in rejected:
+                with self.assertRaisesRegex(ValueError, "a bounded repeat expands to more"):
+                    check_grep_pattern(pattern)
+        # Many repeats side by side, each one under the cap
+        side_by_side = ["x{255}" * 5, "[a-z]{0,255}" * 5, "(x{0,32}){0,32}" * 2, ".{0,255}" * 2]
+        side_by_side += ["(a{255}|b{255}|c{255}|d{255}|e{255})"]
+        for pattern in side_by_side:
             with self.subTest(pattern=pattern):
-                with self.assertRaisesRegex(ValueError, "combined repeat cost"):
+                with self.assertRaisesRegex(ValueError, "in total"):
                     check_grep_pattern(pattern)
 
 
@@ -408,6 +434,22 @@ class TestBlocklistHardening(unittest.TestCase):
                 self.assertEqual(code, 1)
                 self.assertIn(f"line {line_num}:", stderr)
                 self.assertFalse(os.path.exists(self.output_path))
+
+    def test_bounded_repeat_budget_across_blocklist(self):
+        """Lines under the per-line cap still add up against the blocklist's cap."""
+        lines = [f"^pt,budget{i},(x{{255}}){{4}}" for i in range(3)]
+        self._write_blocklist(*lines[:2])
+        self.assertEqual(self._filter(), (self.total, 0))
+        os.remove(self.output_path)
+
+        self._write_blocklist(*lines)
+        with self.assertRaisesRegex(ValueError, "line 3: bounded repeats across the blocklist"):
+            self._filter()
+        self.assertFalse(os.path.exists(self.output_path))
+        code, stderr = self._run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("line 3:", stderr)
+        self.assertNotIn("line 2:", stderr)
 
     def test_library_path_applies_blocklist_idioms(self):
         self._write_blocklist(*LIBRARY_LINES, REJECTED_TARGETS)

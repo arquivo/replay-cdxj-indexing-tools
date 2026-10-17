@@ -42,7 +42,7 @@ Blocklist file format:
     \\.swf"
 
     # Block domain + specific path
-    ^pt,site,www)/admin/
+    ^pt,site,www\\)/admin/
 
 PYTHON API
 ==========
@@ -85,10 +85,14 @@ GREP_MAX_PATTERN_LEN = 10000
 # Largest repeat count accepted in {n}, {n,} and {n,m} (same as RE_DUP_MAX
 # in POSIX's minimum limits)
 GREP_MAX_REPEAT = 255
-# Largest product of repeat counts across nested groups, e.g. 4 * 255 for
-# "(x{255}){4}". grep expands a bounded repeat into that many copies of its
-# operand, so nested repeats multiply; 1024 leaves room for real patterns.
-GREP_MAX_REPEAT_COST = 1024
+# grep expands a bounded repeat into that many copies of its operand, so
+# nested repeats multiply, and its set-up cost grows quickly with the expanded
+# size, more so when the blocklist has several such lines. Caps on the expanded
+# size (see check_grep_pattern) of the bounded repeats in one line, e.g.
+# 4 * 255 for "(x{255}){4}", and in the whole blocklist; real blocklists rarely
+# use bounded repeats at all.
+GREP_MAX_REPEAT_SIZE = 1024
+GREP_MAX_TOTAL_REPEAT_SIZE = 2048
 
 _REPEAT_COUNTS = re.compile(r"\{(\d*)(?:,(\d*))?\}")
 
@@ -109,16 +113,26 @@ def _read_pattern_lines(path: str) -> List[Tuple[int, str]]:
     return lines
 
 
-def check_grep_pattern(pattern: str) -> None:
+def check_grep_pattern(pattern: str) -> int:
     """
     Reject a blocklist line containing constructs that are expensive for
     ``grep -E``: back-references (``\\1``-``\\9``), repeat counts above
-    GREP_MAX_REPEAT, nested bounded repeats whose combined repeat cost is
-    above GREP_MAX_REPEAT_COST, or more than GREP_MAX_PATTERN_LEN characters.
+    GREP_MAX_REPEAT, bounded repeats that expand to more than
+    GREP_MAX_REPEAT_SIZE characters in total, or more than
+    GREP_MAX_PATTERN_LEN characters.
+
+    The expanded size of a bounded repeat is its operand's size times its
+    largest count, where sizes add along a sequence and across alternatives,
+    and nested repeats multiply. Each character or bracket expression counts
+    as 1, and ``.`` as 4 (it is more expensive for grep to repeat).
 
     grep's matcher is mostly DFA-based, so the Python-oriented backtracking
     checks in regex_safety do not apply here (and would reject common SURT
     idioms). Syntax is left to grep. These checks are not exhaustive.
+
+    Returns:
+        The expanded size of the line's bounded repeats, which callers add up
+        across a blocklist (see GREP_MAX_TOTAL_REPEAT_SIZE).
 
     Raises:
         ValueError: with the reason, if the line is rejected.
@@ -126,46 +140,81 @@ def check_grep_pattern(pattern: str) -> None:
     if len(pattern) > GREP_MAX_PATTERN_LEN:
         raise ValueError(f"longer than {GREP_MAX_PATTERN_LEN} characters ({len(pattern)})")
 
-    # groups[-1] is the largest repeat cost seen so far in the innermost open
-    # group; last is the repeat cost of the atom just before the current char.
-    groups = [1]
-    last = 1
+    # One frame per open group: [finished alternatives, current alternative,
+    # its last atom], each as (size, expanded size of the bounded repeats).
+    frames = [[(0, 0), (0, 0), (0, 0)]]
     i = 0
     while i < len(pattern):
+        frame = frames[-1]
         char = pattern[i]
+        atom = (4, 0) if char == "." else (1, 0)
         if char == "\\" and i + 1 < len(pattern):
             if pattern[i + 1] in "123456789":
                 raise ValueError("back-references are expensive for grep")
-            i, last = i + 2, 1  # escape pairs (e.g. a literal "\\{") are atoms
+            i += 2  # an escape pair (e.g. a literal "\\{") is one atom
+        elif char == "[":
+            i = _skip_bracket_expression(pattern, i)  # "{" is literal inside
+        elif char == "(":
+            frames.append([(0, 0), (0, 0), (0, 0)])
+            i += 1
             continue
-        if char == "[":
-            # "{" is literal inside a bracket expression
-            i, last = _skip_bracket_expression(pattern, i), 1
+        elif char == ")" and len(frames) > 1:
+            done, current, _last = frames.pop()
+            frame = frames[-1]
+            atom = _add_sizes(done, current)
+            i += 1
+        elif char == "|":
+            frame[:] = [_add_sizes(frame[0], frame[1]), (0, 0), (0, 0)]
+            i += 1
             continue
-        if char == "(":
-            groups.append(1)
-            last = 1
-        elif char == ")" and len(groups) > 1:
-            last = groups.pop()
-            groups[-1] = max(groups[-1], last)
         elif char == "{" and (match := _REPEAT_COUNTS.match(pattern, i)):
-            counts = [int(count) for count in match.groups() if count]
-            if any(count > GREP_MAX_REPEAT for count in counts):
-                raise ValueError(f"repeat counts above {GREP_MAX_REPEAT} are expensive for grep")
-            last *= max(counts + [1])
-            if last > GREP_MAX_REPEAT_COST:
+            size = frame[2][0] * _repeat_count(*match.groups())
+            if size > GREP_MAX_REPEAT_SIZE:
                 raise ValueError(
-                    "nested bounded repeats are expensive for grep"
-                    f" (combined repeat cost above {GREP_MAX_REPEAT_COST})"
+                    f"a bounded repeat expands to more than {GREP_MAX_REPEAT_SIZE}"
+                    " characters, which is expensive for grep"
                 )
-            groups[-1] = max(groups[-1], last)
+            # The repeat replaces its operand, and counts as expanded in full
+            frame[1] = _add_sizes(frame[1], (size, size), minus=frame[2])
+            frame[2] = (size, size)
             i = match.end()
             continue
-        elif char == "|":
-            last = 1
-        elif char not in "*+?":
-            last = 1  # any other char is a one-character atom
-        i += 1
+        elif char in "*+?":
+            i += 1
+            continue
+        else:
+            i += 1  # any other char (including an unmatched ")") is one atom
+        frame[1] = _add_sizes(frame[1], atom)
+        frame[2] = atom
+
+    repeated = sum(done[1] + current[1] for done, current, _last in frames)
+    if repeated > GREP_MAX_REPEAT_SIZE:
+        raise ValueError(
+            f"bounded repeats expand to more than {GREP_MAX_REPEAT_SIZE} characters"
+            " in total, which is expensive for grep"
+        )
+    return repeated
+
+
+def _add_sizes(
+    first: Tuple[int, int], second: Tuple[int, int], minus: Tuple[int, int] = (0, 0)
+) -> Tuple[int, int]:
+    """Add two (size, repeated size) pairs, optionally replacing ``minus``."""
+    return (first[0] + second[0] - minus[0], first[1] + second[1] - minus[1])
+
+
+def _repeat_count(low: str, high: Optional[str]) -> int:
+    """
+    Return the largest count of a ``{low}``, ``{low,}`` or ``{low,high}``
+    bound (either count may be empty).
+
+    Raises:
+        ValueError: if a count is above GREP_MAX_REPEAT.
+    """
+    counts = [int(count) for count in (low, high) if count]
+    if any(count > GREP_MAX_REPEAT for count in counts):
+        raise ValueError(f"repeat counts above {GREP_MAX_REPEAT} are expensive for grep")
+    return max(counts, default=1)
 
 
 def _skip_bracket_expression(pattern: str, start: int) -> int:
@@ -196,11 +245,20 @@ def _check_grep_patterns(patterns: List[Tuple[int, str]], source: str) -> None:
         ValueError: listing every rejected line number and reason.
     """
     rejected = []
+    total = 0
     for line_num, pattern in patterns:
         try:
-            check_grep_pattern(pattern)
+            repeated = check_grep_pattern(pattern)
         except ValueError as e:
             rejected.append(f"  {source} {line_num}: {e}")
+            continue
+        # Report only the first line that takes the blocklist over the budget
+        if total <= GREP_MAX_TOTAL_REPEAT_SIZE < total + repeated:
+            rejected.append(
+                f"  {source} {line_num}: bounded repeats across the blocklist expand to"
+                f" more than {GREP_MAX_TOTAL_REPEAT_SIZE} characters, which is expensive for grep"
+            )
+        total += repeated
     if rejected:
         raise ValueError(
             f"{len(rejected)} blocklist pattern(s) rejected; refusing to filter"
@@ -263,9 +321,9 @@ def filter_cdxj_by_blocklist(
 
     Args:
         input_path: Input CDXJ file, or '-' for stdin
-        blocklist_patterns: List of compiled regex Pattern objects to block
-            (deprecated, use blocklist_file). Each pattern's text is checked
-            (see check_grep_pattern) before use.
+        blocklist_patterns: List of compiled patterns; their text is checked
+            (see check_grep_pattern) and passed to grep. Prefer
+            blocklist_file= for grep-only syntax such as an unescaped ')'.
         output_path: Output file, or '-' for stdout (default: stdout)
         buffer_size: I/O buffer size in bytes (unused, kept for API compatibility)
         blocklist_file: Path to a raw blocklist file. Every line is checked

@@ -47,10 +47,14 @@ merge-flat-cdxj - *.cdxj | \
 
 Every blocklist line is checked before grep runs. A line is rejected if it
 uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
-a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, nested bounded repeats
-whose combined repeat cost is above a fixed cap, or more than 10 000
-characters. These checks are not exhaustive; set `--timeout` when blocklist
-lines are not fully trusted. If **any** line is rejected, the tool fails closed: it exits with
+a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
+characters. grep expands each bounded repeat into copies of what it repeats
+(so `(ab){3}` counts as 6 characters, and nested repeats multiply), so the
+expanded size of bounded repeats is also capped, both per line and across the
+whole blocklist. Plain text and alternations are not limited by this. These
+checks are not exhaustive; set `--timeout` when blocklist lines are not fully
+trusted (in `cdxj-index-collection.sh`, `--blocklist-timeout` or the
+`BLOCKLIST_TIMEOUT` environment variable). If **any** line is rejected, the tool fails closed: it exits with
 status 1, writes no output, and reports each rejected line number and reason
 on stderr. Filtering with only part of a blocklist would publish the records
 the rejected lines target. A grep error also exits 1 without writing output.
@@ -162,7 +166,7 @@ Combine SURT domain with specific path requirements:
 ### Load and Apply Blocklist
 
 ```python
-from replay_cdxj_indexing_tools.utils.filter_blocklist import (
+from replay_cdxj_indexing_tools.filter.blocklist import (
     load_blocklist,
     filter_cdxj_by_blocklist,
 )
@@ -200,7 +204,7 @@ kept, blocked = filter_cdxj_by_blocklist(
 
 ```python
 import re
-from replay_cdxj_indexing_tools.utils.filter_blocklist import filter_cdxj_by_blocklist
+from replay_cdxj_indexing_tools.filter.blocklist import filter_cdxj_by_blocklist
 
 # Create patterns manually
 patterns = [
@@ -218,7 +222,7 @@ kept, blocked = filter_cdxj_by_blocklist('input.cdxj', patterns, 'output.cdxj')
 
 ```python
 import sys
-from replay_cdxj_indexing_tools.utils.filter_blocklist import (
+from replay_cdxj_indexing_tools.filter.blocklist import (
     load_blocklist,
     filter_cdxj_by_blocklist,
 )
@@ -477,7 +481,7 @@ pytest tests/test_filter_blocklist.py -v
 pytest tests/test_filter_blocklist.py::TestFilterCdxjByBlocklist -v
 
 # With coverage
-pytest --cov=replay_cdxj_indexing_tools.utils.filter_blocklist tests/test_filter_blocklist.py
+pytest --cov=replay_cdxj_indexing_tools.filter.blocklist tests/test_filter_blocklist.py
 ```
 
 ## Migration from Legacy Scripts
