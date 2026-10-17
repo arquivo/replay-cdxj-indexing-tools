@@ -619,15 +619,17 @@ class TestZipNumSearch(unittest.TestCase):
         with open(malicious_loc, "w") as f:
             f.write("test-00.cdx.gz\t../../etc/passwd\n")
 
-        with self.assertRaises(ValueError):
-            list(
-                search_zipnum_file(
-                    self.idx_file,
-                    "com,example)/",
-                    match_prefix=False,
-                    loc_filepath=malicious_loc,
+        with self.assertLogs("replay_cdxj_indexing_tools.search.zipnum_search", "WARNING") as logs:
+            with self.assertRaisesRegex(ValueError, "Path traversal detected"):
+                list(
+                    search_zipnum_file(
+                        self.idx_file,
+                        "com,example)/",
+                        match_prefix=False,
+                        loc_filepath=malicious_loc,
+                    )
                 )
-            )
+        self.assertIn("Path traversal attempt via .loc file", logs.output[0])
 
     def test_zipnum_path_traversal_absolute(self):
         """Absolute path outside base_dir in .loc entry must raise ValueError."""
@@ -637,7 +639,7 @@ class TestZipNumSearch(unittest.TestCase):
         with open(malicious_loc, "w") as f:
             f.write("test-00.cdx.gz\t/etc/passwd\n")
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "Path traversal detected"):
             list(
                 search_zipnum_file(
                     self.idx_file,
@@ -662,7 +664,7 @@ class TestZipNumSearch(unittest.TestCase):
         with open(malicious_loc, "w") as f:
             f.write("test-00.cdx.gz\tevil_link.cdx.gz\n")
 
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "Path traversal detected"):
             list(
                 search_zipnum_file(
                     self.idx_file,
@@ -684,7 +686,7 @@ class TestZipNumSearch(unittest.TestCase):
             with open(malicious_idx, "w") as f:
                 f.write("com,example)/\t../../etc/passwd.cdx.gz\t0\t100\t0\n")
 
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Path traversal detected"):
                 list(
                     search_zipnum_file(
                         malicious_idx,
@@ -719,7 +721,7 @@ class TestZipNumSearch(unittest.TestCase):
             with open(safe_shard, "wb") as f:
                 f.write(gz.compress(b'com,example)/ 20200101 {"status":"200"}\n'))
 
-            with self.assertRaises(ValueError):
+            with self.assertRaisesRegex(ValueError, "Path traversal detected"):
                 list(
                     search_zipnum_file(
                         malicious_idx,
@@ -729,6 +731,26 @@ class TestZipNumSearch(unittest.TestCase):
                         base_dir=tmpdir,
                     )
                 )
+
+    def test_zipnum_root_base_dir_absolute_loc(self):
+        """With base_dir '/', an absolute .loc entry is accepted (issue #89)."""
+        from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+        abs_loc = os.path.join(self.test_dir, "absolute.loc")
+        with open(abs_loc, "w") as f:
+            f.write(f"test-00.cdx.gz\t{os.path.abspath(self.shard1)}\n")
+
+        results = list(
+            search_zipnum_file(
+                self.idx_file,
+                "com,example)/",
+                match_prefix=False,
+                loc_filepath=abs_loc,
+                base_dir="/",
+            )
+        )
+        self.assertEqual(len(results), 1)
+        self.assertTrue(results[0].startswith("com,example)/ 20200101000000"))
 
     def test_zipnum_loc_autodetection_with_idx_in_dirname(self):
         """Auto-detection must use splitext, not str.replace, to handle directory names with .idx."""
