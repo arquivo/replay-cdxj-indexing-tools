@@ -7,7 +7,7 @@ Convert ZipNum format indexes back to flat CDXJ - decompress and merge sharded i
 ### Basic Syntax
 
 ```bash
-zipnum-to-flat-cdxj -i INDEX_FILE [--base-dir DIR] [--loc FILE] [--workers N]
+zipnum-to-flat-cdxj -i INDEX_FILE [--base-dir DIR] [--loc FILE]
 ```
 
 ### Examples
@@ -20,11 +20,6 @@ zipnum-to-flat-cdxj -i indexes/index.idx > arquivo.cdxj
 **Read index from stdin:**
 ```bash
 cat indexes/index.idx | zipnum-to-flat-cdxj -i - > arquivo.cdxj
-```
-
-**Parallel decompression:**
-```bash
-zipnum-to-flat-cdxj -i indexes/index.idx --workers 8 > arquivo.cdxj
 ```
 
 **Custom shard directory:**
@@ -47,7 +42,7 @@ zipnum-to-flat-cdxj -i indexes/index.idx | gzip -9 > arquivo.cdxj.gz
 - `-i, --input FILE` - Input .idx file or `-` for stdin (required)
 - `--base-dir DIR` - Base directory for shard files (default: idx file directory)
 - `--loc FILE` - Custom .loc file path (default: auto-detect)
-- `--workers N` - Parallel decompression workers (default: 4)
+- `--workers N` - Deprecated and ignored (decompression is streamed sequentially); prints a warning if given
 
 ## Python API
 
@@ -59,7 +54,6 @@ from replay_cdxj_indexing_tools.zipnum.zipnum_to_flat_cdxj import zipnum_to_flat
 # Convert ZipNum to flat CDXJ (outputs to stdout)
 zipnum_to_flat_cdxj(
     idx_path='indexes/index.idx',
-    workers=4
 )
 ```
 
@@ -73,7 +67,6 @@ zipnum_to_flat_cdxj(
     idx_path='indexes/index.idx',
     base_dir='/data/shards',
     loc_file='indexes/custom.loc',
-    workers=8
 )
 ```
 
@@ -86,7 +79,6 @@ from replay_cdxj_indexing_tools.zipnum.zipnum_to_flat_cdxj import zipnum_to_flat
 # Convert from stdin
 zipnum_to_flat_cdxj(
     idx_path='-',
-    workers=4
 )
 ```
 
@@ -236,27 +228,20 @@ for line in sys.stdin:
 
 ## Performance
 
-**Benchmark Results:**
-
-| Input Size | Shards | Workers | Time | Throughput |
-|------------|--------|---------|------|------------|
-| 1GB (compressed) | 300 | 1 | ~30s | ~33 MB/s |
-| 1GB (compressed) | 300 | 4 | ~12s | ~83 MB/s |
-| 1GB (compressed) | 300 | 8 | ~8s | ~125 MB/s |
-| 10GB (compressed) | 3000 | 4 | ~120s | ~83 MB/s |
-| 10GB (compressed) | 3000 | 8 | ~80s | ~125 MB/s |
+Shards are decompressed one at a time and streamed to stdout in 256 KiB chunks,
+so memory use does not grow with shard size. Throughput is bound by
+single-threaded gzip decompression and disk I/O. The `--workers` option is
+deprecated and has no effect.
 
 **Performance Tips:**
 
-1. **Use parallel workers:**
+1. **Parallelize across indexes, not within one:**
    ```bash
-   # Match CPU cores for best performance
-   zipnum-to-flat-cdxj -i index.idx --workers 8 > output.cdxj
+   # Run independent conversions concurrently (one process per index)
+   zipnum-to-flat-cdxj -i a.idx > a.cdxj &
+   zipnum-to-flat-cdxj -i b.idx > b.cdxj &
+   wait
    ```
-   - 1 worker: Baseline
-   - 4 workers: ~2.5x faster
-   - 8 workers: ~3.5x faster
-   - 16+ workers: Diminishing returns (I/O bound)
 
 2. **Compress output:**
    ```bash
@@ -282,35 +267,10 @@ for line in sys.stdin:
    ```bash
    # Process shards in batches
    for shard in shard-{01..10}; do
-       zipnum-to-flat-cdxj -i index.idx --workers 8 | \
+       zipnum-to-flat-cdxj -i index.idx | \
            grep "^${shard}" >> output_${shard}.cdxj
    done
    ```
-
-## Worker Configuration
-
-### Choosing Worker Count
-
-```bash
-# Get CPU count
-nproc
-
-# Use 50-100% of cores
-# Example: 8-core system
-zipnum-to-flat-cdxj -i index.idx --workers 6  # 75% utilization
-```
-
-**Guidelines:**
-
-| System | Recommended Workers |
-|--------|---------------------|
-| 2 cores | 1-2 |
-| 4 cores | 2-3 |
-| 8 cores | 4-6 |
-| 16 cores | 8-12 |
-| 32+ cores | 12-16 |
-
-**Note:** Beyond 8-12 workers, performance gains are limited by I/O.
 
 ## Pipeline Examples
 
@@ -326,7 +286,7 @@ OUTPUT_DIR="indexes_clean"
 
 # 1. Convert ZipNum to flat
 echo "Converting ZipNum to flat CDXJ..."
-zipnum-to-flat-cdxj -i $ORIGINAL_INDEX --workers 8 > temp_flat.cdxj
+zipnum-to-flat-cdxj -i $ORIGINAL_INDEX > temp_flat.cdxj
 
 # 2. Apply new blocklist
 echo "Applying blocklist..."
@@ -358,7 +318,7 @@ OUTPUT_DIR="archive_2024"
 
 # 1. Convert old archive to flat
 echo "Converting old archive..."
-zipnum-to-flat-cdxj -i $OLD_INDEX --workers 8 > old_flat.cdxj
+zipnum-to-flat-cdxj -i $OLD_INDEX > old_flat.cdxj
 
 # 2. Merge old and new
 echo "Merging indexes..."
@@ -384,7 +344,7 @@ INDEX_FILE="indexes/index.idx"
 
 echo "Extracting domain statistics..."
 
-zipnum-to-flat-cdxj -i $INDEX_FILE --workers 8 | \
+zipnum-to-flat-cdxj -i $INDEX_FILE | \
     awk '{print $1}' | \
     sed 's/)[^)]*$/)/; s/).*/)/' | \
     sort | uniq -c | sort -rn | \
@@ -501,9 +461,6 @@ zipnum-to-flat-cdxj -i indexes/index.idx --loc /path/to/custom.loc
 If conversion is slow:
 
 ```bash
-# Increase workers
-zipnum-to-flat-cdxj -i indexes/index.idx --workers 8 > output.cdxj
-
 # Check I/O wait
 iostat -x 1
 
@@ -512,17 +469,18 @@ df -h indexes/
 
 # Consider processing on SSD
 cp -r indexes /tmp/
-zipnum-to-flat-cdxj -i /tmp/indexes/index.idx --workers 8 > output.cdxj
+zipnum-to-flat-cdxj -i /tmp/indexes/index.idx > output.cdxj
 ```
 
 ### Out of Memory
 
-If you run out of memory (unlikely with streaming):
+Memory use does not grow with shard size because shards are streamed. If the
+downstream pipeline runs out of memory:
 
 ```bash
 # Process in chunks (by shard prefix)
 for prefix in {a..z} {0..9}; do
-    zipnum-to-flat-cdxj -i index.idx --workers 2 | \
+    zipnum-to-flat-cdxj -i index.idx | \
         grep "^$prefix" >> output_$prefix.cdxj
 done
 
@@ -551,15 +509,20 @@ pytest --cov=replay_cdxj_indexing_tools.zipnum tests/test_zipnum_to_flat_cdxj.py
 
 1. **Sequential Shard Processing**
    - Shards are processed in order to maintain sort
-   - Can't parallelize across shards, only within shard decompression
+   - Decompression is single-threaded; `--workers` is ignored
 
 2. **Memory Usage**
-   - Minimal memory usage (streaming output)
-   - Each worker thread holds one shard in memory during decompression
+   - Memory does not grow with shard size: each shard is streamed in 256 KiB
+     chunks and never loaded whole into memory (the .idx entries are still
+     held in memory)
 
 3. **Output Format**
    - Outputs only to stdout (use shell redirection for files)
    - No option to write directly to file (by design - Unix philosophy)
+   - A corrupt or truncated shard makes the tool exit non-zero, but the data
+     already decompressed from that shard (and all earlier shards) has been
+     written to stdout. In pipelines use `set -o pipefail` or check the exit
+     status before trusting the output
 
 4. **Sort Order**
    - Maintains original sort order from ZipNum

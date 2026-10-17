@@ -29,9 +29,6 @@ Basic Examples:
 
 Advanced Examples:
 
-    # Parallel decompression with 8 workers
-    zipnum-to-flat-cdxj -i base.idx --workers 8 > output.cdxj
-
     # Pipeline with filtering
     zipnum-to-flat-cdxj -i base.idx | filter-blocklist -b blocklist.txt > filtered.cdxj
 
@@ -66,7 +63,8 @@ Required:
 Optional:
     --base-dir DIR         Base directory for shard files (default: idx file directory)
     --loc FILE            Custom .loc file path (default: auto-detect)
-    --workers N           Parallel decompression workers (default: 4)
+    --workers N           Deprecated and ignored (decompression is streamed
+                          sequentially); prints a warning if given
 
 OUTPUT
 ======
@@ -79,17 +77,20 @@ NOTES
 
 - All output goes to stdout (no files created)
 - Shards are processed sequentially to maintain sort order
-- Within each shard, decompression can be parallelized with --workers
+- Each shard is streamed through gzip in 256 KiB chunks, so memory use does
+  not grow with shard size
+- --workers is deprecated and has no effect
+- A corrupt or truncated shard raises an error and exits non-zero, but data
+  already decompressed from it has been written; use `set -o pipefail` or
+  check the exit status in pipelines
 - Use shell redirection to save output to file
 - Compatible with all ZipNum files created by cdxj-to-zipnum
 
 PERFORMANCE TIPS
 ================
 
-- Use --workers to match CPU cores for faster decompression
 - Pipe directly to other tools to avoid intermediate files
 - For large indexes, redirect to compressed output: | gzip > output.cdxj.gz
-- Process in parallel: zipnum-to-flat-cdxj -i base.idx --workers 8
 
 PIPELINE EXAMPLES
 =================
@@ -108,11 +109,14 @@ merge-cdxj output.cdxj temp.cdxj other.cdxj
 
 import gzip
 import os
+import shutil
 import sys
+import warnings
 from argparse import ArgumentParser
-from collections import OrderedDict
-from concurrent.futures import ThreadPoolExecutor
 from typing import List, Optional, Tuple
+
+# Read/write size used when streaming a shard to stdout
+_COPY_BUFSIZE = 256 * 1024
 
 
 def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
@@ -224,41 +228,31 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
     return resolved
 
 
-def decompress_shard_worker(shard_path: str) -> bytes:
-    """
-    Worker function to decompress an entire shard file.
-    Returns uncompressed data as bytes.
-    """
-    with gzip.open(shard_path, "rb") as gz:
-        return gz.read()
-
-
-def decompress_shard_chunk_worker(shard_path: str, offset: int, length: int) -> bytes:
-    """
-    Worker function to decompress a specific chunk from a shard file.
-    Reads compressed chunk at offset with length, then decompresses it.
-    Returns uncompressed data as bytes.
-    """
-    with open(shard_path, "rb") as fh:
-        fh.seek(offset)
-        compressed_data = fh.read(length)
-
-    return gzip.decompress(compressed_data)
-
-
 def zipnum_to_flat_cdxj(
     idx_path: str,
     base_dir: Optional[str] = None,
     loc_file: Optional[str] = None,
-    workers: int = 4,
+    workers: Optional[int] = None,
 ):
     """
     Main logic:
     - Read .idx file to discover shards
     - Optionally read .loc file for shard locations
-    - Decompress each shard in order
+    - Stream-decompress each shard in order
     - Output uncompressed CDXJ to stdout
+
+    ``workers`` is deprecated and ignored: decompression is streamed
+    sequentially, so memory use does not grow with shard size. Passing a
+    value other than None emits a DeprecationWarning; it will be removed in a
+    future major release.
     """
+    if workers is not None:
+        warnings.warn(
+            "workers is ignored and will be removed in a future major release",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
     # Read idx file
     entries = read_idx_file(idx_path)
 
@@ -284,43 +278,23 @@ def zipnum_to_flat_cdxj(
         if auto_loc:
             loc_map = read_loc_file(auto_loc)
 
-    # Group entries by shard (maintain order)
-    shard_groups: "OrderedDict[str, List[Tuple[int, int]]]" = OrderedDict()
-    for _, shard_name, offset, length, _ in entries:
-        if shard_name not in shard_groups:
-            shard_groups[shard_name] = []
-        shard_groups[shard_name].append((offset, length))
+    # Unique shard names, in order of first appearance
+    shard_names = dict.fromkeys(entry[1] for entry in entries)
 
     # Process each shard sequentially to maintain sort order
     # Use stdout.buffer for binary writes (better performance)
     output = sys.stdout.buffer
 
-    for shard_name in shard_groups:
+    for shard_name in shard_names:
         shard_path = resolve_shard_path(shard_name, base_dir, loc_map)
 
         if not os.path.exists(shard_path):
             print(f"Warning: Shard file not found: {shard_path}", file=sys.stderr)
             continue
 
-        # For each shard, we can decompress the entire file at once
-        # since ZipNum shards are already split appropriately
-        # Using parallel workers to speed up decompression
-
-        if workers > 1:
-            # Parallel decompression: decompress entire shard using thread pool
-            with ThreadPoolExecutor(max_workers=workers) as executor:
-                future = executor.submit(decompress_shard_worker, shard_path)
-                decompressed_data = future.result()
-                output.write(decompressed_data)
-        else:
-            # Single-threaded: decompress directly
-            with gzip.open(shard_path, "rb") as gz:
-                # Read and write in chunks to avoid loading entire file in memory
-                while True:
-                    chunk = gz.read(65536)  # 64KB chunks
-                    if not chunk:
-                        break
-                    output.write(chunk)
+        # Stream in fixed-size chunks so memory use does not grow with shard size
+        with gzip.open(shard_path, "rb") as gz:
+            shutil.copyfileobj(gz, output, _COPY_BUFSIZE)
 
     # Flush output
     output.flush()
@@ -350,11 +324,8 @@ def parse_args(argv=None):
     p.add_argument(
         "--workers",
         type=int,
-        default=4,
-        help=(
-            "Number of parallel decompression workers (default: 4). "
-            "More workers can improve performance on multi-core systems."
-        ),
+        default=None,
+        help="Deprecated and ignored (decompression is streamed sequentially)",
     )
 
     return p.parse_args(argv)
@@ -367,11 +338,16 @@ def main(argv=None):
     """
     args = parse_args(argv)
 
+    if args.workers is not None:
+        print(
+            "Warning: --workers is deprecated and ignored (decompression is streamed)",
+            file=sys.stderr,
+        )
+
     zipnum_to_flat_cdxj(
         idx_path=args.input,
         base_dir=args.base_dir,
         loc_file=args.loc,
-        workers=args.workers,
     )
 
 

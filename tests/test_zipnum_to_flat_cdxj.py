@@ -8,6 +8,11 @@ Tests ZipNum to flat CDXJ conversion functionality.
 
 import gzip
 import os
+import subprocess
+import sys
+import tracemalloc
+import types
+import warnings
 
 import pytest
 
@@ -281,7 +286,7 @@ class TestZipnumToFlatCdxj:
         """Test converting single shard ZipNum."""
         idx_file, cdxj_lines = self.create_test_zipnum(tmp_path, num_shards=1)
 
-        zipnum_to_flat_cdxj(str(idx_file), workers=1)
+        zipnum_to_flat_cdxj(str(idx_file))
 
         captured = capsys.readouterr()
         output_lines = captured.out.encode().split(b"\n")
@@ -297,7 +302,7 @@ class TestZipnumToFlatCdxj:
         """Test converting multiple shard ZipNum."""
         idx_file, cdxj_lines = self.create_test_zipnum(tmp_path, num_shards=3)
 
-        zipnum_to_flat_cdxj(str(idx_file), workers=2)
+        zipnum_to_flat_cdxj(str(idx_file))
 
         captured = capsys.readouterr()
         output_lines = captured.out.encode().split(b"\n")
@@ -310,7 +315,7 @@ class TestZipnumToFlatCdxj:
         """Test with custom base directory."""
         idx_file, cdxj_lines = self.create_test_zipnum(tmp_path, num_shards=1)
 
-        zipnum_to_flat_cdxj(str(idx_file), base_dir=str(tmp_path), workers=1)
+        zipnum_to_flat_cdxj(str(idx_file), base_dir=str(tmp_path))
 
         captured = capsys.readouterr()
         output_lines = captured.out.encode().split(b"\n")
@@ -324,7 +329,7 @@ class TestZipnumToFlatCdxj:
         idx_file.write_text("com,example)/ 20230101000000\ttest\t0\t100\t1\n")
 
         # Don't create the shard file
-        zipnum_to_flat_cdxj(str(idx_file), workers=1)
+        zipnum_to_flat_cdxj(str(idx_file))
 
         captured = capsys.readouterr()
         # Should get warning on stderr
@@ -347,7 +352,7 @@ class TestCommandLine:
             gz.write(cdxj_data)
 
         # Run main
-        main(["-i", str(idx_file), "--workers", "1"])
+        main(["-i", str(idx_file)])
 
         captured = capsys.readouterr()
         assert b"com,example)" in captured.out.encode()
@@ -365,7 +370,7 @@ class TestCommandLine:
         with gzip.open(shard_file, "wb") as gz:
             gz.write(cdxj_data)
 
-        main(["-i", str(idx_file), "--base-dir", str(shard_dir), "--workers", "1"])
+        main(["-i", str(idx_file), "--base-dir", str(shard_dir)])
 
         captured = capsys.readouterr()
         assert b"com,example)" in captured.out.encode()
@@ -383,7 +388,7 @@ class TestCommandLine:
         with gzip.open(shard_file, "wb") as gz:
             gz.write(cdxj_data)
 
-        main(["-i", str(idx_file), "--loc", str(loc_file), "--workers", "1"])
+        main(["-i", str(idx_file), "--loc", str(loc_file)])
 
         captured = capsys.readouterr()
         assert b"com,example)" in captured.out.encode()
@@ -398,7 +403,7 @@ class TestEdgeCases:
         idx_file.write_text("")
 
         with pytest.raises(SystemExit):
-            zipnum_to_flat_cdxj(str(idx_file), workers=1)
+            zipnum_to_flat_cdxj(str(idx_file))
 
     def test_idx_file_only_comments(self, tmp_path):
         """Test with idx file containing only comments."""
@@ -406,21 +411,144 @@ class TestEdgeCases:
         idx_file.write_text("# This is a comment\n# Another comment\n")
 
         with pytest.raises(SystemExit):
-            zipnum_to_flat_cdxj(str(idx_file), workers=1)
+            zipnum_to_flat_cdxj(str(idx_file))
 
-    def test_parallel_workers(self, tmp_path, capsys):
-        """Test with multiple parallel workers."""
-        idx_file = tmp_path / "test.idx"
-        shard_file = tmp_path / "test.cdx.gz"
 
-        idx_file.write_text("com,example)/ 20230101000000\ttest\t0\t100\t1\n")
+def _write_shards(tmp_path, num_shards=3, lines_per_shard=500):
+    """Write distinct gzip shards plus a .idx; return (idx_file, expected_output)."""
+    idx_lines = []
+    expected = b""
+    for shard_num in range(1, num_shards + 1):
+        shard_name = f"test-{shard_num:02d}"
+        data = b"".join(
+            f"com,example)/s{shard_num}/{i:04d} 20230101000000 {{}}\n".encode()
+            for i in range(lines_per_shard)
+        )
+        with gzip.open(tmp_path / f"{shard_name}.cdx.gz", "wb") as gz:
+            gz.write(data)
+        idx_lines.append(f"com,example)/s{shard_num} 20230101000000\t{shard_name}\t0\t1\t1\n")
+        expected += data
+    idx_file = tmp_path / "test.idx"
+    idx_file.write_text("".join(idx_lines))
+    return idx_file, expected
 
-        cdxj_data = b'com,example)/ 20230101000000 {"url":"http://example.com/"}\n' * 100
-        with gzip.open(shard_file, "wb") as gz:
-            gz.write(cdxj_data)
 
-        # Test with different worker counts
-        for workers in [1, 2, 4, 8]:
-            zipnum_to_flat_cdxj(str(idx_file), workers=workers)
-            captured = capsys.readouterr()
-            assert len(captured.out.encode().split(b"\n")) >= 100
+class TestStreamingDecompression:
+    """Shards are streamed; the deprecated workers value changes nothing (#77)."""
+
+    def test_workers_value_does_not_change_output(self, tmp_path, capsys):
+        """Output with any workers value is byte-identical to the default, in shard order."""
+        idx_file, expected = _write_shards(tmp_path)
+
+        zipnum_to_flat_cdxj(str(idx_file))
+        assert capsys.readouterr().out.encode() == expected
+
+        for workers in (1, 2, 4):
+            with pytest.warns(DeprecationWarning, match="workers is ignored"):
+                zipnum_to_flat_cdxj(str(idx_file), workers=workers)
+            assert capsys.readouterr().out.encode() == expected
+
+    def test_default_call_emits_no_warning(self, tmp_path, capsys):
+        """Not passing workers emits no warning at all."""
+        idx_file, expected = _write_shards(tmp_path, num_shards=1)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            zipnum_to_flat_cdxj(str(idx_file))
+
+        assert capsys.readouterr().out.encode() == expected
+
+    def test_peak_memory_bounded_by_chunk_not_shard(self, tmp_path, monkeypatch):
+        """Peak traced memory stays far below the decompressed shard size."""
+        line = b'com,example)/page 20230101000000 {"url":"http://example.com/page"}\n'
+        data = line * (32 * 1024 * 1024 // len(line))  # ~32 MB decompressed
+        with gzip.open(tmp_path / "big.cdx.gz", "wb", compresslevel=1) as gz:
+            gz.write(data)
+        idx_file = tmp_path / "big.idx"
+        idx_file.write_text("com,example)/page 20230101000000\tbig\t0\t1\t1\n")
+        out_file = tmp_path / "out.cdxj"
+
+        with open(out_file, "wb") as out:
+            monkeypatch.setattr(sys, "stdout", types.SimpleNamespace(buffer=out))
+            tracemalloc.start()
+            try:
+                zipnum_to_flat_cdxj(str(idx_file))
+                _, peak = tracemalloc.get_traced_memory()
+            finally:
+                tracemalloc.stop()
+
+        assert out_file.read_bytes() == data
+        # Loading the whole shard would need >= 32 MB; streaming needs a few chunks.
+        assert peak < 4 * 1024 * 1024, f"peak {peak} bytes for {len(data)}-byte shard"
+
+
+class TestCorruptShard:
+    """A truncated shard fails loudly instead of ending the output silently."""
+
+    @staticmethod
+    def _write_truncated_shard(tmp_path):
+        """Truncate a one-shard ZipNum; return (idx_file, full decompressed data)."""
+        idx_file, expected = _write_shards(tmp_path, num_shards=1, lines_per_shard=100_000)
+        shard = tmp_path / "test-01.cdx.gz"
+        compressed = shard.read_bytes()
+        shard.write_bytes(compressed[: len(compressed) // 2])
+        return idx_file, expected
+
+    def test_truncated_shard_raises(self, tmp_path, capsys):
+        """The library call raises on a truncated shard."""
+        idx_file, _ = self._write_truncated_shard(tmp_path)
+
+        with pytest.raises(EOFError):
+            zipnum_to_flat_cdxj(str(idx_file))
+        capsys.readouterr()
+
+    def test_truncated_shard_cli_exits_non_zero(self, tmp_path):
+        """The CLI exits non-zero after writing a partial prefix of the shard."""
+        idx_file, expected = self._write_truncated_shard(tmp_path)
+
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "replay_cdxj_indexing_tools.zipnum.zipnum_to_flat_cdxj",
+                "-i",
+                str(idx_file),
+            ],
+            capture_output=True,
+            check=False,
+        )
+
+        assert result.returncode != 0
+        assert b"EOFError" in result.stderr
+        # Documented behaviour: data decompressed before the error is already written
+        assert result.stdout
+        assert len(result.stdout) < len(expected)
+        assert expected.startswith(result.stdout)
+
+
+class TestWorkersDeprecation:
+    """--workers is accepted but deprecated and ignored."""
+
+    def test_cli_workers_prints_one_notice(self, tmp_path, capsys):
+        """--workers prints one stderr notice and does not reach the library."""
+        idx_file, expected = _write_shards(tmp_path, num_shards=1)
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            main(["-i", str(idx_file), "--workers", "8"])
+
+        captured = capsys.readouterr()
+        assert captured.out.encode() == expected
+        assert captured.err == (
+            "Warning: --workers is deprecated and ignored (decompression is streamed)\n"
+        )
+
+    def test_cli_without_workers_prints_nothing(self, tmp_path, capsys):
+        """Without --workers the CLI writes nothing to stderr."""
+        idx_file, expected = _write_shards(tmp_path, num_shards=1)
+
+        main(["-i", str(idx_file)])
+
+        captured = capsys.readouterr()
+        assert captured.out.encode() == expected
+        assert captured.err == ""
