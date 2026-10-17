@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.2 (2026-10-17)
+
+### Bug Fixes
+
+- Validate shard/pool args and fail on zipnum shard close errors
+  ([`8f48bc4`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/8f48bc43d124691d6398ae5bcb5aba7e7b91ec88))
+
+
 ## v1.2.1 (2026-10-17)
 
 ### Bug Fixes
