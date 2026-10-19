@@ -29,6 +29,7 @@ level (e.g. a worker process with a deadline).
 """
 
 import contextlib
+import dataclasses
 import functools
 import logging
 import re
@@ -103,16 +104,14 @@ class RegexTimeoutError(RuntimeError):
     """A regex search exceeded its time budget."""
 
 
-class _Watchdog:  # pylint: disable=too-few-public-methods
+@dataclasses.dataclass(slots=True)
+class _Watchdog:
     """State shared between the SIGALRM handler and the guarded search."""
 
-    __slots__ = ("thread_ident", "deadline")
-
-    def __init__(self) -> None:
-        # Ident of the (main) thread owning the watchdog; None when inactive
-        self.thread_ident: Optional[int] = None
-        # monotonic() time after which the running search is aborted
-        self.deadline: Optional[float] = None
+    # Ident of the (main) thread owning the watchdog; None when inactive
+    thread_ident: Optional[int] = None
+    # monotonic() time after which the running search is aborted
+    deadline: Optional[float] = None
 
 
 _STATE = _Watchdog()

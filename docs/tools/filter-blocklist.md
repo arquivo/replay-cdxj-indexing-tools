@@ -43,22 +43,40 @@ merge-flat-cdxj - *.cdxj | \
 - `-b, --blocklist BLOCKLIST` - Blocklist file with regex patterns (required)
 - `-o, --output OUTPUT` - Output file or `-` for stdout (default: stdout)
 - `-v, --verbose` - Print statistics to stderr
-- `--timeout SECONDS` - Abort (exit status 124, no output) if filtering takes longer; the clock includes time spent waiting for input on stdin (default: `0` = no limit)
+- `--timeout SECONDS` - Abort (exit status 124, no output) if filtering takes longer; the clock includes time spent waiting for input on stdin; at most `604800` (1 week) (default: `0` = no limit)
 
 Every blocklist line is checked before grep runs. A line is rejected if it
 uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
 a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
-characters. grep expands each bounded repeat into copies of what it repeats
-(so `(ab){3}` counts as 6 characters, and nested repeats multiply), so the
-expanded size of bounded repeats is also capped, both per line and across the
-whole blocklist. Plain text and alternations are not limited by this. These
-checks are not exhaustive; set `--timeout` when blocklist lines are not fully
-trusted (in `cdxj-index-collection.sh`, `--blocklist-timeout` or the
-`BLOCKLIST_TIMEOUT` environment variable). If **any** line is rejected, the tool fails closed: it exits with
-status 1, writes no output, and reports each rejected line number and reason
-on stderr. Filtering with only part of a blocklist would publish the records
-the rejected lines target. A grep error also exits 1 without writing output.
-See [SECURITY.md](../../SECURITY.md).
+characters.
+
+Wildcards and bounded repeats also have a cost, which is capped at **256 per
+line** and **32 768 for the whole blocklist**:
+
+- plain characters, including long alternations of host names, cost nothing;
+- a `.` costs 4, and a bracket expression (`[a-z0-9-]`) or `\w`, `\W`, `\s`,
+  `\S` costs 1, whether written out or repeated with `*`, `+` or `?`;
+- a bounded repeat costs its expanded size, because grep copies the repeated
+  part once per count: the size of what it repeats (plain characters count 1
+  here) times its largest count. Nested repeats multiply, so `(ab){3}` costs
+  6 and `((ab){3}){2}` costs 12.
+
+For example `[a-z0-9-]{1,63}` costs 63, `([a-z0-9-]{1,63}\.){1,4}` costs 256
+and `.{0,64}` costs 256, so a blocklist can hold about 500 hostname-label lines
+like the first. grep's set-up time grows with the square of a line's cost and
+with the number of such lines, which is why the per-line cap is the tighter
+one.
+
+These checks are not exhaustive. When blocklist lines are not fully trusted,
+`--timeout` is the real bound: set it, sized for the largest CDXJ input you
+filter. In `cdxj-index-collection.sh` it is `--blocklist-timeout` or the
+`BLOCKLIST_TIMEOUT` environment variable.
+
+If **any** line is rejected, the tool fails closed: it exits with status 1,
+writes no output, and reports each rejected line number and reason on stderr.
+Filtering with only part of a blocklist would publish the records the rejected
+lines target. A grep error also exits 1 without writing output. See
+[SECURITY.md](../../SECURITY.md).
 
 Exit status: `0` success, `1` error (including a rejected blocklist line),
 `2` invalid command-line arguments, `124` `--timeout` expired.

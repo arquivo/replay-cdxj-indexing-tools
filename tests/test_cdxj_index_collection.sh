@@ -261,9 +261,15 @@ test_blocklist_timeout_flag() {
     output=$(BLOCKLIST_TIMEOUT=45.5 bash "$SCRIPT" "${args[@]}" 2>&1 || true)
     assert_contains "$output" "Blocklist timeout: *45.5 " "Reads blocklist timeout from BLOCKLIST_TIMEOUT"
 
-    output=$(bash "$SCRIPT" "${args[@]}" --blocklist-timeout soon 2>&1 || true)
-    assert_contains "$output" "Invalid blocklist timeout" "Rejects an invalid blocklist timeout"
-    assert_not_contains "$output" "Configuration:" "Stops before processing on an invalid timeout"
+    output=$(bash "$SCRIPT" "${args[@]}" --blocklist-timeout 604800.0 2>&1 || true)
+    assert_contains "$output" "Blocklist timeout: *604800.0 " "Accepts a blocklist timeout of one week"
+
+    local value
+    for value in soon -1 1e3 604800.5 604801 0000999999 99999999999999999999; do
+        output=$(bash "$SCRIPT" "${args[@]}" --blocklist-timeout "$value" 2>&1 || true)
+        assert_contains "$output" "Invalid blocklist timeout" "Rejects blocklist timeout $value"
+        assert_not_contains "$output" "Configuration:" "Stops before processing on timeout $value"
+    done
     cleanup_test_env
 }
 
@@ -271,7 +277,8 @@ test_blocklist_timeout_fails_stage() {
     setup_test_env
     # Stub filter-blocklist: record its arguments, then report a timeout
     mkdir -p "$TEST_DIR/bin"
-    printf '%s\n' '#!/bin/bash' 'echo "$*" > "$(dirname "$0")/args"' 'exit 124' \
+    printf '%s\n' '#!/bin/bash' 'echo "$*" > "$(dirname "$0")/args"' \
+        'echo "Error: filtering timed out after $8 seconds" >&2' 'exit 124' \
         > "$TEST_DIR/bin/filter-blocklist"
     chmod +x "$TEST_DIR/bin/filter-blocklist"
     eval "$(sed -n '/^    filter_cdxj() {/,/^    }/p' "$SCRIPT")"
@@ -283,6 +290,8 @@ test_blocklist_timeout_fails_stage() {
     [ "$status" -ne 0 ]
     assert_success "A blocklist timeout fails the filtering stage"
     assert_contains "$output" "took longer than 30s" "Reports the blocklist timeout"
+    assert_contains "$output" "    Error: filtering timed out after 30 seconds" \
+        "Shows the filter-blocklist error message"
     assert_contains "$(cat "$TEST_DIR/bin/args")" " --timeout 30" "Passes the timeout to filter-blocklist"
     unset -f filter_cdxj
     cleanup_test_env

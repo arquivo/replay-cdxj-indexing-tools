@@ -108,24 +108,28 @@ unbounded time (denial-of-service).
   mostly DFA-based. The Python-oriented denylist does not apply (it would
   reject common SURT idioms); instead `check_grep_pattern()` rejects the few
   constructs that are expensive for grep: back-references, repeat counts above
-  255, lines longer than 10 000 characters, and bounded repeats whose
+  255 and lines longer than 10 000 characters. Wildcards and bounded repeats
+  also have a cost, capped at 256 per line and 32 768 for the whole
+  blocklist. Plain characters cost nothing, a `.` costs 4, and a bracket
+  expression or `\w`, `\W`, `\s`, `\S` costs 1; a bounded repeat costs its
   expanded size (grep copies the repeated part once per count, so nested
-  repeats multiply) is above a cap, per line and across the whole blocklist.
-  These checks are not exhaustive; set `--timeout` when blocklist lines are
-  not fully trusted. The `cdxj-index-collection.sh` pipeline passes it on from
-  `--blocklist-timeout SECONDS` or the `BLOCKLIST_TIMEOUT` environment
-  variable (default `0`, no limit); a timeout fails the filtering stage.
-  If **any** line is
-  rejected the tool fails closed: it exits 1, writes no output and reports
-  each rejected line number and reason on stderr, since filtering with part of
-  the blocklist would publish the records the rejected lines target. The
-  library path fails closed too: `load_blocklist()` raises `ValueError` if any
-  line is not a valid Python regex, and `filter_cdxj_by_blocklist()` applies
-  the same grep checks to every pattern it is given. grep also
-  fails closed on its own errors (including being killed by a signal), runs
-  with `--` before the input path, and can be bounded with the optional
-  `--timeout` (default: no limit; the clock includes time spent waiting on
-  stdin; exit status 124 on timeout).
+  repeats multiply). See `docs/tools/filter-blocklist.md` for the rules.
+- *Blocklist timeout* -- these checks are not exhaustive. When blocklist lines
+  are not fully trusted, the real bound is `filter-blocklist --timeout`
+  (default: no limit; at most 604 800 s, one week; the clock includes time
+  spent waiting on stdin; exit status 124 on timeout). Size it for the largest
+  CDXJ input you filter. The `cdxj-index-collection.sh` pipeline passes it on
+  from `--blocklist-timeout SECONDS` or the `BLOCKLIST_TIMEOUT` environment
+  variable (default `0`, no limit), shows the filter's error message, and
+  fails the filtering stage on a timeout or any other error.
+- *Fail closed* -- if **any** line is rejected the tool exits 1, writes no
+  output and reports each rejected line number and reason on stderr, since
+  filtering with part of the blocklist would publish the records the rejected
+  lines target. The library path fails closed too: `load_blocklist()` raises
+  `ValueError` if any line is not a valid Python regex, and
+  `filter_cdxj_by_blocklist()` applies the same grep checks to every pattern
+  it is given. grep also fails closed on its own errors (including being
+  killed by a signal) and runs with `--` before the input path.
 
 **Tests:** `tests/test_regex_safety.py`
 

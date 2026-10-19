@@ -42,7 +42,7 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--blocklist FILE` | `/data/blocklists/arquivo-blocklist.txt` | Path to blocklist file |
-| `--blocklist-timeout SECONDS` | `0` (no limit; env `BLOCKLIST_TIMEOUT`) | Abort the run if filtering one file with the blocklist takes longer; set it when blocklist lines are not fully trusted |
+| `--blocklist-timeout SECONDS` | `0` (no limit; env `BLOCKLIST_TIMEOUT`) | Abort the run if filtering one file with the blocklist takes longer (at most `604800`, 1 week); set it, sized for the largest CDXJ file, when blocklist lines are not fully trusted |
 | `--threshold N` | `1000` | Excessive URLs threshold |
 | `--jobs N` | `$(nproc)` | Number of parallel jobs |
 | `--shard-size N` | `3000` | ZipNum shard size (lines) |

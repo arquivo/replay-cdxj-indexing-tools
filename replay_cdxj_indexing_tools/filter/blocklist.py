@@ -78,6 +78,8 @@ from typing import List, Optional, Pattern, Tuple
 
 # Exit status on timeout (matches POSIX timeout(1))
 _EXIT_TIMEOUT = 124
+# Largest --timeout accepted, in seconds (1 week)
+MAX_TIMEOUT = 604800
 
 # Longest blocklist line accepted for grep. Generous on purpose: real
 # blocklists contain long host alternations.
@@ -85,14 +87,19 @@ GREP_MAX_PATTERN_LEN = 10000
 # Largest repeat count accepted in {n}, {n,} and {n,m} (same as RE_DUP_MAX
 # in POSIX's minimum limits)
 GREP_MAX_REPEAT = 255
-# grep expands a bounded repeat into that many copies of its operand, so
-# nested repeats multiply, and its set-up cost grows quickly with the expanded
-# size, more so when the blocklist has several such lines. Caps on the expanded
-# size (see check_grep_pattern) of the bounded repeats in one line, e.g.
-# 4 * 255 for "(x{255}){4}", and in the whole blocklist; real blocklists rarely
-# use bounded repeats at all.
-GREP_MAX_REPEAT_SIZE = 1024
-GREP_MAX_TOTAL_REPEAT_SIZE = 2048
+# Caps on the grep cost (see check_grep_pattern) of one line and of the whole
+# blocklist. grep expands a bounded repeat into that many copies of its
+# operand, and its set-up time grows with the square of a line's expanded size
+# times the number of such lines, so the per-line cap is the tighter one: 256
+# allows e.g. "x{255}", ".{0,64}" or "([a-z0-9-]{1,63}\.){1,4}", and the
+# blocklist cap allows about 500 lines like "[a-z0-9-]{1,63}".
+GREP_MAX_LINE_COST = 256
+GREP_MAX_BLOCKLIST_COST = 32768
+# Cost of a wildcard atom: "." is the most expensive for grep; bracket
+# expressions and the \w, \W, \s and \S classes are cheaper
+_DOT_COST = 4
+_CLASS_COST = 1
+_CLASS_ESCAPES = "wWsS"
 
 _REPEAT_COUNTS = re.compile(r"\{(\d*)(?:,(\d*))?\}")
 
@@ -117,22 +124,23 @@ def check_grep_pattern(pattern: str) -> int:
     """
     Reject a blocklist line containing constructs that are expensive for
     ``grep -E``: back-references (``\\1``-``\\9``), repeat counts above
-    GREP_MAX_REPEAT, bounded repeats that expand to more than
-    GREP_MAX_REPEAT_SIZE characters in total, or more than
+    GREP_MAX_REPEAT, a cost above GREP_MAX_LINE_COST, or more than
     GREP_MAX_PATTERN_LEN characters.
 
-    The expanded size of a bounded repeat is its operand's size times its
-    largest count, where sizes add along a sequence and across alternatives,
-    and nested repeats multiply. Each character or bracket expression counts
-    as 1, and ``.`` as 4 (it is more expensive for grep to repeat).
+    The cost of a line is the sum of the costs of its wildcard atoms and of
+    its bounded repeats; plain characters cost nothing. A ``.`` costs 4, and
+    a bracket expression (or ``\\w``, ``\\W``, ``\\s``, ``\\S``) costs 1. A
+    bounded repeat costs its expanded size: its operand's size times its
+    largest count, where each plain character also counts as 1, sizes add
+    along a sequence and across alternatives, and nested repeats multiply.
 
     grep's matcher is mostly DFA-based, so the Python-oriented backtracking
     checks in regex_safety do not apply here (and would reject common SURT
     idioms). Syntax is left to grep. These checks are not exhaustive.
 
     Returns:
-        The expanded size of the line's bounded repeats, which callers add up
-        across a blocklist (see GREP_MAX_TOTAL_REPEAT_SIZE).
+        The line's cost, which callers add up across a blocklist (see
+        GREP_MAX_BLOCKLIST_COST).
 
     Raises:
         ValueError: with the reason, if the line is rejected.
@@ -141,18 +149,21 @@ def check_grep_pattern(pattern: str) -> int:
         raise ValueError(f"longer than {GREP_MAX_PATTERN_LEN} characters ({len(pattern)})")
 
     # One frame per open group: [finished alternatives, current alternative,
-    # its last atom], each as (size, expanded size of the bounded repeats).
+    # its last atom], each as (size, cost).
     frames = [[(0, 0), (0, 0), (0, 0)]]
     i = 0
     while i < len(pattern):
         frame = frames[-1]
         char = pattern[i]
-        atom = (4, 0) if char == "." else (1, 0)
+        atom = (_DOT_COST, _DOT_COST) if char == "." else (1, 0)
         if char == "\\" and i + 1 < len(pattern):
             if pattern[i + 1] in "123456789":
                 raise ValueError("back-references are expensive for grep")
+            if pattern[i + 1] in _CLASS_ESCAPES:
+                atom = (_CLASS_COST, _CLASS_COST)
             i += 2  # an escape pair (e.g. a literal "\\{") is one atom
         elif char == "[":
+            atom = (_CLASS_COST, _CLASS_COST)
             i = _skip_bracket_expression(pattern, i)  # "{" is literal inside
         elif char == "(":
             frames.append([(0, 0), (0, 0), (0, 0)])
@@ -169,12 +180,12 @@ def check_grep_pattern(pattern: str) -> int:
             continue
         elif char == "{" and (match := _REPEAT_COUNTS.match(pattern, i)):
             size = frame[2][0] * _repeat_count(*match.groups())
-            if size > GREP_MAX_REPEAT_SIZE:
+            if size > GREP_MAX_LINE_COST:
                 raise ValueError(
-                    f"a bounded repeat expands to more than {GREP_MAX_REPEAT_SIZE}"
+                    f"a bounded repeat expands to more than {GREP_MAX_LINE_COST}"
                     " characters, which is expensive for grep"
                 )
-            # The repeat replaces its operand, and counts as expanded in full
+            # The repeat replaces its operand, and costs its expanded size
             frame[1] = _add_sizes(frame[1], (size, size), minus=frame[2])
             frame[2] = (size, size)
             i = match.end()
@@ -187,19 +198,19 @@ def check_grep_pattern(pattern: str) -> int:
         frame[1] = _add_sizes(frame[1], atom)
         frame[2] = atom
 
-    repeated = sum(done[1] + current[1] for done, current, _last in frames)
-    if repeated > GREP_MAX_REPEAT_SIZE:
+    cost = sum(done[1] + current[1] for done, current, _last in frames)
+    if cost > GREP_MAX_LINE_COST:
         raise ValueError(
-            f"bounded repeats expand to more than {GREP_MAX_REPEAT_SIZE} characters"
-            " in total, which is expensive for grep"
+            f"bounded repeats and wildcards cost {cost}, more than {GREP_MAX_LINE_COST},"
+            " which is expensive for grep"
         )
-    return repeated
+    return cost
 
 
 def _add_sizes(
     first: Tuple[int, int], second: Tuple[int, int], minus: Tuple[int, int] = (0, 0)
 ) -> Tuple[int, int]:
-    """Add two (size, repeated size) pairs, optionally replacing ``minus``."""
+    """Add two (size, cost) pairs, optionally replacing ``minus``."""
     return (first[0] + second[0] - minus[0], first[1] + second[1] - minus[1])
 
 
@@ -248,17 +259,17 @@ def _check_grep_patterns(patterns: List[Tuple[int, str]], source: str) -> None:
     total = 0
     for line_num, pattern in patterns:
         try:
-            repeated = check_grep_pattern(pattern)
+            cost = check_grep_pattern(pattern)
         except ValueError as e:
             rejected.append(f"  {source} {line_num}: {e}")
             continue
         # Report only the first line that takes the blocklist over the budget
-        if total <= GREP_MAX_TOTAL_REPEAT_SIZE < total + repeated:
+        if total <= GREP_MAX_BLOCKLIST_COST < total + cost:
             rejected.append(
-                f"  {source} {line_num}: bounded repeats across the blocklist expand to"
-                f" more than {GREP_MAX_TOTAL_REPEAT_SIZE} characters, which is expensive for grep"
+                f"  {source} {line_num}: bounded repeats and wildcards across the blocklist"
+                f" cost more than {GREP_MAX_BLOCKLIST_COST}, which is expensive for grep"
             )
-        total += repeated
+        total += cost
     if rejected:
         raise ValueError(
             f"{len(rejected)} blocklist pattern(s) rejected; refusing to filter"
@@ -421,13 +432,16 @@ def filter_cdxj_by_blocklist(
 
 
 def _seconds(value: str) -> float:
-    """argparse type: a finite, non-negative number of seconds."""
+    """argparse type: a number of seconds from 0 to MAX_TIMEOUT."""
     try:
         seconds = float(value)
     except ValueError:
         seconds = math.nan
-    if not math.isfinite(seconds) or seconds < 0:
-        raise argparse.ArgumentTypeError(f"must be a finite number >= 0, got {value!r}")
+    # Larger values overflow the timeout subprocess.run() passes to the OS
+    if not 0 <= seconds <= MAX_TIMEOUT:
+        raise argparse.ArgumentTypeError(
+            f"must be a finite number >= 0 and <= {MAX_TIMEOUT} (1 week), got {value!r}"
+        )
     return seconds
 
 
@@ -485,7 +499,8 @@ Exit status:
         default=0,
         metavar="SECONDS",
         help="Abort if filtering takes longer than this many seconds, including time"
-        " spent waiting for input on stdin (default: 0 = no limit)",
+        f" spent waiting for input on stdin; at most {MAX_TIMEOUT} (1 week)"
+        " (default: 0 = no limit)",
     )
 
     args = parser.parse_args()

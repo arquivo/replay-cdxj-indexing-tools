@@ -147,16 +147,14 @@ class TestTimeLimit(unittest.TestCase):
     def test_search_shorter_than_limit_succeeds(self):
         """Watchdog ticks during a search that stays within its budget are harmless."""
 
-        class SlowRegex:  # pylint: disable=too-few-public-methods
-            """Stands in for a pattern whose search spans several ticks."""
-
-            def search(self, _text):
-                time.sleep(0.2)  # resumed after each SIGALRM tick (PEP 475)
-                return "match"
+        # Stands in for a pattern whose search spans several ticks; sleep() is
+        # resumed after each SIGALRM tick (PEP 475)
+        slow_regex = mock.Mock()
+        slow_regex.search.side_effect = lambda _text: time.sleep(0.2) or "match"
 
         with regex_time_limit() as active:
             self.assertTrue(active)
-            self.assertEqual(search_with_time_limit(SlowRegex(), "", timeout=1), "match")
+            self.assertEqual(search_with_time_limit(slow_regex, "", timeout=1), "match")
 
     def test_cdxj_filter_timeout_aborts(self):
         """A pattern that gets past the denylist is still bounded in matches()."""
@@ -313,7 +311,8 @@ class TestGrepPatternCheck(unittest.TestCase):
 
     def test_accepts_blocklist_idioms(self):
         self.assertGreater(len(_long_alternation()), 1000)
-        for pattern in ACCEPTED_LINES + LEGIT_PATTERNS + BYPASS_SHAPES:
+        # The last bypass shape is over the grep cost cap (see below)
+        for pattern in ACCEPTED_LINES + LEGIT_PATTERNS + BYPASS_SHAPES[:-1]:
             with self.subTest(pattern=pattern[:40]):
                 check_grep_pattern(pattern)
 
@@ -332,48 +331,54 @@ class TestGrepPatternCheck(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     check_grep_pattern(pattern)
 
-    def test_bounded_repeat_size(self):
-        """Bounded repeats are capped by the size they expand to, per line."""
+    def test_line_cost(self):
+        """Wildcards and bounded repeats are capped by their cost, per line."""
         accepted = {
+            "^pt,(sapo|publico),": 0,  # plain characters are free
+            "x*y+z?": 0,
+            "^pt,.*,www\\)/": 4,  # a written-out wildcard counts
+            "a.b[0-9]\\w\\S": 4 + 3,
             "x{255}": 255,
             "a{,}": 1,
             "x{2,}": 2,
-            "x*y+z?": 0,
-            ".{255}": 4 * 255,
+            ".{64}": 4 * 64,
+            "[a-z0-9-]{1,63}": 63,
+            "([a-z0-9-]{1,63}\\.){1,4}": 4 * 64,
             "(ab{1,10}){1,20}": 20 * 11,
-            "(x{255}){4}": 4 * 255,
-            "((a{10}){10}){10}": 1000,
-            "(a{30}|b){30}": 30 * 31,
+            "(x{63}){4}": 4 * 63,
+            "((a{4}){4}){4}": 64,
+            "(a{7}|b){30}": 30 * 8,
             "x{0}(ab|c){3}": 3 * 3,
             "\\{9}\\.{9}[a-z]{9}": 18,  # "\\{" is a literal
             "a){255}": 255,  # an unmatched ")" is a literal
             "[^a]{9}[[:x]{9}": 18,  # "[:" without ":]" is literal in a bracket
-            "^pt,(sapo|publico),": 0,
         }
-        for pattern, size in accepted.items():
+        for pattern, cost in accepted.items():
             with self.subTest(pattern=pattern):
-                self.assertEqual(check_grep_pattern(pattern), size)
+                self.assertEqual(check_grep_pattern(pattern), cost)
         one_repeat = [
-            "(x{255}){5}",
+            ".{65}",
+            "(x{255}){2}",
             "(x{0,100}){0,100}",
-            "((a{10}){10}){11}",
-            "x{10}{10}{11}",
+            "((a{10}){10}){3}",
+            "x{10}{10}{3}",
             "(a{40}|b){40}",
             "((a{255})b){5}",
-            "(abcdefgh){200}",  # a wide repeated group
+            "(abcdefgh){40}",  # a wide repeated group
             "(.{0,32}){0,32}",
+            BYPASS_SHAPES[-1],
             "^pt,(([a-z]{1,8}\\.){1,8}){1,20}x",
         ]
         for pattern in one_repeat:
             with self.subTest(pattern=pattern):
                 with self.assertRaisesRegex(ValueError, "a bounded repeat expands to more"):
                     check_grep_pattern(pattern)
-        # Many repeats side by side, each one under the cap
-        side_by_side = ["x{255}" * 5, "[a-z]{0,255}" * 5, "(x{0,32}){0,32}" * 2, ".{0,255}" * 2]
-        side_by_side += ["(a{255}|b{255}|c{255}|d{255}|e{255})"]
+        # Many repeats or wildcards side by side, each one under the cap
+        side_by_side = ["x{255}" * 2, "[a-z]{0,255}" * 2, ".{0,64}" * 2, "(a{255}|b{255})"]
+        side_by_side += ["." * 65, "[a-z]" * 257, "\\w" * 257]
         for pattern in side_by_side:
-            with self.subTest(pattern=pattern):
-                with self.assertRaisesRegex(ValueError, "in total"):
+            with self.subTest(pattern=pattern[:40]):
+                with self.assertRaisesRegex(ValueError, "cost [0-9]+, more than 256"):
                     check_grep_pattern(pattern)
 
 
@@ -435,21 +440,26 @@ class TestBlocklistHardening(unittest.TestCase):
                 self.assertIn(f"line {line_num}:", stderr)
                 self.assertFalse(os.path.exists(self.output_path))
 
-    def test_bounded_repeat_budget_across_blocklist(self):
-        """Lines under the per-line cap still add up against the blocklist's cap."""
-        lines = [f"^pt,budget{i},(x{{255}}){{4}}" for i in range(3)]
-        self._write_blocklist(*lines[:2])
+    def test_blocklist_cost_budget(self):
+        """Line costs add up against the blocklist's cap, written-out wildcards too."""
+        # A few hundred hostname-label lines, 63 each: 500 * 63 is under the cap
+        hosts = [f"^pt,[a-z0-9-]{{1,63}},host{i}\\)/" for i in range(520)]
+        self._write_blocklist(*hosts[:500])
         self.assertEqual(self._filter(), (self.total, 0))
         os.remove(self.output_path)
 
-        self._write_blocklist(*lines)
-        with self.assertRaisesRegex(ValueError, "line 3: bounded repeats across the blocklist"):
-            self._filter()
-        self.assertFalse(os.path.exists(self.output_path))
-        code, stderr = self._run_main()
-        self.assertEqual(code, 1)
-        self.assertIn("line 3:", stderr)
-        self.assertNotIn("line 2:", stderr)
+        # 520 * 63 = 32760, so 5 written-out dots (cost 20) go over the cap
+        for extra in ["^pt,keep.....", "^pt,[a-z0-9-]{1,63},host\\)/"]:
+            with self.subTest(extra=extra):
+                self._write_blocklist(*hosts, extra)
+                with self.assertRaisesRegex(ValueError, "line 521: .* across the blocklist"):
+                    self._filter()
+                self.assertFalse(os.path.exists(self.output_path))
+                code, stderr = self._run_main()
+                self.assertEqual(code, 1)
+                self.assertIn("line 521:", stderr)
+                self.assertNotIn("line 520:", stderr)
+                self.assertFalse(os.path.exists(self.output_path))
 
     def test_library_path_applies_blocklist_idioms(self):
         self._write_blocklist(*LIBRARY_LINES, REJECTED_TARGETS)
@@ -563,11 +573,16 @@ class TestBlocklistHardening(unittest.TestCase):
             self.assertEqual(self._run_main()[0], 0)
         self.assertIsNone(run.call_args.kwargs["timeout"])  # default: no limit
 
-        for value in ["nan", "inf", "-1", "soon"]:
+        with mock.patch.object(blocklist.subprocess, "run", return_value=completed) as run:
+            self.assertEqual(self._run_main("--timeout", "604800")[0], 0)
+        self.assertEqual(run.call_args.kwargs["timeout"], 604800)
+
+        # Values above a week would overflow the OS timeout
+        for value in ["nan", "inf", "-1", "soon", "604800.5", "1e300"]:
             with self.subTest(value=value):
                 code, stderr = self._run_main("--timeout", value)
                 self.assertEqual(code, 2)
-                self.assertIn("finite number >= 0", stderr)
+                self.assertIn("finite number >= 0 and <= 604800", stderr)
 
     def test_grep_failure_writes_no_output(self):
         for returncode in (2, -9):  # an error status, or killed by a signal
