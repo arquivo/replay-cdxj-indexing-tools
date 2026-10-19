@@ -35,9 +35,11 @@ addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
     -f collection=ARQUIVO-2024 \
     -f source=web
 
-# Use custom Python function
+# Use custom Python function (requires ADDFIELD_PLUGIN_DIR; see
+# docs/tools/addfield-to-flat-cdxj.md)
+export ADDFIELD_PLUGIN_DIR="$HOME/addfield-plugins"
 addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
-    --function addfield_year.py
+    --function "$ADDFIELD_PLUGIN_DIR/addfield_year.py"
 
 # Parallel processing (recommended)
 parallel -j 16 \

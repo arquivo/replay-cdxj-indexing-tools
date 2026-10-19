@@ -29,6 +29,7 @@ within **90 days** of confirmation.
 | Timestamps (`from_ts` / `to_ts`) | **Untrusted** | Validated to digits-only before use |
 | Redis credentials | **Trusted** | Must be supplied by the operator |
 | `arclist_folder` path | **Trusted** | Must not be attacker-controlled |
+| `ADDFIELD_PLUGIN_DIR` and `--function` file (`addfield-to-flat-cdxj`) | **Trusted** | Executed as Python code; must be operator-controlled (see §6) |
 
 ---
 
@@ -139,6 +140,59 @@ the data store to any network-adjacent attacker who can reach the Redis port.
 
 ---
 
+### 6. Arbitrary code execution via `--function` plugin files (CWE-94)
+
+**Component:** `replay_cdxj_indexing_tools/addfield/addfield_to_flat_cdxj.py` —
+`load_addfield_function()` (CLI: `addfield-to-flat-cdxj --function`)
+
+**Threat:** `--function` executes a Python file's module-level code with the
+full privileges of the process. Anyone who can choose the path, or write to
+the file or its directory, gets code execution as the operator. This is a
+deliberate, trusted-operator-only feature: the allowlist below is a path and
+permission filter, **not a sandbox** — any file accepted from the plugin
+directory runs unrestricted.
+
+**Mitigation:**
+- **Fail closed:** `--function` (and `load_addfield_function()`) refuse to load
+  anything unless `ADDFIELD_PLUGIN_DIR` is set. This changed the default:
+  operators using `--function` (versions up to and including 1.2.6 had no
+  checks) must now set `ADDFIELD_PLUGIN_DIR`.
+- The resolved (`os.path.realpath()`) function path must be directly inside the
+  resolved plugin directory; symlink escapes and subdirectories are rejected
+  (CWE-22). `ADDFIELD_PLUGIN_DIR` itself may be a symlink (or start with `~`):
+  it is expanded and resolved once with `realpath()`. A value that resolves to
+  `/` (e.g. `~` with an empty `HOME`) is refused.
+- The plugin directory and the file must be owned by the current user or root
+  and must not be group- or world-writable (CWE-732); shared directories such
+  as `/tmp` are refused.
+- The resolved directory is opened with `O_NOFOLLOW`; the file is `lstat()`ed
+  relative to that directory descriptor (FIFOs, device nodes and symlinks are
+  rejected before any `open()`), then opened relative to it with
+  `O_NOFOLLOW | O_NONBLOCK | O_NOCTTY`. Ownership, permissions and type are
+  checked with `fstat()` on the open descriptors, and the code is compiled from
+  the bytes read from that same descriptor — the file is never re-opened by
+  path, closing the check-to-load race (CWE-367). Only the final components get
+  `O_NOFOLLOW`; intermediate components of the resolved path are not re-checked.
+- Every load and every refusal is logged at `WARNING` level (path `repr()`-quoted,
+  so crafted names cannot forge log lines); the CLI configures a stderr handler
+  so this is emitted even when the caller has not configured logging.
+- POSIX-only: on platforms without POSIX ownership/permission semantics,
+  `--function` is refused.
+
+**Operator responsibilities:**
+- Keep `ADDFIELD_PLUGIN_DIR` and all its parent directories (and, if it is a
+  symlink, its target's parents) writable only by the operator account or root.
+- Use a dedicated directory that contains only reviewed plugins — never `$HOME`,
+  the working directory, or input/output directories. The owner check proves
+  who owns a file, not who wrote its contents.
+- Never derive `--function` or `ADDFIELD_PLUGIN_DIR` from untrusted or remote
+  input.
+- Keep stderr from `--function` runs if the audit trail matters.
+
+**Tests:** `tests/test_addfield_to_flat_cdxj.py` — `TestLoadAddfieldFunctionSecurity`
+
+---
+
 ## CWE Reference Summary
 
 | CWE | Description | Affected component |
@@ -148,3 +202,4 @@ the data store to any network-adjacent attacker who can reach the Redis port.
 | CWE-400 | Uncontrolled Resource Consumption | `zipnum_search` block reads; `arclist_index_to_redis` pipeline |
 | CWE-78  | OS Command Injection | `arclist_index_to_redis.run_pipeline()` (mitigated via list args) |
 | CWE-306 | Missing Authentication | `path_index_to_redis.submit_index_to_redis()` remote Redis |
+| CWE-94  | Code Injection | `addfield_to_flat_cdxj.load_addfield_function()` (`--function`; fail-closed plugin dir; hardening: CWE-22/732/367) |

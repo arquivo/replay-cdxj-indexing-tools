@@ -76,10 +76,60 @@ addfield-to-flat-cdxj -i INPUT -o OUTPUT --function SCRIPT.py
 | `-i, --input PATH` | Input CDXJ file or `-` for stdin (required) |
 | `-o, --output PATH` | Output file or `-` for stdout (default: stdout) |
 | `-f, --field KEY=VALUE` | Add field (can be used multiple times) |
-| `--function FILE` | Python file with addfield() function |
+| `--function FILE` | Python file with addfield() function (requires `ADDFIELD_PLUGIN_DIR`, see below) |
 | `-v, --verbose` | Print statistics to stderr |
 
 **Note:** Must provide either `-f` (fields) **or** `--function` (not both).
+
+### `--function` security (`ADDFIELD_PLUGIN_DIR`)
+
+`--function` runs the given Python file's module-level code with the full
+privileges of the `addfield-to-flat-cdxj` process (CWE-94). It is a
+**trusted-operator-only** feature and is **disabled by default**:
+
+- It refuses to run (exit code 1) unless the `ADDFIELD_PLUGIN_DIR` environment
+  variable is set to an operator-controlled directory (a leading `~` is
+  expanded; a value that resolves to `/` is refused).
+- The function file must resolve to a regular file **directly inside** that
+  directory (symlinks pointing elsewhere, subdirectories, FIFOs and device
+  nodes are rejected).
+- The directory and the file must be owned by the current user (or root) and
+  must **not** be group- or world-writable. Shared directories such as `/tmp`
+  are therefore refused. With a umask of `002`, new files are group-writable:
+  run `chmod go-w` on **both** the directory and the file.
+- Use a dedicated directory that contains only reviewed plugins — never
+  `$HOME`, the working directory, or input/output directories. The owner check
+  proves who owns the file, not who wrote its contents.
+- Each `--function` run logs one audit `WARNING` line to stderr with the
+  resolved absolute path (refusals are logged too).
+
+```bash
+mkdir -m 700 "$HOME/addfield-plugins"
+install -m 644 addfield_year.py "$HOME/addfield-plugins/"
+export ADDFIELD_PLUGIN_DIR="$HOME/addfield-plugins"
+
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
+    --function "$ADDFIELD_PLUGIN_DIR/addfield_year.py"
+```
+
+**In Docker**, pass the variable with `-e` and mount the plugin directory
+read-only. The container runs as root by default, so a plugin directory owned
+by your host user is refused (it is neither yours inside the container nor
+root's). Run as your host user, or make the directory root-owned on the host:
+
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+    -e ADDFIELD_PLUGIN_DIR=/plugins \
+    -v "$HOME/addfield-plugins:/plugins:ro" -v /path/to/data:/data \
+    arquivo/replay-cdxj-indexing-tools \
+    addfield-to-flat-cdxj -i input/in.cdxj -o output/out.cdxj \
+    --function /plugins/addfield_year.py
+```
+
+> **Upgrade note:** versions up to and including 1.2.6 loaded any `--function`
+> path without checks. Existing `--function` invocations now fail until
+> `ADDFIELD_PLUGIN_DIR` is set as above. Never point `--function` or
+> `ADDFIELD_PLUGIN_DIR` at paths that come from untrusted or remote input.
 
 ## CDXJ Format
 
@@ -186,10 +236,13 @@ def addfield(surt_key, timestamp, json_data):
     return json_data
 ```
 
-Use it:
+Use it (the file must live in `ADDFIELD_PLUGIN_DIR`, see
+[`--function` security](#--function-security-addfield_plugin_dir)):
 
 ```bash
-addfield-to-flat-cdxj -i input.cdxj -o output.cdxj --function addfield_func.py
+export ADDFIELD_PLUGIN_DIR="$HOME/addfield-plugins"
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
+    --function "$ADDFIELD_PLUGIN_DIR"/addfield_func.py
 ```
 
 **Result:** Records are tagged with year-based collection names:
@@ -377,8 +430,9 @@ print(f"Processed {processed} lines, skipped {skipped} lines")
 ### Using Custom Functions
 
 ```python
-# Load function from file
-addfield_func = load_addfield_function('addfield_func.py')
+# Load function from file (fails closed unless ADDFIELD_PLUGIN_DIR is set and
+# the file is directly inside it -- same rules as --function)
+addfield_func = load_addfield_function('/srv/addfield-plugins/addfield_func.py')
 
 # Apply it
 processed, skipped = addfield_to_cdxj(
@@ -441,16 +495,24 @@ def addfield_to_cdxj(
 def load_addfield_function(function_path: str) -> Callable
 ```
 
-Load addfield function from Python file.
+Load addfield function from Python file. Executes the file's module-level code,
+so it applies the same fail-closed checks as `--function` (see
+[`--function` security](#--function-security-addfield_plugin_dir)).
 
 **Parameters:**
-- `function_path`: Path to Python file with `addfield()` function
+- `function_path`: Path to Python file with `addfield()` function; must resolve
+  to a file directly inside `ADDFIELD_PLUGIN_DIR`
 
 **Returns:**
 - The addfield function
 
 **Raises:**
-- `IOError`: If file cannot be read
+- `PermissionError`: If `ADDFIELD_PLUGIN_DIR` is unset, the platform is not
+  POSIX, or the directory/file is not owned by the current user or root or is
+  group-/world-writable
+- `ValueError`: If the file is not directly inside `ADDFIELD_PLUGIN_DIR`
+- `IOError`: If the plugin directory or file cannot be opened, or the file is
+  not a regular file (including a symlink swapped in after resolution)
 - `AttributeError`: If addfield() function not found
 
 #### `parse_cdxj_line()`
@@ -522,24 +584,49 @@ addfield-to-flat-cdxj -i input.cdxj -f key=value
 addfield-to-flat-cdxj -i input.cdxj --function func.py
 ```
 
+### --function refused: ADDFIELD_PLUGIN_DIR is not set
+
+**Error:** `Error: Loading addfield functions from files (--function) is disabled because ADDFIELD_PLUGIN_DIR is not set. ...`
+
+**Solution:** Move the function file into a private directory and set
+`ADDFIELD_PLUGIN_DIR` to it (see [`--function` security](#--function-security-addfield_plugin_dir)).
+
+### --function refused: outside the allowed plugin directory
+
+**Error:** `Error: Function file '...' is outside the allowed plugin directory '...' (see ADDFIELD_PLUGIN_DIR); it must be placed directly inside that directory`
+
+**Solution:** Place the file directly inside `ADDFIELD_PLUGIN_DIR` (not in a
+subdirectory, and not as a symlink to a file elsewhere).
+
+### --function refused: group- or world-writable / wrong owner
+
+**Error:** `Error: Refusing to load addfield function: plugin directory '/tmp' is group- or world-writable (mode 1777); use a private directory you own instead, e.g. mkdir -m 700 "$HOME/addfield-plugins"`
+
+**Solution:** Follow the hint in the message. For your own directory it is
+`chmod go-w` (check both the directory and the file, e.g. after a umask of
+`002`). For a shared or foreign directory such as `/tmp`, the message instead
+tells you to create a private one (`mkdir -m 700 "$HOME/addfield-plugins"`).
+Both the directory and the file must be owned by the user running the tool (or
+root).
+
 ### Function file not found
 
 **Error:**
 ```
-Error: Cannot load module from /path/to/missing.py
+Error: Cannot load module from '/path/to/missing.py': No such file or directory
 ```
 
 **Solution:** Check file path and ensure file exists:
 ```bash
-ls -l addfield_func.py  # Verify file exists
-addfield-to-flat-cdxj -i input.cdxj --function ./addfield_func.py
+ls -l "$ADDFIELD_PLUGIN_DIR"/addfield_func.py  # Verify file exists
+addfield-to-flat-cdxj -i input.cdxj --function "$ADDFIELD_PLUGIN_DIR"/addfield_func.py
 ```
 
 ### Missing addfield() function
 
 **Error:**
 ```
-Error: Module must define an addfield(surt_key, timestamp, json_data) function
+Error: Module '/path/to/func.py' must define an addfield(surt_key, timestamp, json_data) function
 ```
 
 **Solution:** Ensure your Python file has an `addfield()` function:
@@ -687,7 +774,9 @@ def addfield(surt_key, timestamp, json_data):
 ```
 
 ```bash
-addfield-to-flat-cdxj -i input.cdxj -o output.cdxj --function addfield_year.py
+# addfield_year.py must be directly inside $ADDFIELD_PLUGIN_DIR
+addfield-to-flat-cdxj -i input.cdxj -o output.cdxj \
+    --function "$ADDFIELD_PLUGIN_DIR"/addfield_year.py
 ```
 
 ### Complete Parallel Processing
