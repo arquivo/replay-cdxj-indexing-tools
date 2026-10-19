@@ -63,14 +63,14 @@ Test coverage for Python CLI tools:
 bash tests/test_cdxj_index_collection.sh
 ```
 
-**Coverage (31 tests):**
+**Coverage (33 tests):**
 - Script validation (exists, executable, syntax)
 - Help and usage output
 - Command-line flags:
   - `--incremental`, `--jobs`, `--threshold`, `--shard-size`
   - `--addfield` (single and multiple)
   - `--addfield-func`
-  - `--blocklist`, `--keep-temp`, `--no-compress`
+  - `--blocklist`, `--blocklist-timeout`, `--keep-temp`, `--no-compress`
 - Error handling:
   - Missing/non-existent collections
   - Empty directories

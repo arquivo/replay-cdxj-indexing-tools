@@ -32,6 +32,10 @@ DEFAULT_BLOCKLIST="arquivo-blocklist.txt"
 EXCESSIVE_THRESHOLD=1000
 PARALLEL_JOBS=$(nproc)
 SHARD_SIZE=3000
+# Seconds filter-blocklist may take per file (0 = no limit); set it when
+# blocklist lines are not fully trusted
+BLOCKLIST_TIMEOUT="${BLOCKLIST_TIMEOUT:-0}"
+MAX_BLOCKLIST_TIMEOUT=604800 # 1 week, the most filter-blocklist accepts
 
 # Colors for output
 RED='\033[0;31m'
@@ -52,6 +56,12 @@ Arguments:
 
 Options:
   --blocklist FILE          Path to blocklist file (default: $BLOCKLIST_DIR/$DEFAULT_BLOCKLIST)
+  --blocklist-timeout SECONDS
+                            Abort if filtering one file with the blocklist takes
+                            longer; set it when blocklist lines are not fully
+                            trusted; at most $MAX_BLOCKLIST_TIMEOUT (1 week)
+                            (default: $BLOCKLIST_TIMEOUT, from env
+                            BLOCKLIST_TIMEOUT; 0 = no limit)
   --threshold N             Excessive URLs threshold (default: $EXCESSIVE_THRESHOLD)
   --jobs N                  Number of parallel jobs (default: $PARALLEL_JOBS)
   --shard-size N            ZipNum shard size (default: $SHARD_SIZE)
@@ -174,6 +184,10 @@ while [[ $# -gt 0 ]]; do
             BLOCKLIST="$2"
             shift 2
             ;;
+        --blocklist-timeout)
+            BLOCKLIST_TIMEOUT="$2"
+            shift 2
+            ;;
         --threshold)
             EXCESSIVE_THRESHOLD="$2"
             shift 2
@@ -232,6 +246,22 @@ if [ -z "$COLLECTION_NAME" ]; then
     usage
 fi
 
+# Validate blocklist timeout (seconds from 0 to MAX_BLOCKLIST_TIMEOUT, 0 = no limit)
+valid_blocklist_timeout() {
+    [[ "$1" =~ ^0*([0-9]{1,6})([.]([0-9]+))?$ ]] || return 1
+    local seconds=$((10#${BASH_REMATCH[1]}))
+    local fraction="${BASH_REMATCH[3]}"
+    if [ "$seconds" -eq "$MAX_BLOCKLIST_TIMEOUT" ]; then
+        ! [[ "$fraction" =~ [1-9] ]]
+    else
+        [ "$seconds" -lt "$MAX_BLOCKLIST_TIMEOUT" ]
+    fi
+}
+if ! valid_blocklist_timeout "$BLOCKLIST_TIMEOUT"; then
+    log_error "Invalid blocklist timeout: $BLOCKLIST_TIMEOUT (expected seconds from 0 to $MAX_BLOCKLIST_TIMEOUT, 0 = no limit)"
+    exit 1
+fi
+
 # Use collection name as the collection field value
 COLLECTION_FIELD="$COLLECTION_NAME"
 
@@ -285,6 +315,7 @@ echo "  Collection dir:     $COLLECTION_DIR"
 echo "  Output dir:         $OUTPUT_DIR"
 echo "  Temp dir:           $TEMP_DIR"
 echo "  Blocklist:          $BLOCKLIST"
+echo "  Blocklist timeout:  $BLOCKLIST_TIMEOUT (seconds per file, 0 = no limit)"
 echo "  Excessive threshold: $EXCESSIVE_THRESHOLD"
 echo "  Parallel jobs:      $PARALLEL_JOBS"
 echo "  Shard size:         $SHARD_SIZE"
@@ -464,19 +495,30 @@ if [ $USE_BLOCKLIST -eq 1 ]; then
         local input_file="$1"
         local blocklist="$2"
         local output_dir="$3"
+        local timeout="$4"
         
         local basename=$(basename "$input_file")
         local output_file="$output_dir/$basename"
         
-        # Filter this file
-        filter-blocklist -i "$input_file" -b "$blocklist" -o "$output_file" 2>/dev/null
+        # Filter this file, keeping its messages (e.g. rejected blocklist
+        # line numbers and reasons) to show if it fails
+        local errors status
+        errors=$(filter-blocklist -i "$input_file" -b "$blocklist" -o "$output_file" \
+            --timeout "$timeout" 2>&1)
+        status=$?
         
-        if [ $? -eq 0 ]; then
+        if [ $status -eq 0 ]; then
             echo "  [FILTERED] $basename" >&2
+            return 0
+        elif [ $status -eq 124 ]; then
+            echo "  [ERROR] Filtering $basename took longer than ${timeout}s" >&2
         else
             echo "  [ERROR] Failed to filter $basename" >&2
-            return 1
         fi
+        if [ -n "$errors" ]; then
+            printf '%s\n' "$errors" | sed 's/^/    /' >&2
+        fi
+        return 1
     }
     
     # Export for parallel
@@ -486,8 +528,8 @@ if [ $USE_BLOCKLIST -eq 1 ]; then
     
     # Filter all CDXJ files in parallel (use enriched files from previous stage)
     find "$PROCESS_DIR" -name "*.cdxj" | \
-        parallel -j "$PARALLEL_JOBS" --bar --eta \
-        filter_cdxj {} "$BLOCKLIST" "$FILTERED_DIR"
+        parallel -j "$PARALLEL_JOBS" --halt soon,fail=1 --bar --eta \
+        filter_cdxj {} "$BLOCKLIST" "$FILTERED_DIR" "$BLOCKLIST_TIMEOUT"
     
     FILTERED_COUNT=$(ls "$FILTERED_DIR"/*.cdxj 2>/dev/null | wc -l)
     log_success "Filtered $FILTERED_COUNT files in parallel"

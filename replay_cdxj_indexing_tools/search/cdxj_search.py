@@ -9,10 +9,14 @@ from typing import Iterator
 
 import surt
 
+from replay_cdxj_indexing_tools.regex_safety import RegexTimeoutError, regex_time_limit
 from replay_cdxj_indexing_tools.search.binary_search import search_cdxj_file
 from replay_cdxj_indexing_tools.search.file_discovery import detect_file_type, discover_files
 from replay_cdxj_indexing_tools.search.filters import CDXJFilter, deduplicate_lines, sort_lines
 from replay_cdxj_indexing_tools.search.zipnum_search import search_zipnum_file
+
+# Exit status when a regex filter times out (matches POSIX timeout(1))
+_EXIT_TIMEOUT = 124
 
 
 def apply_match_type(search_key: str, match_type: str) -> tuple:
@@ -141,6 +145,43 @@ def _deduplicate_streaming(lines: Iterator[str]) -> Iterator[str]:
             yield line
 
 
+def _write_results(results: Iterator[str], args: argparse.Namespace) -> None:
+    """Sort/dedupe/limit the (lazily filtered) results and print them."""
+    if args.sort:
+        # Sort requires full materialisation; dedupe and limit follow in memory
+        buffered = list(results)
+        if args.verbose:
+            print(f"Total results: {len(buffered)}", file=sys.stderr)
+        buffered = sort_lines(buffered)
+        if args.verbose:
+            print("Results sorted by timestamp", file=sys.stderr)
+        if args.dedupe:
+            original_count = len(buffered)
+            buffered = deduplicate_lines(buffered)
+            if args.verbose:
+                print(f"Removed {original_count - len(buffered)} duplicates", file=sys.stderr)
+        if args.limit and len(buffered) > args.limit:
+            buffered = buffered[: args.limit]
+            if args.verbose:
+                print(f"Limited results to {args.limit}", file=sys.stderr)
+        for line in buffered:
+            print(line)
+        if args.verbose:
+            print(f"Output {len(buffered)} results", file=sys.stderr)
+    else:
+        # No sort: stream through dedupe and limit without buffering all results
+        if args.dedupe:
+            results = _deduplicate_streaming(results)
+        if args.limit:
+            results = itertools.islice(results, args.limit)
+        count = 0
+        for line in results:
+            print(line)
+            count += 1
+        if args.verbose:
+            print(f"Output {count} results", file=sys.stderr)
+
+
 def main():
     """Main entry point for cdxj-search command."""
     parser = argparse.ArgumentParser(
@@ -169,6 +210,12 @@ Examples:
 
   # Search with glob pattern
   cdxj-search --url http://example.com /data/RAQ*.cdxj
+
+Exit status:
+  0    success
+  1    error
+  2    invalid command-line arguments
+  124  a --filter regex match exceeded its time limit (output is incomplete)
         """,
     )
 
@@ -279,39 +326,15 @@ Examples:
         cdxj_filter = CDXJFilter(args.from_ts, args.to_ts, args.filters)
         results = filter(cdxj_filter.matches, results)
 
-    if args.sort:
-        # Sort requires full materialisation; dedupe and limit follow in memory
-        buffered = list(results)
-        if args.verbose:
-            print(f"Total results: {len(buffered)}", file=sys.stderr)
-        buffered = sort_lines(buffered)
-        if args.verbose:
-            print("Results sorted by timestamp", file=sys.stderr)
-        if args.dedupe:
-            original_count = len(buffered)
-            buffered = deduplicate_lines(buffered)
-            if args.verbose:
-                print(f"Removed {original_count - len(buffered)} duplicates", file=sys.stderr)
-        if args.limit and len(buffered) > args.limit:
-            buffered = buffered[: args.limit]
-            if args.verbose:
-                print(f"Limited results to {args.limit}", file=sys.stderr)
-        for line in buffered:
-            print(line)
-        if args.verbose:
-            print(f"Output {len(buffered)} results", file=sys.stderr)
-    else:
-        # No sort: stream through dedupe and limit without buffering all results
-        if args.dedupe:
-            results = _deduplicate_streaming(results)
-        if args.limit:
-            results = itertools.islice(results, args.limit)
-        count = 0
-        for line in results:
-            print(line)
-            count += 1
-        if args.verbose:
-            print(f"Output {count} results", file=sys.stderr)
+    # Filters run lazily while results are written, so the regex time-limit
+    # watchdog must cover the output stage. A timeout aborts the run with a
+    # non-zero exit rather than silently dropping records.
+    try:
+        with regex_time_limit():
+            _write_results(results, args)
+    except RegexTimeoutError as e:
+        print(f"Error: {e} (aborting; output is incomplete)", file=sys.stderr)
+        sys.exit(_EXIT_TIMEOUT)
 
 
 if __name__ == "__main__":
