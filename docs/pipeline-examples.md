@@ -176,8 +176,11 @@ Use custom Python functions for complex field logic:
 #!/bin/bash
 set -e
 
-# Create custom function
-cat > /tmp/addfield_year.py << 'EOF'
+# Create custom function in a private plugin directory (--function refuses
+# shared/writable locations such as /tmp; see docs/tools/addfield-to-flat-cdxj.md)
+export ADDFIELD_PLUGIN_DIR=$(mktemp -d)
+trap 'rm -rf "$ADDFIELD_PLUGIN_DIR"' EXIT
+cat > "$ADDFIELD_PLUGIN_DIR/addfield_year.py" << 'EOF'
 def addfield(surt_key, timestamp, json_data):
     """Add year and collection based on timestamp."""
     year = timestamp[:4]
@@ -187,17 +190,17 @@ def addfield(surt_key, timestamp, json_data):
     json_data['collection'] = f'ARQUIVO-{year}-{month}'
     return json_data
 EOF
+chmod 644 "$ADDFIELD_PLUGIN_DIR/addfield_year.py"
 
 # Apply in parallel to all files
 parallel -j $(nproc) \
-    "addfield-to-flat-cdxj -i {} -o {.}.enriched.cdxj --function /tmp/addfield_year.py" \
+    "addfield-to-flat-cdxj -i {} -o {.}.enriched.cdxj --function $ADDFIELD_PLUGIN_DIR/addfield_year.py" \
     ::: /data/indexes/*.cdxj
 
 # Continue pipeline
 merge-flat-cdxj - /data/indexes/*.enriched.cdxj | \
     flat-cdxj-to-zipnum -o /data/zipnum -i - -n 3000 --compress
 
-rm /tmp/addfield_year.py
 ```
 
 ### Monitoring Pipeline Progress
