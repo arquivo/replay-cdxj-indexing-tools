@@ -108,14 +108,14 @@ unbounded time (denial-of-service).
   mostly DFA-based. The Python-oriented denylist does not apply (it would
   reject common SURT idioms); instead `check_grep_pattern()` rejects the few
   constructs that are expensive for grep: back-references, repeat counts above
-  255 and lines longer than 10 000 characters. Two limits target grep's
+  255 and lines longer than 10 000 characters. Three limits target grep's
   set-up work. Per line, wildcards and bounded repeats cost at most 256: plain
   characters cost nothing, a `.` costs 4, a bracket expression or `\w`, `\W`,
   `\s`, `\S` costs 1, and a bounded repeat costs its expanded size (grep
   copies the repeated part once per count, so nested repeats multiply). Per
   blocklist, the expanded sizes of all bounded repeats add up to at most
-  32 768; wildcards outside bounded repeats count only toward the per-line
-  limit. See `docs/tools/filter-blocklist.md` for the rules.
+  32 768, and the costs of all wildcards outside bounded repeats to at most
+  1 048 576. See `docs/tools/filter-blocklist.md` for the rules.
 - *Blocklist timeout* -- these limits target grep's set-up work, not its
   matching time on adversarial input, and they are not exhaustive. When
   blocklist lines are not fully trusted, the real bound is `filter-blocklist

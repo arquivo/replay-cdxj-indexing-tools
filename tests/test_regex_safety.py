@@ -370,6 +370,9 @@ class TestGrepPatternCheck(unittest.TestCase):
         for pattern, cost in repeats.items():
             with self.subTest(pattern=pattern):
                 self.assertEqual(check_grep_pattern(pattern).repeats, cost)
+        # The rest of the line's cost is its wildcards outside bounded repeats
+        self.assertEqual(check_grep_pattern("^pt,.*,www\\)/.*\\?.*sid=").wildcards, 12)
+        self.assertEqual(check_grep_pattern("a.b[0-9]\\w.{9}").wildcards, 4 + 1 + 1)
         one_repeat = [
             ".{65}",
             "(x{255}){2}",
@@ -490,6 +493,23 @@ class TestBlocklistHardening(unittest.TestCase):
                 self.assertNotIn("rejected", stderr)
                 self.assertTrue(os.path.exists(self.output_path))
                 os.remove(self.output_path)
+
+    def test_blocklist_wildcard_budget(self):
+        """Wildcards outside bounded repeats add up against their own cap."""
+        # 4096 lines at the per-line cap (64 dots, 256 each) reach the cap exactly
+        lines = [f"^pt,h{i}" + "." * 64 for i in range(4097)]
+        blocklist._check_grep_patterns(list(enumerate(lines[:4096], 1)), "line")
+
+        # One more such line fails closed, before grep runs
+        self._write_blocklist(*lines)
+        with self.assertRaisesRegex(ValueError, "line 4097: wildcards across the blocklist"):
+            self._filter()
+        self.assertFalse(os.path.exists(self.output_path))
+        code, stderr = self._run_main()
+        self.assertEqual(code, 1)
+        self.assertIn("line 4097: wildcards across the blocklist cost more than 1048576", stderr)
+        self.assertNotIn("line 4096:", stderr)
+        self.assertFalse(os.path.exists(self.output_path))
 
     def test_library_path_applies_blocklist_idioms(self):
         self._write_blocklist(*LIBRARY_LINES, REJECTED_TARGETS)

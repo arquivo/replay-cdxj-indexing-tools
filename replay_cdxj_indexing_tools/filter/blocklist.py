@@ -93,11 +93,13 @@ GREP_MAX_REPEAT = 255
 # grows with the square of a line's expanded size times the number of such
 # lines, so the per-line cap is the tighter one: 256 allows e.g. "x{255}",
 # ".{0,64}" or "([a-z0-9-]{1,63}\.){1,4}", and the blocklist cap allows about
-# 500 lines like "[a-z0-9-]{1,63}". Wildcards outside bounded repeats count
-# toward the per-line cap only: many lines with a few of them each (such as
-# ".*") are cheap for grep.
+# 500 lines like "[a-z0-9-]{1,63}". Wildcards outside bounded repeats are
+# much cheaper for grep, so they have their own, larger blocklist cap: it
+# allows e.g. 10 000 lines with a few ".*" each, but only about 4 000 lines at
+# the per-line cap.
 GREP_MAX_LINE_COST = 256
 GREP_MAX_BLOCKLIST_COST = 32768
+GREP_MAX_BLOCKLIST_WILDCARD_COST = 1048576
 # Cost of a wildcard atom: "." is the most expensive for grep; bracket
 # expressions and the \w, \W, \s and \S classes are cheaper
 _DOT_COST = 4
@@ -132,6 +134,14 @@ class GrepCost(NamedTuple):
     # a blocklist and cap by GREP_MAX_BLOCKLIST_COST
     repeats: int
 
+    @property
+    def wildcards(self) -> int:
+        """
+        Cost of the wildcards outside bounded repeats, which callers add up
+        across a blocklist and cap by GREP_MAX_BLOCKLIST_WILDCARD_COST.
+        """
+        return self.line - self.repeats
+
 
 def check_grep_pattern(pattern: str) -> GrepCost:
     """
@@ -146,16 +156,18 @@ def check_grep_pattern(pattern: str) -> GrepCost:
     bracket expression or class escape 1. A bounded repeat costs its
     expanded size: its operand's size times its largest count, where each
     plain character also counts as 1, sizes add along a sequence and across
-    alternatives, and nested repeats multiply. Only the bounded repeats
-    count toward the blocklist's budget.
+    alternatives, and nested repeats multiply. Across a blocklist, the
+    bounded repeats and the wildcards outside them have separate budgets.
 
     grep's matcher is mostly DFA-based, so the Python-oriented backtracking
     checks in regex_safety do not apply here (and would reject common SURT
     idioms). Syntax is left to grep. These checks are not exhaustive.
 
     Returns:
-        The line's cost, and the expanded size of its bounded repeats alone,
-        which callers add up across a blocklist (see GREP_MAX_BLOCKLIST_COST).
+        The line's cost, and the expanded size of its bounded repeats alone;
+        callers add up the latter and the remaining wildcard cost across a
+        blocklist (see GREP_MAX_BLOCKLIST_COST and
+        GREP_MAX_BLOCKLIST_WILDCARD_COST).
 
     Raises:
         ValueError: with the reason, if the line is rejected.
@@ -281,20 +293,26 @@ def _check_grep_patterns(patterns: List[Tuple[int, str]], source: str) -> None:
         ValueError: listing every rejected line number and reason.
     """
     rejected = []
-    total = 0
+    repeats = wildcards = 0
     for line_num, pattern in patterns:
         try:
-            repeats = check_grep_pattern(pattern).repeats
+            cost = check_grep_pattern(pattern)
         except ValueError as e:
             rejected.append(f"  {source} {line_num}: {e}")
             continue
-        # Report only the first line that takes the blocklist over the budget
-        if total <= GREP_MAX_BLOCKLIST_COST < total + repeats:
+        # Report only the first line that takes the blocklist over each budget
+        if repeats <= GREP_MAX_BLOCKLIST_COST < repeats + cost.repeats:
             rejected.append(
                 f"  {source} {line_num}: bounded repeats across the blocklist expand to"
                 f" more than {GREP_MAX_BLOCKLIST_COST} characters, which is expensive for grep"
             )
-        total += repeats
+        if wildcards <= GREP_MAX_BLOCKLIST_WILDCARD_COST < wildcards + cost.wildcards:
+            rejected.append(
+                f"  {source} {line_num}: wildcards across the blocklist cost more than"
+                f" {GREP_MAX_BLOCKLIST_WILDCARD_COST}, which is expensive for grep"
+            )
+        repeats += cost.repeats
+        wildcards += cost.wildcards
     if rejected:
         raise ValueError(
             f"{len(rejected)} blocklist pattern(s) rejected; refusing to filter"

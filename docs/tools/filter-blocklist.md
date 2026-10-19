@@ -50,7 +50,7 @@ uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
 a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
 characters.
 
-Two limits target the work grep does to set up the blocklist:
+Three limits target the work grep does to set up the blocklist:
 
 - **Per line**, the cost of the line's wildcards and bounded repeats is capped
   at **256**. A `.` costs 4 and a bracket expression (`[a-z0-9-]`) or `\w`,
@@ -61,8 +61,10 @@ Two limits target the work grep does to set up the blocklist:
   (here plain characters count 1, a `.` 4) times its largest count. Nested
   repeats multiply, so `(ab){3}` costs 6 and `((ab){3}){2}` costs 12.
 - **Per blocklist**, the expanded sizes of all bounded repeats add up to at
-  most **32 768**. Wildcards outside bounded repeats do not count here, so a
-  large blocklist of lines such as `^pt,example,www\)/.*` is accepted.
+  most **32 768**.
+- **Per blocklist**, the costs of all wildcards outside bounded repeats add up
+  to at most **1 048 576**, so a large blocklist of lines such as
+  `^pt,example,www\)/.*` is accepted.
 
 For example `[a-z0-9-]{1,63}` costs 63, `([a-z0-9-]{1,63}\.){1,4}` costs 256
 and `.{0,64}` costs 256, so a blocklist can hold about 500 hostname-label lines
