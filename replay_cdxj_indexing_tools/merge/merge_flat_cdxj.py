@@ -131,6 +131,14 @@ def get_all_files(paths, exclude_patterns=None, verbose=False):
                     dir_found += 1
                     total_found += 1
 
+                    # Skip symlinks: an attacker with write access to the
+                    # input directory could otherwise plant one pointing
+                    # outside the intended scope (e.g. /etc/passwd) and have
+                    # its contents read and merged into the output (#79).
+                    if os.path.islink(full_path):
+                        log_progress(f"[SKIP] Symlink ignored: {full_path}", verbose)
+                        continue
+
                     excluded, pattern = should_exclude(full_path, exclude_patterns)
                     if excluded:
                         dir_excluded += 1
