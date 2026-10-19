@@ -355,7 +355,21 @@ class TestGrepPatternCheck(unittest.TestCase):
         }
         for pattern, cost in accepted.items():
             with self.subTest(pattern=pattern):
-                self.assertEqual(check_grep_pattern(pattern), cost)
+                self.assertEqual(check_grep_pattern(pattern).line, cost)
+        # Only bounded repeats count toward the blocklist's budget
+        repeats = {
+            "^pt,(sapo|publico),": 0,
+            "^pt,.*,www\\)/.*\\?.*sessionid=": 0,
+            "a.b[0-9]\\w\\S": 0,
+            "x{255}": 255,
+            ".{64}": 4 * 64,
+            "....[a-z0-9-]{1,63}": 63,
+            "((a{4}){4}){4}": 64,
+            "x{9}(y{9}|z{9})": 27,
+        }
+        for pattern, cost in repeats.items():
+            with self.subTest(pattern=pattern):
+                self.assertEqual(check_grep_pattern(pattern).repeats, cost)
         one_repeat = [
             ".{65}",
             "(x{255}){2}",
@@ -441,15 +455,15 @@ class TestBlocklistHardening(unittest.TestCase):
                 self.assertFalse(os.path.exists(self.output_path))
 
     def test_blocklist_cost_budget(self):
-        """Line costs add up against the blocklist's cap, written-out wildcards too."""
-        # A few hundred hostname-label lines, 63 each: 500 * 63 is under the cap
+        """Bounded repeats add up against the blocklist's cap; wildcards do not."""
+        # About 500 hostname-label lines, 63 each: 520 * 63 = 32760 is under the cap
         hosts = [f"^pt,[a-z0-9-]{{1,63}},host{i}\\)/" for i in range(520)]
-        self._write_blocklist(*hosts[:500])
+        self._write_blocklist(*hosts, "^pt,nomatch.....")
         self.assertEqual(self._filter(), (self.total, 0))
         os.remove(self.output_path)
 
-        # 520 * 63 = 32760, so 5 written-out dots (cost 20) go over the cap
-        for extra in ["^pt,keep.....", "^pt,[a-z0-9-]{1,63},host\\)/"]:
+        # One more bounded repeat goes over the cap
+        for extra in ["^pt,nomatch.{0,3}", "^pt,[a-z0-9-]{1,63},host\\)/"]:
             with self.subTest(extra=extra):
                 self._write_blocklist(*hosts, extra)
                 with self.assertRaisesRegex(ValueError, "line 521: .* across the blocklist"):
@@ -460,6 +474,22 @@ class TestBlocklistHardening(unittest.TestCase):
                 self.assertIn("line 521:", stderr)
                 self.assertNotIn("line 520:", stderr)
                 self.assertFalse(os.path.exists(self.output_path))
+
+    def test_large_blocklist_of_wildcard_lines(self):
+        """Wildcards outside bounded repeats do not count toward the blocklist's cap."""
+        for suffix in [".*", ".*\\?.*sessionid="]:
+            with self.subTest(suffix=suffix):
+                lines = [f"^pt,host{i}\\)/{suffix}" for i in range(10000)]
+                self._write_blocklist(*lines, REJECTED_TARGETS)
+                expected = (self.total - len(REJECTED_LINES), len(REJECTED_LINES))
+                self.assertEqual(self._filter(), expected)
+                os.remove(self.output_path)
+
+                code, stderr = self._run_main()
+                self.assertEqual(code, 0)
+                self.assertNotIn("rejected", stderr)
+                self.assertTrue(os.path.exists(self.output_path))
+                os.remove(self.output_path)
 
     def test_library_path_applies_blocklist_idioms(self):
         self._write_blocklist(*LIBRARY_LINES, REJECTED_TARGETS)

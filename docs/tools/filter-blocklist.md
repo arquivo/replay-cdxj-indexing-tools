@@ -50,27 +50,31 @@ uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
 a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
 characters.
 
-Wildcards and bounded repeats also have a cost, which is capped at **256 per
-line** and **32 768 for the whole blocklist**:
+Two limits target the work grep does to set up the blocklist:
 
-- plain characters, including long alternations of host names, cost nothing;
-- a `.` costs 4, and a bracket expression (`[a-z0-9-]`) or `\w`, `\W`, `\s`,
-  `\S` costs 1, whether written out or repeated with `*`, `+` or `?`;
-- a bounded repeat costs its expanded size, because grep copies the repeated
-  part once per count: the size of what it repeats (plain characters count 1
-  here) times its largest count. Nested repeats multiply, so `(ab){3}` costs
-  6 and `((ab){3}){2}` costs 12.
+- **Per line**, the cost of the line's wildcards and bounded repeats is capped
+  at **256**. A `.` costs 4 and a bracket expression (`[a-z0-9-]`) or `\w`,
+  `\W`, `\s`, `\S` costs 1, with or without `*`, `+` or `?` after it. Plain
+  characters, and alternations of them such as host-name lists, cost nothing.
+  A bounded repeat (`{n}`, `{n,}`, `{n,m}`) costs its expanded size, because
+  grep copies the repeated part once per count: the size of what it repeats
+  (here plain characters count 1, a `.` 4) times its largest count. Nested
+  repeats multiply, so `(ab){3}` costs 6 and `((ab){3}){2}` costs 12.
+- **Per blocklist**, the expanded sizes of all bounded repeats add up to at
+  most **32 768**. Wildcards outside bounded repeats do not count here, so a
+  large blocklist of lines such as `^pt,example,www\)/.*` is accepted.
 
 For example `[a-z0-9-]{1,63}` costs 63, `([a-z0-9-]{1,63}\.){1,4}` costs 256
 and `.{0,64}` costs 256, so a blocklist can hold about 500 hostname-label lines
-like the first. grep's set-up time grows with the square of a line's cost and
-with the number of such lines, which is why the per-line cap is the tighter
-one.
+like the first. grep's set-up time grows with the square of a line's expanded
+size and with the number of such lines, which is why the per-line cap is the
+tighter one.
 
-These checks are not exhaustive. When blocklist lines are not fully trusted,
-`--timeout` is the real bound: set it, sized for the largest CDXJ input you
-filter. In `cdxj-index-collection.sh` it is `--blocklist-timeout` or the
-`BLOCKLIST_TIMEOUT` environment variable.
+These limits target grep's set-up work, not its matching time on adversarial
+input, and they are not exhaustive. When blocklist lines are not fully
+trusted, `--timeout` is the real bound: set it, sized for the largest CDXJ
+input you filter. In `cdxj-index-collection.sh` it is `--blocklist-timeout`
+or the `BLOCKLIST_TIMEOUT` environment variable.
 
 If **any** line is rejected, the tool fails closed: it exits with status 1,
 writes no output, and reports each rejected line number and reason on stderr.
