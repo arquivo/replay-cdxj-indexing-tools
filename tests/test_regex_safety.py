@@ -370,9 +370,19 @@ class TestGrepPatternCheck(unittest.TestCase):
         for pattern, cost in repeats.items():
             with self.subTest(pattern=pattern):
                 self.assertEqual(check_grep_pattern(pattern).repeats, cost)
-        # The rest of the line's cost is its wildcards outside bounded repeats
-        self.assertEqual(check_grep_pattern("^pt,.*,www\\)/.*\\?.*sid=").wildcards, 12)
-        self.assertEqual(check_grep_pattern("a.b[0-9]\\w.{9}").wildcards, 4 + 1 + 1)
+        # Wildcard atoms outside bounded repeats count 1 each, whatever their kind
+        wildcards = {
+            "^pt,(sapo|publico),": 0,
+            "^pt,.*,www\\)/.*\\?.*sid=": 3,
+            "a.b[0-9]\\w.{9}": 3,  # the repeated "." counts in repeats instead
+            ".*[a-z]+\\s?(\\W|x)*": 4,  # "*", "+" and "?" do not change the count
+            "[a-z0-9-]{1,63}": 0,
+            "(.[a-z]{2}\\w)+": 2,
+            "\\w" * 256: 256,
+        }
+        for pattern, count in wildcards.items():
+            with self.subTest(pattern=pattern[:40]):
+                self.assertEqual(check_grep_pattern(pattern).wildcards, count)
         one_repeat = [
             ".{65}",
             "(x{255}){2}",
@@ -495,21 +505,35 @@ class TestBlocklistHardening(unittest.TestCase):
                 os.remove(self.output_path)
 
     def test_blocklist_wildcard_budget(self):
-        """Wildcards outside bounded repeats add up against their own cap."""
-        # 4096 lines at the per-line cap (64 dots, 256 each) reach the cap exactly
-        lines = [f"^pt,h{i}" + "." * 64 for i in range(4097)]
-        blocklist._check_grep_patterns(list(enumerate(lines[:4096], 1)), "line")
+        """Wildcard atoms outside bounded repeats add up against their own cap."""
+        reason = "the blocklist has more than 65536 wildcards outside bounded repeats"
+        # 65536 atoms reach the cap exactly: 256 lines of 256 "\\w" (cost 1
+        # each) or 1024 lines of 64 "." (cost 4 each, the per-line cap)
+        for atom, per_line in [("\\w", 256), (".", 64)]:
+            with self.subTest(atom=atom):
+                lines = [f"^pt,h{i}" + atom * per_line for i in range(65536 // per_line)]
+                blocklist._check_grep_patterns(list(enumerate(lines, 1)), "line")
 
-        # One more such line fails closed, before grep runs
-        self._write_blocklist(*lines)
-        with self.assertRaisesRegex(ValueError, "line 4097: wildcards across the blocklist"):
-            self._filter()
-        self.assertFalse(os.path.exists(self.output_path))
-        code, stderr = self._run_main()
-        self.assertEqual(code, 1)
-        self.assertIn("line 4097: wildcards across the blocklist cost more than 1048576", stderr)
-        self.assertNotIn("line 4096:", stderr)
-        self.assertFalse(os.path.exists(self.output_path))
+                # One more atom fails closed, before grep runs
+                self._write_blocklist(*lines, "^pt,keep" + atom)
+                line_num = len(lines) + 1
+                with self.assertRaisesRegex(ValueError, f"line {line_num}: {reason}"):
+                    self._filter()
+                self.assertFalse(os.path.exists(self.output_path))
+                code, stderr = self._run_main()
+                self.assertEqual(code, 1)
+                self.assertIn(f"line {line_num}: {reason}", stderr)
+                self.assertNotIn(f"line {line_num - 1}:", stderr)
+                self.assertFalse(os.path.exists(self.output_path))
+
+    def test_line_over_both_blocklist_budgets_counts_once(self):
+        lines = ["\\w" * 256] * 256 + ["[a-z0-9-]{1,63}"] * 520 + [".{0,3}\\w"]
+        with self.assertRaises(ValueError) as ctx:
+            blocklist._check_grep_patterns(list(enumerate(lines, 1)), "line")
+        message = str(ctx.exception)
+        self.assertTrue(message.startswith("1 blocklist pattern(s) rejected"), message)
+        self.assertIn("line 777: bounded repeats across the blocklist expand", message)
+        self.assertIn("; the blocklist has more than 65536 wildcards", message)
 
     def test_library_path_applies_blocklist_idioms(self):
         self._write_blocklist(*LIBRARY_LINES, REJECTED_TARGETS)

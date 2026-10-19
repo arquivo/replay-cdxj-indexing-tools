@@ -114,8 +114,8 @@ unbounded time (denial-of-service).
   `\s`, `\S` costs 1, and a bounded repeat costs its expanded size (grep
   copies the repeated part once per count, so nested repeats multiply). Per
   blocklist, the expanded sizes of all bounded repeats add up to at most
-  32 768, and the costs of all wildcards outside bounded repeats to at most
-  1 048 576. See `docs/tools/filter-blocklist.md` for the rules.
+  32 768, and there are at most 65 536 wildcards outside bounded repeats
+  (each counting 1). See `docs/tools/filter-blocklist.md` for the rules.
 - *Blocklist timeout* -- these limits target grep's set-up work, not its
   matching time on adversarial input, and they are not exhaustive. When
   blocklist lines are not fully trusted, the real bound is `filter-blocklist

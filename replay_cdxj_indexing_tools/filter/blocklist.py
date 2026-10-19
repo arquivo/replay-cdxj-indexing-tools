@@ -93,15 +93,18 @@ GREP_MAX_REPEAT = 255
 # grows with the square of a line's expanded size times the number of such
 # lines, so the per-line cap is the tighter one: 256 allows e.g. "x{255}",
 # ".{0,64}" or "([a-z0-9-]{1,63}\.){1,4}", and the blocklist cap allows about
-# 500 lines like "[a-z0-9-]{1,63}". Wildcards outside bounded repeats are
-# much cheaper for grep, so they have their own, larger blocklist cap: it
-# allows e.g. 10 000 lines with a few ".*" each, but only about 4 000 lines at
-# the per-line cap.
+# 500 lines like "[a-z0-9-]{1,63}".
 GREP_MAX_LINE_COST = 256
 GREP_MAX_BLOCKLIST_COST = 32768
-GREP_MAX_BLOCKLIST_WILDCARD_COST = 1048576
-# Cost of a wildcard atom: "." is the most expensive for grep; bracket
-# expressions and the \w, \W, \s and \S classes are cheaper
+# Cap on the number of wildcard atoms outside bounded repeats (each ".",
+# bracket expression, \w, \W, \s or \S counts 1) across the whole blocklist.
+# Each costs grep a few KB of memory to set up, whatever its kind, and
+# --timeout does not bound memory. 65536 allows e.g. 10 000 lines with a few
+# ".*" each, but only 256 lines with 256 such atoms each.
+GREP_MAX_BLOCKLIST_WILDCARD_ATOMS = 65536
+# Per-line cost of a wildcard atom (see GREP_MAX_LINE_COST): a "." costs
+# grep the most set-up time; bracket expressions and the \w, \W, \s and \S
+# classes cost less
 _DOT_COST = 4
 _CLASS_COST = 1
 _CLASS_ESCAPES = "wWsS"
@@ -133,14 +136,9 @@ class GrepCost(NamedTuple):
     # Expanded size of the bounded repeats only, which callers add up across
     # a blocklist and cap by GREP_MAX_BLOCKLIST_COST
     repeats: int
-
-    @property
-    def wildcards(self) -> int:
-        """
-        Cost of the wildcards outside bounded repeats, which callers add up
-        across a blocklist and cap by GREP_MAX_BLOCKLIST_WILDCARD_COST.
-        """
-        return self.line - self.repeats
+    # Number of wildcard atoms outside bounded repeats, which callers add up
+    # across a blocklist and cap by GREP_MAX_BLOCKLIST_WILDCARD_ATOMS
+    wildcards: int
 
 
 def check_grep_pattern(pattern: str) -> GrepCost:
@@ -157,17 +155,18 @@ def check_grep_pattern(pattern: str) -> GrepCost:
     expanded size: its operand's size times its largest count, where each
     plain character also counts as 1, sizes add along a sequence and across
     alternatives, and nested repeats multiply. Across a blocklist, the
-    bounded repeats and the wildcards outside them have separate budgets.
+    bounded repeats' expanded size and the number of wildcard atoms outside
+    them have separate budgets.
 
     grep's matcher is mostly DFA-based, so the Python-oriented backtracking
     checks in regex_safety do not apply here (and would reject common SURT
     idioms). Syntax is left to grep. These checks are not exhaustive.
 
     Returns:
-        The line's cost, and the expanded size of its bounded repeats alone;
-        callers add up the latter and the remaining wildcard cost across a
-        blocklist (see GREP_MAX_BLOCKLIST_COST and
-        GREP_MAX_BLOCKLIST_WILDCARD_COST).
+        The line's cost, the expanded size of its bounded repeats alone and
+        its number of wildcard atoms outside them; callers add up the last
+        two across a blocklist (see GREP_MAX_BLOCKLIST_COST and
+        GREP_MAX_BLOCKLIST_WILDCARD_ATOMS).
 
     Raises:
         ValueError: with the reason, if the line is rejected.
@@ -176,21 +175,22 @@ def check_grep_pattern(pattern: str) -> GrepCost:
         raise ValueError(f"longer than {GREP_MAX_PATTERN_LEN} characters ({len(pattern)})")
 
     # One frame per open group: [finished alternatives, current alternative,
-    # its last atom], each as (size, cost, expanded size of bounded repeats).
+    # its last atom], each as (size, cost, expanded size of bounded repeats,
+    # wildcard atoms outside them).
     frames = [[_NOTHING, _NOTHING, _NOTHING]]
     i = 0
     while i < len(pattern):
         frame = frames[-1]
         char = pattern[i]
-        atom = (_DOT_COST, _DOT_COST, 0) if char == "." else (1, 0, 0)
+        atom = (_DOT_COST, _DOT_COST, 0, 1) if char == "." else (1, 0, 0, 0)
         if char == "\\" and i + 1 < len(pattern):
             if pattern[i + 1] in "123456789":
                 raise ValueError("back-references are expensive for grep")
             if pattern[i + 1] in _CLASS_ESCAPES:
-                atom = (_CLASS_COST, _CLASS_COST, 0)
+                atom = (_CLASS_COST, _CLASS_COST, 0, 1)
             i += 2  # an escape pair (e.g. a literal "\\{") is one atom
         elif char == "[":
-            atom = (_CLASS_COST, _CLASS_COST, 0)
+            atom = (_CLASS_COST, _CLASS_COST, 0, 1)
             i = _skip_bracket_expression(pattern, i)  # "{" is literal inside
         elif char == "(":
             frames.append([_NOTHING, _NOTHING, _NOTHING])
@@ -212,9 +212,10 @@ def check_grep_pattern(pattern: str) -> GrepCost:
                     f"a bounded repeat expands to more than {GREP_MAX_LINE_COST}"
                     " characters, which is expensive for grep"
                 )
-            # The repeat replaces its operand, and costs its expanded size
-            frame[1] = _add_sizes(frame[1], (size, size, size), minus=frame[2])
-            frame[2] = (size, size, size)
+            # The repeat replaces its operand (and the operand's wildcard
+            # atoms), and costs its expanded size
+            frame[1] = _add_sizes(frame[1], (size, size, size, 0), minus=frame[2])
+            frame[2] = (size, size, size, 0)
             i = match.end()
             continue
         elif char in "*+?":
@@ -231,23 +232,28 @@ def check_grep_pattern(pattern: str) -> GrepCost:
             f"bounded repeats and wildcards cost {cost}, more than {GREP_MAX_LINE_COST},"
             " which is expensive for grep"
         )
-    return GrepCost(cost, sum(done[2] + current[2] for done, current, _last in frames))
+    return GrepCost(
+        cost,
+        sum(done[2] + current[2] for done, current, _last in frames),
+        sum(done[3] + current[3] for done, current, _last in frames),
+    )
 
 
-# (size, cost, expanded size of bounded repeats) of an empty sequence
-_NOTHING = (0, 0, 0)
+# (size, cost, repeats, wildcard atoms) of an empty sequence
+_NOTHING = (0, 0, 0, 0)
 
 
 def _add_sizes(
-    first: Tuple[int, int, int],
-    second: Tuple[int, int, int],
-    minus: Tuple[int, int, int] = _NOTHING,
-) -> Tuple[int, int, int]:
-    """Add two (size, cost, repeats) triples, optionally replacing ``minus``."""
+    first: Tuple[int, int, int, int],
+    second: Tuple[int, int, int, int],
+    minus: Tuple[int, int, int, int] = _NOTHING,
+) -> Tuple[int, int, int, int]:
+    """Add two (size, cost, repeats, wildcard atoms) tuples, optionally replacing ``minus``."""
     return (
         first[0] + second[0] - minus[0],
         first[1] + second[1] - minus[1],
         first[2] + second[2] - minus[2],
+        first[3] + second[3] - minus[3],
     )
 
 
@@ -301,15 +307,20 @@ def _check_grep_patterns(patterns: List[Tuple[int, str]], source: str) -> None:
             rejected.append(f"  {source} {line_num}: {e}")
             continue
         # Report only the first line that takes the blocklist over each budget
+        reasons = []
         if repeats <= GREP_MAX_BLOCKLIST_COST < repeats + cost.repeats:
-            rejected.append(
-                f"  {source} {line_num}: bounded repeats across the blocklist expand to"
-                f" more than {GREP_MAX_BLOCKLIST_COST} characters, which is expensive for grep"
+            reasons.append(
+                "bounded repeats across the blocklist expand to more than"
+                f" {GREP_MAX_BLOCKLIST_COST} characters"
             )
-        if wildcards <= GREP_MAX_BLOCKLIST_WILDCARD_COST < wildcards + cost.wildcards:
+        if wildcards <= GREP_MAX_BLOCKLIST_WILDCARD_ATOMS < wildcards + cost.wildcards:
+            reasons.append(
+                "the blocklist has more than"
+                f" {GREP_MAX_BLOCKLIST_WILDCARD_ATOMS} wildcards outside bounded repeats"
+            )
+        if reasons:
             rejected.append(
-                f"  {source} {line_num}: wildcards across the blocklist cost more than"
-                f" {GREP_MAX_BLOCKLIST_WILDCARD_COST}, which is expensive for grep"
+                f"  {source} {line_num}: {'; '.join(reasons)}, which is expensive for grep"
             )
         repeats += cost.repeats
         wildcards += cost.wildcards

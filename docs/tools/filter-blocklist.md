@@ -62,9 +62,9 @@ Three limits target the work grep does to set up the blocklist:
   repeats multiply, so `(ab){3}` costs 6 and `((ab){3}){2}` costs 12.
 - **Per blocklist**, the expanded sizes of all bounded repeats add up to at
   most **32 768**.
-- **Per blocklist**, the costs of all wildcards outside bounded repeats add up
-  to at most **1 048 576**, so a large blocklist of lines such as
-  `^pt,example,www\)/.*` is accepted.
+- **Per blocklist**, there are at most **65 536** wildcards outside bounded
+  repeats, each `.`, bracket expression, `\w`, `\W`, `\s` or `\S` counting 1,
+  so a large blocklist of lines such as `^pt,example,www\)/.*` is accepted.
 
 For example `[a-z0-9-]{1,63}` costs 63, `([a-z0-9-]{1,63}\.){1,4}` costs 256
 and `.{0,64}` costs 256, so a blocklist can hold about 500 hostname-label lines
