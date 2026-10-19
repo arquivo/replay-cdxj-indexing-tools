@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.2.7 (2026-10-19)
+
+### Bug Fixes
+
+- **addfield**: Require ADDFIELD_PLUGIN_DIR for --function (fail closed)
+  ([`59cbb00`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/59cbb00ad26b39505e6f4cdb71bd6cb888ffbfe7))
+
+
 ## v1.2.6 (2026-10-17)
 
 ### Bug Fixes
