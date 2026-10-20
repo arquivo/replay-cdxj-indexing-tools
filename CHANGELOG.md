@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.2.8 (2026-10-20)
+
+### Bug Fixes
+
+- Skip blank lines in merge-flat-cdxj and flat-cdxj-to-zipnum
+  ([`263bdd5`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/263bdd52abc2ca7bfecffd5541205c34500027ce))
+
+- Skip corrupt CDXJ lines with a warning in merge and zipnum
+  ([`c522c83`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/c522c8384b1f09022056a060eff7f7e091f959d8))
+
+
 ## v1.2.7 (2026-10-19)
 
 ### Bug Fixes
