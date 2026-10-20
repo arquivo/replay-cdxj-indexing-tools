@@ -148,6 +148,11 @@ pt,sapo,www)/ 20230101120000 {...}
 pt,sapo,www)/ 20230615120000 {...}
 ```
 
+### Blank Lines
+
+Blank and whitespace-only lines in the input files are skipped. An empty line sorts
+before every real key, so it would otherwise become the first line of the merged output.
+
 ### Performance
 
 Performance is primarily I/O bound - limited by disk read/write speed. Use fast storage (SSD/NVMe) for best results.

@@ -38,7 +38,7 @@ RUNNING THE TESTS
 
 TEST COVERAGE SUMMARY
 =====================
-Total: 39 tests across 3 test classes
+Total: 40 tests across 3 test classes
 
 1. TestGetAllFiles - File Collection Utilities
    Tests for the get_all_files() helper function that recursively discovers
@@ -72,6 +72,9 @@ Total: 39 tests across 3 test classes
    - test_merge_all_empty_files: All input files empty (produces empty output)
    - test_merge_files_different_lengths: Files of vastly different sizes (1 vs 100 lines)
    - test_merge_with_duplicate_values: Duplicate lines across multiple files maintained
+   - test_merge_skips_blank_lines: Blank/whitespace-only lines are dropped, so they
+     cannot sort to the top of the output (issue #109)
+   - test_merge_only_blank_lines: Inputs of only blank lines produce empty output
 
    Special Content Handling:
    - test_merge_with_special_characters: Unicode, symbols, accented characters (àéíóú)
@@ -753,6 +756,27 @@ class TestMergeSortedFiles(unittest.TestCase):
         # Check that whitespace is preserved
         self.assertIn("line2  ", result)
         self.assertIn("line3\t", result)
+
+    def test_merge_skips_blank_lines(self):
+        """Test that blank and whitespace-only lines are not written to the output"""
+        file1 = self.create_test_file("file1.txt", ["", "apple", "   ", "cherry", "\t"])
+        file2 = self.create_test_file("file2.txt", ["banana", "", ""])
+        output = str(self.test_path / "output.txt")
+
+        merge_sorted_files([file1, file2], output)
+
+        result = Path(output).read_text(encoding="utf-8")
+        self.assertEqual(result, "apple\nbanana\ncherry\n")
+
+    def test_merge_only_blank_lines(self):
+        """Test that inputs containing only blank lines produce empty output"""
+        file1 = self.create_test_file("file1.txt", ["", "  "])
+        file2 = self.create_test_file("file2.txt", [""])
+        output = str(self.test_path / "output.txt")
+
+        merge_sorted_files([file1, file2], output)
+
+        self.assertEqual(Path(output).read_text(encoding="utf-8"), "")
 
     def test_merge_to_stdout(self):
         """Test merging to stdout (output_file = '-')"""
