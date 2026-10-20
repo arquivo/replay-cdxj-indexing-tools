@@ -132,7 +132,8 @@ pt,governo,www)/ 20230615120100 {"url": "...", "offset": "1234", "length": "2345
 ```
 
 Blank and whitespace-only input lines are skipped. They are not written to the shards
-and never become an (empty) index key.
+and never become an (empty) index key. Corrupt lines (NUL bytes, or no key before the JSON
+block) are skipped as well, with a warning on stderr naming the input and line number.
 
 ## Shard Size Selection
 

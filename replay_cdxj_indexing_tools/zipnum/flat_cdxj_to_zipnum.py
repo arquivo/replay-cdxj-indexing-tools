@@ -137,6 +137,7 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 
+from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter
 from replay_cdxj_indexing_tools.cli_utils import positive_int
 
 logger = logging.getLogger(__name__)
@@ -213,20 +214,24 @@ def stream_chunks_from_input(input_path: str, chunk_size: int) -> Iterable[Tuple
     """
     Generator that yields (chunk_index, list_of_line_bytes) by reading a single input.
     Supports input_path == '-' for stdin, or a filename (plain or .gz).
-    Blank and whitespace-only lines are skipped, so they never end up in a shard
-    or become an empty index key.
+    Blank lines are skipped, and corrupt lines (NUL bytes, no key before the JSON
+    block) are skipped with a warning on stderr, so they never end up in a shard
+    or become a bogus index key.
     """
     chunk: List[bytes] = []
     chunk_idx = 0
+    source = "<stdin>" if input_path == "-" else input_path
+    line_filter = CdxjLineFilter()
     with open_input_path(input_path) as fh:
-        for line in fh:
-            if not line.strip():
+        for lineno, line in enumerate(fh, 1):
+            if not line_filter.accept(line, source, lineno):
                 continue
             chunk.append(line)
             if len(chunk) >= chunk_size:
                 yield (chunk_idx, chunk)
                 chunk_idx += 1
                 chunk = []
+    line_filter.report()
     if chunk:
         yield (chunk_idx, chunk)
 
