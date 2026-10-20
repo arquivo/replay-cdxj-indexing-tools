@@ -51,7 +51,7 @@ Total: 22 tests across 4 test classes
    - test_open_plain_file: Reading plain text CDXJ files
    - test_open_gzip_file: Reading gzip-compressed CDXJ files (.gz extension)
 
-3. TestStreamChunksFromInput (5 tests) - Chunk Streaming Logic
+3. TestStreamChunksFromInput (7 tests) - Chunk Streaming Logic
    Tests the stream_chunks_from_input() generator that batches CDXJ lines into chunks.
    Chunks are the basic unit for creating index entries and organizing compressed data.
 
@@ -62,6 +62,8 @@ Total: 22 tests across 4 test classes
    - test_stream_chunks_small_input: Input smaller than chunk size (single chunk output)
    - test_stream_chunks_empty_file: Empty file handling (should yield no chunks)
    - test_stream_chunks_from_gzip: Streaming from gzip-compressed input
+   - test_stream_chunks_skips_blank_lines: Blank and whitespace-only lines are dropped
+   - test_stream_chunks_only_blank_lines: Input of only blank lines yields no chunks
 
 4. TestCdxjToZipnum (10 tests) - Complete Conversion Pipeline
    Integration tests for the full cdxj_to_zipnum() conversion process including
@@ -95,6 +97,9 @@ Total: 22 tests across 4 test classes
 
    - test_compressed_data_integrity: Verifies gzip compression and decompression
      integrity, ensures compressed shard contains all original CDXJ lines
+
+   - test_blank_lines_do_not_produce_empty_idx_key: A leading blank line (e.g. from a
+     merged input) must not become an empty first key in the .idx or land in the shard
 
    - test_real_cdxj_data: Tests with authentic Portuguese (.pt) domain data from
      web archives (aas.pt, edp.pt, governo.pt, sapo.pt, uc.pt) including full
@@ -506,6 +511,42 @@ class TestStreamChunksFromInput(unittest.TestCase):
         self.assertEqual(len(chunks[1][1]), 2)
         self.assertEqual(len(chunks[2][1]), 1)
 
+    def test_stream_chunks_skips_blank_lines(self):
+        """
+        Test that blank and whitespace-only lines are skipped.
+
+        A blank line would otherwise become the first line of a chunk and
+        produce an empty key in the .idx file (issue #109).
+
+        Input: 3 CDXJ lines mixed with empty, whitespace-only and CRLF-only lines
+        Chunk size: 2
+        Expected: 2 chunks (2 lines, 1 line) containing only the CDXJ lines
+        """
+        test_file = os.path.join(self.test_dir, "test.cdxj")
+        cdxj_lines = [f"org,example)/{i} 20200101120000\n".encode() for i in range(3)]
+
+        with open(test_file, "wb") as f:
+            f.writelines(
+                [b"\n", cdxj_lines[0], b"   \n", b"\r\n", cdxj_lines[1], b"\t\n", cdxj_lines[2]]
+            )
+
+        chunks = list(stream_chunks_from_input(test_file, chunk_size=2))
+
+        self.assertEqual([chunk for _, chunk in chunks], [cdxj_lines[:2], cdxj_lines[2:]])
+
+    def test_stream_chunks_only_blank_lines(self):
+        """
+        Test that an input with only blank lines yields no chunks, like an empty file.
+        """
+        test_file = os.path.join(self.test_dir, "blank.cdxj")
+
+        with open(test_file, "wb") as f:
+            f.write(b"\n  \n\n")
+
+        chunks = list(stream_chunks_from_input(test_file, chunk_size=3))
+
+        self.assertEqual(chunks, [])
+
 
 class TestCdxjToZipnum(unittest.TestCase):
     """
@@ -862,6 +903,34 @@ class TestCdxjToZipnum(unittest.TestCase):
 
         original = b"".join(test_lines)
         self.assertEqual(decompressed, original, "Decompressed data should match original")
+
+    def test_blank_lines_do_not_produce_empty_idx_key(self):
+        """
+        Test that a leading blank line does not create an empty first .idx key.
+
+        Reproduces issue #109: a merged input starting with a blank line produced
+        an index whose first line was "\t<shard>\t0\t<length>\t1".
+        """
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        test_lines = [
+            b'pt,a)/ 20200101000000 {"url": "http://a.pt/"}\n',
+            b'pt,b)/ 20200101000000 {"url": "http://b.pt/"}\n',
+        ]
+
+        with open(input_file, "wb") as f:
+            f.writelines([b"\n", test_lines[0], b"  \n", test_lines[1], b"\n"])
+
+        cdxj_to_zipnum(self.output_dir, input_file, chunk_size=10)
+
+        base_name = os.path.basename(self.output_dir)
+        with open(os.path.join(self.output_dir, f"{base_name}.idx"), encoding="utf-8") as f:
+            idx_lines = f.read().splitlines()
+        with gzip.open(os.path.join(self.output_dir, f"{base_name}.cdx.gz"), "rb") as f:
+            decompressed = f.read()
+
+        self.assertEqual(len(idx_lines), 1)
+        self.assertEqual(idx_lines[0].split("\t")[0], "pt,a)/ 20200101000000")
+        self.assertEqual(decompressed, b"".join(test_lines))
 
     def test_idx_file_includes_cdxgz_extension(self):
         """

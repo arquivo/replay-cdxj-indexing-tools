@@ -131,6 +131,9 @@ pt,governo,www)/ 20230615120100 {"url": "...", "offset": "1234", "length": "2345
 ...
 ```
 
+Blank and whitespace-only input lines are skipped. They are not written to the shards
+and never become an (empty) index key.
+
 ## Shard Size Selection
 
 Choose `lines-per-block` based on your data:

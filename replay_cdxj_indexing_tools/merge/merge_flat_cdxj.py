@@ -156,6 +156,20 @@ def get_all_files(paths, exclude_patterns=None, verbose=False):
         )
 
 
+def read_next_line(fh):
+    """
+    Return the next non-blank line from fh, or '' at end of file.
+
+    Blank and whitespace-only lines are skipped: an empty line sorts before every
+    real key, so letting one through would make it the first line of the merged
+    output (and the first key of any ZipNum index built from it).
+    """
+    line = fh.readline()
+    while line and not line.strip():
+        line = fh.readline()
+    return line
+
+
 def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=False):
     """
     Merge multiple sorted files into a single sorted output file using a min-heap.
@@ -177,6 +191,8 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
         4. Refills the heap with the next line from the same file
         5. Continues until all files are exhausted
 
+    Blank and whitespace-only input lines are skipped (see read_next_line).
+
     Time Complexity: O(N log k) where N is total lines and k is number of files
     Space Complexity: O(k) for the heap
     """
@@ -192,7 +208,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
         # Heap elements are tuples: (line_content, file_index)
         heap = []
         for idx, fh in enumerate(file_handles):
-            line = fh.readline()
+            line = read_next_line(fh)
             if line:
                 # Push (line, file_index) tuple onto heap
                 # Python's heapq compares tuples lexicographically, so lines are naturally sorted
@@ -210,7 +226,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                 lines_written += 1
 
                 # Read the next line from the same file that just provided a line
-                next_line = file_handles[idx].readline()
+                next_line = read_next_line(file_handles[idx])
                 if next_line:
                     # Add the new line back to the heap if file has more content
                     heapq.heappush(heap, (next_line, idx))
@@ -224,7 +240,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                     lines_written += 1
 
                     # Read the next line from the same file that just provided a line
-                    next_line = file_handles[idx].readline()
+                    next_line = read_next_line(file_handles[idx])
                     if next_line:
                         # Add the new line back to the heap if file has more content
                         heapq.heappush(heap, (next_line, idx))

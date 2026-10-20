@@ -213,11 +213,15 @@ def stream_chunks_from_input(input_path: str, chunk_size: int) -> Iterable[Tuple
     """
     Generator that yields (chunk_index, list_of_line_bytes) by reading a single input.
     Supports input_path == '-' for stdin, or a filename (plain or .gz).
+    Blank and whitespace-only lines are skipped, so they never end up in a shard
+    or become an empty index key.
     """
     chunk: List[bytes] = []
     chunk_idx = 0
     with open_input_path(input_path) as fh:
         for line in fh:
+            if not line.strip():
+                continue
             chunk.append(line)
             if len(chunk) >= chunk_size:
                 yield (chunk_idx, chunk)
