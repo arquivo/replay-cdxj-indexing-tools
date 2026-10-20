@@ -52,6 +52,8 @@ import heapq
 import os
 import sys
 
+from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter
+
 
 def should_exclude(filename, exclude_patterns):
     """
@@ -156,18 +158,17 @@ def get_all_files(paths, exclude_patterns=None, verbose=False):
         )
 
 
-def read_next_line(fh):
+def iter_records(fh, source, line_filter):
     """
-    Return the next non-blank line from fh, or '' at end of file.
+    Yield the lines of fh that line_filter accepts.
 
-    Blank and whitespace-only lines are skipped: an empty line sorts before every
-    real key, so letting one through would make it the first line of the merged
-    output (and the first key of any ZipNum index built from it).
+    Blank and corrupt lines (NUL bytes, no key before the JSON block) are skipped:
+    they sort before every real key, so letting one through would make it the first
+    line of the merged output (and the first key of any ZipNum index built from it).
     """
-    line = fh.readline()
-    while line and not line.strip():
-        line = fh.readline()
-    return line
+    for lineno, line in enumerate(fh, 1):
+        if line_filter.accept(line, source, lineno):
+            yield line
 
 
 def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=False):
@@ -191,7 +192,8 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
         4. Refills the heap with the next line from the same file
         5. Continues until all files are exhausted
 
-    Blank and whitespace-only input lines are skipped (see read_next_line).
+    Blank lines are skipped; corrupt lines are skipped with a warning on stderr
+    (see iter_records and CdxjLineFilter).
 
     Time Complexity: O(N log k) where N is total lines and k is number of files
     Space Complexity: O(k) for the heap
@@ -203,12 +205,14 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
         # Open all input files; ExitStack ensures every handle is closed on exit
         # pylint: disable-next=unspecified-encoding  # system locale follows caller's environment
         file_handles = [stack.enter_context(open(f, "r", buffering=buffer_size)) for f in files]
+        line_filter = CdxjLineFilter()
+        readers = [iter_records(fh, f, line_filter) for f, fh in zip(files, file_handles)]
 
         # Initialize min-heap with the first line from each file
         # Heap elements are tuples: (line_content, file_index)
         heap = []
-        for idx, fh in enumerate(file_handles):
-            line = read_next_line(fh)
+        for idx, reader in enumerate(readers):
+            line = next(reader, "")
             if line:
                 # Push (line, file_index) tuple onto heap
                 # Python's heapq compares tuples lexicographically, so lines are naturally sorted
@@ -226,7 +230,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                 lines_written += 1
 
                 # Read the next line from the same file that just provided a line
-                next_line = read_next_line(file_handles[idx])
+                next_line = next(readers[idx], "")
                 if next_line:
                     # Add the new line back to the heap if file has more content
                     heapq.heappush(heap, (next_line, idx))
@@ -240,11 +244,12 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                     lines_written += 1
 
                     # Read the next line from the same file that just provided a line
-                    next_line = read_next_line(file_handles[idx])
+                    next_line = next(readers[idx], "")
                     if next_line:
                         # Add the new line back to the heap if file has more content
                         heapq.heappush(heap, (next_line, idx))
 
+    line_filter.report()
     log_progress(f"[MERGE] Complete: {lines_written} lines written", verbose)
 
 

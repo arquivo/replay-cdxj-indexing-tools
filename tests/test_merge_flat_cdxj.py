@@ -38,7 +38,7 @@ RUNNING THE TESTS
 
 TEST COVERAGE SUMMARY
 =====================
-Total: 40 tests across 3 test classes
+Total: 41 tests across 3 test classes
 
 1. TestGetAllFiles - File Collection Utilities
    Tests for the get_all_files() helper function that recursively discovers
@@ -75,6 +75,8 @@ Total: 40 tests across 3 test classes
    - test_merge_skips_blank_lines: Blank/whitespace-only lines are dropped, so they
      cannot sort to the top of the output (issue #109)
    - test_merge_only_blank_lines: Inputs of only blank lines produce empty output
+   - test_merge_skips_corrupt_lines_with_warning: Lines with NUL bytes or no key are
+     dropped with a file:line warning on stderr (issue #111)
 
    Special Content Handling:
    - test_merge_with_special_characters: Unicode, symbols, accented characters (àéíóú)
@@ -223,6 +225,7 @@ PERFORMANCE NOTES
     - test_merge_files_with_long_lines tests with 10KB lines
 """
 
+import contextlib
 import os
 import sys
 import tempfile
@@ -777,6 +780,24 @@ class TestMergeSortedFiles(unittest.TestCase):
         merge_sorted_files([file1, file2], output)
 
         self.assertEqual(Path(output).read_text(encoding="utf-8"), "")
+
+    def test_merge_skips_corrupt_lines_with_warning(self):
+        """Test that NUL-filled and keyless lines are skipped and reported (issue #111)"""
+        nul_line = "\x00" * 1000 + '{"url": "http://a.pt/x"}'
+        file1 = self.create_test_file("file1.txt", [nul_line, "pt,a)/ 1 {}", "pt,c)/ 1 {}"])
+        file2 = self.create_test_file("file2.txt", ["pt,b)/ 1 {}", '{"url": "http://b.pt/"}'])
+        output = str(self.test_path / "output.txt")
+
+        stderr = StringIO()
+        with contextlib.redirect_stderr(stderr):
+            merge_sorted_files([file1, file2], output)
+
+        result = Path(output).read_text(encoding="utf-8")
+        self.assertEqual(result, "pt,a)/ 1 {}\npt,b)/ 1 {}\npt,c)/ 1 {}\n")
+        warnings = stderr.getvalue()
+        self.assertIn(f"{file1}:1: skipping corrupt CDXJ line (1000 NUL bytes)", warnings)
+        self.assertIn(f"{file2}:2: skipping corrupt CDXJ line (no key before", warnings)
+        self.assertIn("Skipped 2 corrupt CDXJ line(s)", warnings)
 
     def test_merge_to_stdout(self):
         """Test merging to stdout (output_file = '-')"""
