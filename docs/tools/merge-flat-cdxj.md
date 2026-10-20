@@ -148,10 +148,20 @@ pt,sapo,www)/ 20230101120000 {...}
 pt,sapo,www)/ 20230615120000 {...}
 ```
 
-### Blank Lines
+### Blank and Corrupt Lines
 
 Blank and whitespace-only lines in the input files are skipped. An empty line sorts
 before every real key, so it would otherwise become the first line of the merged output.
+
+Corrupt lines are skipped too, with a warning on stderr naming the file and line number:
+lines containing NUL bytes (for example a zero-filled region left by an unclean write) and
+lines with no key before the JSON block. A summary with the total count is printed at the
+end. The records in a damaged region are lost, so regenerate that source CDXJ.
+
+```
+[WARNING] /data/RAQ2017.cdxj:1234: skipping corrupt CDXJ line (807444 NUL bytes): '{"url": ...'
+[WARNING] Skipped 1 corrupt CDXJ line(s). The source CDXJ should be regenerated.
+```
 
 ### Performance
 

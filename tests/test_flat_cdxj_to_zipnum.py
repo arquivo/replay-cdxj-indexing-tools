@@ -101,6 +101,9 @@ Total: 22 tests across 4 test classes
    - test_blank_lines_do_not_produce_empty_idx_key: A leading blank line (e.g. from a
      merged input) must not become an empty first key in the .idx or land in the shard
 
+   - test_corrupt_lines_do_not_produce_bogus_idx_key: Lines with NUL bytes or no key
+     are skipped with a file:line warning instead of reaching the .idx or the shard
+
    - test_real_cdxj_data: Tests with authentic Portuguese (.pt) domain data from
      web archives (aas.pt, edp.pt, governo.pt, sapo.pt, uc.pt) including full
      CDXJ metadata (URL, MIME type, status, digest, length, offset, filename)
@@ -213,7 +216,9 @@ NOTES
 """
 
 import builtins
+import contextlib
 import gzip
+import io
 import os
 import shutil
 import tempfile
@@ -931,6 +936,44 @@ class TestCdxjToZipnum(unittest.TestCase):
         self.assertEqual(len(idx_lines), 1)
         self.assertEqual(idx_lines[0].split("\t")[0], "pt,a)/ 20200101000000")
         self.assertEqual(decompressed, b"".join(test_lines))
+
+    def test_corrupt_lines_do_not_produce_bogus_idx_key(self):
+        """
+        Test that a NUL-filled line does not become the first .idx key.
+
+        Reproduces issue #111: a zero-filled region in the source CDXJ left a line of
+        ~800k NUL bytes followed by a record's JSON block, which sorted first and
+        became an (invisible) NUL key in the .idx. Such lines are skipped with a
+        warning naming the input and line number.
+        """
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        test_lines = [
+            b'pt,a)/ 20200101000000 {"url": "http://a.pt/"}\n',
+            b'pt,b)/ 20200101000000 {"url": "http://b.pt/"}\n',
+        ]
+
+        with open(input_file, "wb") as f:
+            f.write(b"\x00" * 5000 + b'{"url": "http://lost.pt/"}\n')
+            f.writelines(test_lines)
+            f.write(b'{"url": "http://keyless.pt/"}\n')
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            cdxj_to_zipnum(self.output_dir, input_file, chunk_size=10)
+
+        base_name = os.path.basename(self.output_dir)
+        with open(os.path.join(self.output_dir, f"{base_name}.idx"), "rb") as f:
+            idx_lines = f.read().splitlines()
+        with gzip.open(os.path.join(self.output_dir, f"{base_name}.cdx.gz"), "rb") as f:
+            decompressed = f.read()
+
+        self.assertEqual(len(idx_lines), 1)
+        self.assertEqual(idx_lines[0].split(b"\t")[0], b"pt,a)/ 20200101000000")
+        self.assertEqual(decompressed, b"".join(test_lines))
+        warnings = stderr.getvalue()
+        self.assertIn(f"{input_file}:1: skipping corrupt CDXJ line (5000 NUL bytes)", warnings)
+        self.assertIn(f"{input_file}:4: skipping corrupt CDXJ line (no key before", warnings)
+        self.assertIn("Skipped 2 corrupt CDXJ line(s)", warnings)
 
     def test_idx_file_includes_cdxgz_extension(self):
         """
