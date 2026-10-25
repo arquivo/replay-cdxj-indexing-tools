@@ -8,6 +8,12 @@ import sys
 from typing import List
 
 
+def _log(message: str, verbose: bool) -> None:
+    """Print a message to stderr if verbose is enabled."""
+    if verbose:
+        print(message, file=sys.stderr)
+
+
 def discover_files(patterns: List[str], verbose: bool = False) -> List[str]:
     """
     Discover files from patterns (paths, globs, or directories).
@@ -24,16 +30,25 @@ def discover_files(patterns: List[str], verbose: bool = False) -> List[str]:
     for pattern in patterns:
         # Check if it's a directory
         if os.path.isdir(pattern):
-            if verbose:
-                print(f"Scanning directory: {pattern}", file=sys.stderr)
+            _log(f"Scanning directory: {pattern}", verbose)
             for root, _, filenames in os.walk(pattern):
                 for filename in filenames:
+                    full_path = os.path.join(root, filename)
+
+                    # Skip symlinks: an attacker with write access to the
+                    # scanned directory could otherwise plant one pointing
+                    # outside the intended scope and have its contents read
+                    # and surfaced in search output (#79).
+                    if os.path.islink(full_path):
+                        _log(f"Skipping symlink: {full_path}", verbose)
+                        continue
+
                     if (
                         filename.endswith(".cdxj")
                         or filename.endswith(".idx")
                         or filename.endswith(".cdxj.gz")
                     ):
-                        files.add(os.path.abspath(os.path.join(root, filename)))
+                        files.add(os.path.abspath(full_path))
 
         # Check if it's an exact file
         elif os.path.isfile(pattern):

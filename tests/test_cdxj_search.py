@@ -107,6 +107,21 @@ class TestFileDiscovery(unittest.TestCase):
         files = discover_files([pattern])
         self.assertEqual(len(files), 3)
 
+    @unittest.skipIf(not hasattr(os, "symlink"), "symlinks not supported")
+    def test_discover_directory_skips_symlink(self):
+        """discover_files() must not follow a symlinked file inside a scanned directory (#79)."""
+        Path(os.path.join(self.test_dir, "real.cdxj")).touch()
+
+        link_path = os.path.join(self.test_dir, "evil_link.cdxj")
+        try:
+            os.symlink(os.path.join(self.test_dir, "real.cdxj"), link_path)
+        except (OSError, NotImplementedError):
+            self.skipTest("Cannot create symlinks on this platform")
+
+        files = discover_files([self.test_dir])
+        self.assertEqual(len(files), 1)
+        self.assertNotIn(os.path.abspath(link_path), files)
+
     def test_find_zipnum_index_file(self):
         """Test finding ZipNum index file from data."""
         data_file = os.path.join(self.test_dir, "index.cdxj.gz")
