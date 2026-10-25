@@ -242,6 +242,61 @@ test_shard_size_flag() {
     cleanup_test_env
 }
 
+test_blocklist_timeout_flag() {
+    setup_test_env
+    touch "$TEST_DIR/collections/$TEST_COLLECTION/test.warc.gz"
+    local args=("$TEST_COLLECTION" --collections-dir "$TEST_DIR/collections"
+        --output-dir "$TEST_DIR/zipnum" --temp-dir "$TEST_DIR/temp")
+    local output
+
+    output=$(bash "$SCRIPT" --help 2>&1 || true)
+    assert_contains "$output" " --blocklist-timeout SECONDS" "Help includes --blocklist-timeout option"
+
+    output=$(env -u BLOCKLIST_TIMEOUT bash "$SCRIPT" "${args[@]}" 2>&1 || true)
+    assert_contains "$output" "Blocklist timeout: *0 " "Blocklist timeout defaults to 0 (no limit)"
+
+    output=$(bash "$SCRIPT" "${args[@]}" --blocklist-timeout 30 2>&1 || true)
+    assert_contains "$output" "Blocklist timeout: *30 " "Sets blocklist timeout to 30"
+
+    output=$(BLOCKLIST_TIMEOUT=45.5 bash "$SCRIPT" "${args[@]}" 2>&1 || true)
+    assert_contains "$output" "Blocklist timeout: *45.5 " "Reads blocklist timeout from BLOCKLIST_TIMEOUT"
+
+    output=$(bash "$SCRIPT" "${args[@]}" --blocklist-timeout 604800.0 2>&1 || true)
+    assert_contains "$output" "Blocklist timeout: *604800.0 " "Accepts a blocklist timeout of one week"
+
+    local value
+    for value in soon -1 1e3 604800.5 604801 0000999999 99999999999999999999; do
+        output=$(bash "$SCRIPT" "${args[@]}" --blocklist-timeout "$value" 2>&1 || true)
+        assert_contains "$output" "Invalid blocklist timeout" "Rejects blocklist timeout $value"
+        assert_not_contains "$output" "Configuration:" "Stops before processing on timeout $value"
+    done
+    cleanup_test_env
+}
+
+test_blocklist_timeout_fails_stage() {
+    setup_test_env
+    # Stub filter-blocklist: record its arguments, then report a timeout
+    mkdir -p "$TEST_DIR/bin"
+    printf '%s\n' '#!/bin/bash' 'echo "$*" > "$(dirname "$0")/args"' \
+        'echo "Error: filtering timed out after $8 seconds" >&2' 'exit 124' \
+        > "$TEST_DIR/bin/filter-blocklist"
+    chmod +x "$TEST_DIR/bin/filter-blocklist"
+    eval "$(sed -n '/^    filter_cdxj() {/,/^    }/p' "$SCRIPT")"
+
+    local output status
+    output=$(PATH="$TEST_DIR/bin:$PATH" filter_cdxj "$TEST_DIR/in.cdxj" \
+        "$TEST_DIR/blocklists/test-blocklist.txt" "$TEST_DIR/temp" 30 2>&1)
+    status=$?
+    [ "$status" -ne 0 ]
+    assert_success "A blocklist timeout fails the filtering stage"
+    assert_contains "$output" "took longer than 30s" "Reports the blocklist timeout"
+    assert_contains "$output" "    Error: filtering timed out after 30 seconds" \
+        "Shows the filter-blocklist error message"
+    assert_contains "$(cat "$TEST_DIR/bin/args")" " --timeout 30" "Passes the timeout to filter-blocklist"
+    unset -f filter_cdxj
+    cleanup_test_env
+}
+
 test_collection_field_automatic() {
     setup_test_env
     touch "$TEST_DIR/collections/$TEST_COLLECTION/test.warc.gz"
@@ -534,6 +589,8 @@ main() {
     run_test "Parses --jobs flag" test_jobs_flag
     run_test "Parses --threshold flag" test_threshold_flag
     run_test "Parses --shard-size flag" test_shard_size_flag
+    run_test "Parses --blocklist-timeout flag" test_blocklist_timeout_flag
+    run_test "Blocklist timeout fails the stage" test_blocklist_timeout_fails_stage
     run_test "Collection field automatically set" test_collection_field_automatic
     run_test "Collection field in stage 2" test_collection_field_in_stage2
     run_test "Collection field value matches collection name" test_collection_field_value

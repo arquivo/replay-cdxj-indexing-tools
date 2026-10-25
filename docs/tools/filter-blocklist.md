@@ -9,7 +9,7 @@ Filter CDXJ records matching regex patterns in a blocklist file. Use this to rem
 ### Basic Syntax
 
 ```bash
-filter-blocklist -i INPUT -b BLOCKLIST [-o OUTPUT] [-v]
+filter-blocklist -i INPUT -b BLOCKLIST [-o OUTPUT] [-v] [--timeout SECONDS]
 ```
 
 ### Examples
@@ -43,6 +43,49 @@ merge-flat-cdxj - *.cdxj | \
 - `-b, --blocklist BLOCKLIST` - Blocklist file with regex patterns (required)
 - `-o, --output OUTPUT` - Output file or `-` for stdout (default: stdout)
 - `-v, --verbose` - Print statistics to stderr
+- `--timeout SECONDS` - Abort (exit status 124, no output) if filtering takes longer; the clock includes time spent waiting for input on stdin; at most `604800` (1 week) (default: `0` = no limit)
+
+Every blocklist line is checked before grep runs. A line is rejected if it
+uses a construct that is expensive for grep: a back-reference (`\1` to `\9`),
+a repeat count above 255 in `{n}`, `{n,}` or `{n,m}`, or more than 10 000
+characters.
+
+Three limits target the work grep does to set up the blocklist:
+
+- **Per line**, the cost of the line's wildcards and bounded repeats is capped
+  at **256**. A `.` costs 4 and a bracket expression (`[a-z0-9-]`) or `\w`,
+  `\W`, `\s`, `\S` costs 1, with or without `*`, `+` or `?` after it. Plain
+  characters, and alternations of them such as host-name lists, cost nothing.
+  A bounded repeat (`{n}`, `{n,}`, `{n,m}`) costs its expanded size, because
+  grep copies the repeated part once per count: the size of what it repeats
+  (here plain characters count 1, a `.` 4) times its largest count. Nested
+  repeats multiply, so `(ab){3}` costs 6 and `((ab){3}){2}` costs 12.
+- **Per blocklist**, the expanded sizes of all bounded repeats add up to at
+  most **32 768**.
+- **Per blocklist**, there are at most **65 536** wildcards outside bounded
+  repeats, each `.`, bracket expression, `\w`, `\W`, `\s` or `\S` counting 1,
+  so a large blocklist of lines such as `^pt,example,www\)/.*` is accepted.
+
+For example `[a-z0-9-]{1,63}` costs 63, `([a-z0-9-]{1,63}\.){1,4}` costs 256
+and `.{0,64}` costs 256, so a blocklist can hold about 500 hostname-label lines
+like the first. grep's set-up time grows with the square of a line's expanded
+size and with the number of such lines, which is why the per-line cap is the
+tighter one.
+
+These limits target grep's set-up work, not its matching time on adversarial
+input, and they are not exhaustive. When blocklist lines are not fully
+trusted, `--timeout` is the real bound: set it, sized for the largest CDXJ
+input you filter. In `cdxj-index-collection.sh` it is `--blocklist-timeout`
+or the `BLOCKLIST_TIMEOUT` environment variable.
+
+If **any** line is rejected, the tool fails closed: it exits with status 1,
+writes no output, and reports each rejected line number and reason on stderr.
+Filtering with only part of a blocklist would publish the records the rejected
+lines target. A grep error also exits 1 without writing output. See
+[SECURITY.md](../../SECURITY.md).
+
+Exit status: `0` success, `1` error (including a rejected blocklist line),
+`2` invalid command-line arguments, `124` `--timeout` expired.
 
 ## How It Works
 
@@ -147,12 +190,14 @@ Combine SURT domain with specific path requirements:
 ### Load and Apply Blocklist
 
 ```python
-from replay_cdxj_indexing_tools.utils.filter_blocklist import (
+from replay_cdxj_indexing_tools.filter.blocklist import (
     load_blocklist,
     filter_cdxj_by_blocklist,
 )
 
-# Load patterns from file
+# Load patterns from file. Raises ValueError, listing the line numbers, if
+# any line is not a valid Python regex: nothing is filtered with a partial
+# blocklist.
 patterns = load_blocklist('blocklist.txt')
 print(f"Loaded {len(patterns)} patterns")
 
@@ -167,11 +212,23 @@ print(f"Kept: {kept} lines")
 print(f"Blocked: {blocked} lines")
 ```
 
+`filter_cdxj_by_blocklist()` checks every pattern it sends to grep (see
+above) and raises `ValueError` if any is rejected. Patterns from
+`load_blocklist()` must be valid Python regexes; a blocklist that relies on
+grep-only syntax, such as an unescaped `)` in a SURT prefix, can be passed as
+a file instead:
+
+```python
+kept, blocked = filter_cdxj_by_blocklist(
+    'input.cdxj', [], 'output.cdxj', blocklist_file='blocklist.txt'
+)
+```
+
 ### Manual Pattern Creation
 
 ```python
 import re
-from replay_cdxj_indexing_tools.utils.filter_blocklist import filter_cdxj_by_blocklist
+from replay_cdxj_indexing_tools.filter.blocklist import filter_cdxj_by_blocklist
 
 # Create patterns manually
 patterns = [
@@ -189,7 +246,7 @@ kept, blocked = filter_cdxj_by_blocklist('input.cdxj', patterns, 'output.cdxj')
 
 ```python
 import sys
-from replay_cdxj_indexing_tools.utils.filter_blocklist import (
+from replay_cdxj_indexing_tools.filter.blocklist import (
     load_blocklist,
     filter_cdxj_by_blocklist,
 )
@@ -392,24 +449,37 @@ https://www\.spam\.pt/     # Correct - matches JSON format
 
 ### Invalid Regex Patterns
 
-If blocklist contains invalid regex:
+If grep cannot parse a blocklist line, nothing is written and the tool exits 1:
 
 ```
-Warning: Invalid regex pattern at line 5: [invalid(
-  Error: unbalanced parenthesis
+Error: grep failed (exit 2): grep: /tmp/tmpXXXX.txt:1: Unmatched [, [^, [:, [., or [=
 ```
 
-**Solution:** Fix the pattern or comment it out.
+The line number counts pattern lines only (blank and comment lines are
+skipped). **Solution:** Fix the pattern or comment it out.
+
+### Rejected Patterns
+
+If a line uses a construct that is expensive for grep, nothing is written and
+the tool exits 1:
+
+```
+Error: 1 blocklist pattern(s) rejected; refusing to filter with an incomplete blocklist:
+  line 5: back-references are expensive for grep
+```
+
+**Solution:** Rewrite the line without that construct.
 
 ### Empty Blocklist
 
-If blocklist is empty or has only comments:
+If blocklist is empty or has only comments, every record is kept and a warning
+is printed:
 
 ```
-Warning: No patterns loaded from blocklist
+Warning: No patterns in blocklist
 ```
 
-**Solution:** Ensure blocklist has at least one valid pattern.
+**Solution:** Ensure blocklist has at least one pattern.
 
 ### Pattern Too Broad
 
@@ -435,7 +505,7 @@ pytest tests/test_filter_blocklist.py -v
 pytest tests/test_filter_blocklist.py::TestFilterCdxjByBlocklist -v
 
 # With coverage
-pytest --cov=replay_cdxj_indexing_tools.utils.filter_blocklist tests/test_filter_blocklist.py
+pytest --cov=replay_cdxj_indexing_tools.filter.blocklist tests/test_filter_blocklist.py
 ```
 
 ## Migration from Legacy Scripts

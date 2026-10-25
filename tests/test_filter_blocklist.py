@@ -130,6 +130,23 @@ class TestLoadBlocklist(unittest.TestCase):
 
         self.assertEqual(len(patterns), 4)
 
+    def test_load_invalid_pattern_fails_closed(self):
+        """An invalid line fails the whole load instead of being dropped."""
+        content = "\n".join(
+            [
+                "^pt,spam,",
+                r"^pt,(spam",  # invalid regex
+                "/ads/",
+            ]
+        )
+
+        path = os.path.join(self.temp_dir, "blocklist.txt")
+        with open(path, "w") as f:
+            f.write(content)
+
+        with self.assertRaisesRegex(ValueError, "line 2:"):
+            load_blocklist(path)
+
 
 class TestFilterCdxjByBlocklist(unittest.TestCase):
     """Test filtering CDXJ records by blocklist patterns."""
@@ -302,6 +319,32 @@ class TestFilterCdxjByBlocklist(unittest.TestCase):
 
         self.assertEqual(kept, 2)
         self.assertEqual(blocked, 0)
+
+    def test_filter_blocklist_file_rejected_line_fails_closed(self):
+        """
+        Regression test for #75: a raw blocklist_file passed straight to
+        filter_cdxj_by_blocklist must still be checked, not handed directly
+        to grep. A rejected line fails the whole run (no output), since
+        filtering without it would publish the records it targets.
+        """
+        cdxj_lines = [
+            'pt,governo,www)/ 20230615120000 {"url": "..."}\n',
+            'pt,spam,www)/ 20230615120000 {"url": "..."}\n',
+        ]
+
+        input_path = os.path.join(self.temp_dir, "input.cdxj")
+        output_path = os.path.join(self.temp_dir, "output.cdxj")
+        blocklist_path = os.path.join(self.temp_dir, "blocklist.txt")
+
+        with open(input_path, "w") as f:
+            f.writelines(cdxj_lines)
+
+        with open(blocklist_path, "w") as f:
+            f.write("^pt,spam,\n^pt,(governo),\\1\n")
+
+        with self.assertRaisesRegex(ValueError, "line 2:"):
+            filter_cdxj_by_blocklist(input_path, [], output_path, blocklist_file=blocklist_path)
+        self.assertFalse(os.path.exists(output_path))
 
     def test_filter_multiple_pattern_types(self):
         """Filter using combination of different pattern types."""
