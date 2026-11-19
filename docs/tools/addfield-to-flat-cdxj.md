@@ -2,6 +2,8 @@
 
 Add custom JSON fields to flat CDXJ records. Unlike filters that remove data, this tool enriches records by adding metadata fields while preserving all original data.
 
+The input can also be an `http(s)://` or `s3://` URL, streamed without downloading it first; see [Remote Indexes](../remote-indexes.md).
+
 ## Overview
 
 The `addfield-to-flat-cdxj` tool allows you to enrich CDXJ records with additional metadata. This is essential for:

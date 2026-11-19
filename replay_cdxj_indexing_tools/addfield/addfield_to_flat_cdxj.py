@@ -129,6 +129,8 @@ import sys
 from types import CodeType
 from typing import Callable, Dict, Optional, Tuple
 
+from replay_cdxj_indexing_tools import storage
+
 logger = logging.getLogger(__name__)
 
 # --function only loads files directly inside this operator-controlled directory.
@@ -252,7 +254,7 @@ def addfield_to_cdxj(
     if input_path == "-":
         input_fh = sys.stdin
     else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
-        input_fh = open(input_path, "r", encoding="utf-8", buffering=buffer_size)
+        input_fh = storage.open_input(input_path, "r", encoding="utf-8", buffering=buffer_size)
 
     # Open output
     if output_path == "-":
@@ -557,7 +559,12 @@ Custom Field Function File Format:
         """,
     )
 
-    parser.add_argument("-i", "--input", required=True, help="Input CDXJ file, or - for stdin")
+    parser.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        help="Input CDXJ file, http(s):// or s3:// URL, or - for stdin",
+    )
     parser.add_argument(
         "-o", "--output", default="-", help="Output file, or - for stdout (default: stdout)"
     )

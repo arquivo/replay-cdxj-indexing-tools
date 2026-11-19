@@ -2,6 +2,8 @@
 
 Efficiently merges multiple sorted flat CDXJ files into a single sorted output using a k-way merge algorithm.
 
+Inputs can also be `http(s)://` or `s3://` URLs, streamed without downloading them first; see [Remote Indexes](../remote-indexes.md).
+
 ## Command-Line Usage
 
 ### Basic Syntax

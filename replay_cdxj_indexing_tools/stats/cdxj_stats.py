@@ -97,6 +97,7 @@ import os
 import sys
 from typing import Dict, List, Optional, Tuple
 
+from replay_cdxj_indexing_tools import storage
 from replay_cdxj_indexing_tools.stats.base import OrderChecker, load_sinks, parse_cdxj_line
 
 
@@ -155,7 +156,11 @@ Examples:
         """,
     )
     parser.add_argument(
-        "-i", "--input", dest="input_file", default="-", help="Input CDXJ file, or - for stdin"
+        "-i",
+        "--input",
+        dest="input_file",
+        default="-",
+        help="Input CDXJ file, http(s):// or s3:// URL, or - for stdin",
     )
     parser.add_argument(
         "--sink",
@@ -223,7 +228,7 @@ def run(
             # CDXJ is UTF-8 regardless of the process locale; don't let a non-UTF-8
             # default encoding turn non-ASCII URLs into a UnicodeDecodeError.
             # pylint: disable-next=consider-using-with
-            infile = open(input_file, "r", encoding="utf-8")
+            infile = storage.open_input(input_file, "r", encoding="utf-8")
 
         try:
             for line in infile:

@@ -6,6 +6,8 @@ import logging
 import sys
 from typing import BinaryIO, List
 
+from replay_cdxj_indexing_tools import storage
+
 logger = logging.getLogger(__name__)
 
 
@@ -234,8 +236,11 @@ def search_cdxj_file(
     """
     Search a flat CDXJ file for matching entries.
 
+    A remote file is searched with range requests: each binary-search step fetches
+    one small range, so a lookup costs O(log(file size)) requests.
+
     Args:
-        filepath: Path to CDXJ file
+        filepath: Path to CDXJ file, or remote location (see storage.is_remote)
         search_key: SURT key to search for
         match_prefix: If True, match all entries starting with search_key
         verbose: If True, print debug info to stderr
@@ -254,7 +259,7 @@ def search_cdxj_file(
         raise ValueError("search_key contains null bytes")
 
     try:
-        with open(filepath, "rb") as fp:
+        with storage.open_input(filepath, "rb") as fp:
             return binary_search_file(fp, search_key, match_prefix, verbose)
     except Exception as e:  # pylint: disable=broad-exception-caught  # re-raised after logging
         if verbose:

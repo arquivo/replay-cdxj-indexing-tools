@@ -108,14 +108,14 @@ merge-cdxj output.cdxj temp.cdxj other.cdxj
 """
 
 import gzip
-import os
 import shutil
 import sys
 import warnings
 from argparse import ArgumentParser
 from typing import List, Optional, Tuple
 
-from replay_cdxj_indexing_tools.path_safety import resolve_within
+from replay_cdxj_indexing_tools import storage
+from replay_cdxj_indexing_tools.path_safety import resolve_location
 
 # Read/write size used when streaming a shard to stdout
 _COPY_BUFSIZE = 256 * 1024
@@ -133,7 +133,7 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
     if idx_path == "-":
         fh = sys.stdin
     else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
-        fh = open(idx_path, "r", encoding="utf-8")
+        fh = storage.open_input(idx_path, "r", encoding="utf-8")
 
     try:
         for line in fh:
@@ -165,7 +165,7 @@ def read_loc_file(loc_path: str) -> dict:
     """
     loc_map = {}
 
-    with open(loc_path, "r", encoding="utf-8") as fh:
+    with storage.open_input(loc_path, "r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -194,7 +194,7 @@ def find_loc_file(idx_path: str) -> Optional[str]:
     base = idx_path.replace(".idx", "")
     loc_path = f"{base}.loc"
 
-    if os.path.exists(loc_path):
+    if storage.exists(loc_path):
         return loc_path
 
     return None
@@ -207,23 +207,21 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
     1. If loc_map provided, use it to find filepath
     2. Otherwise, construct path as: base_dir/shard_name.cdx.gz
 
-    Path traversal defense: all resolved paths must remain within base_dir.
+    base_dir may be a local directory or a remote URL (see storage.is_remote).
+    Path traversal defense: all resolved locations must remain within base_dir
+    (see path_safety.resolve_location).
     """
     if loc_map and shard_name in loc_map:
-        # Use path from .loc file
+        # Use path from .loc file; relative paths are resolved against base_dir
         loc_path = loc_map[shard_name]
-        # If relative, resolve against base_dir
-        if not os.path.isabs(loc_path):
-            loc_path = os.path.join(base_dir, loc_path)
         try:
-            return resolve_within(loc_path, base_dir)
+            return resolve_location(loc_path, base_dir)
         except ValueError as e:
             raise ValueError(f"Path traversal detected in .loc file: {loc_path!r}") from e
 
     # Default: shard_name.cdx.gz in base_dir
-    shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
     try:
-        return resolve_within(shard_path, base_dir)
+        return resolve_location(f"{shard_name}.cdx.gz", base_dir)
     except ValueError as e:
         raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}") from e
 
@@ -265,12 +263,12 @@ def zipnum_to_flat_cdxj(
         if idx_path == "-":
             base_dir = "."
         else:
-            base_dir = os.path.dirname(os.path.abspath(idx_path))
+            base_dir = storage.parent_location(idx_path)
 
     # Try to find and read .loc file
     loc_map = None
     if loc_file:
-        if os.path.exists(loc_file):
+        if storage.exists(loc_file):
             loc_map = read_loc_file(loc_file)
     else:
         # Auto-detect .loc file
@@ -288,12 +286,12 @@ def zipnum_to_flat_cdxj(
     for shard_name in shard_names:
         shard_path = resolve_shard_path(shard_name, base_dir, loc_map)
 
-        if not os.path.exists(shard_path):
+        if not storage.exists(shard_path):
             print(f"Warning: Shard file not found: {shard_path}", file=sys.stderr)
             continue
 
         # Stream in fixed-size chunks so memory use does not grow with shard size
-        with gzip.open(shard_path, "rb") as gz:
+        with storage.open_input(shard_path, "rb") as raw, gzip.open(raw, "rb") as gz:
             shutil.copyfileobj(gz, output, _COPY_BUFSIZE)
 
     # Flush output
@@ -307,13 +305,13 @@ def parse_args(argv=None):
         "-i",
         "--input",
         required=True,
-        help="Input .idx file or '-' for stdin",
+        help="Input .idx file, http(s):// or s3:// URL, or '-' for stdin",
     )
     p.add_argument(
         "--base-dir",
         type=str,
         default=None,
-        help="Base directory for shard files (default: idx file directory)",
+        help="Base directory or URL for shard files (default: idx file directory)",
     )
     p.add_argument(
         "--loc",

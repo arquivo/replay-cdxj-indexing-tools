@@ -72,7 +72,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import threading
 from typing import List, Optional, Pattern, Tuple
+
+from replay_cdxj_indexing_tools import storage
+
+# Bytes read from a remote input at a time while piping it into grep
+_FEED_CHUNK = 1024 * 1024
 
 
 def load_blocklist(blocklist_path: str) -> List[Pattern]:
@@ -118,6 +124,52 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
     return patterns
 
 
+def _grep_remote(cmd: List[str], input_path: str) -> Tuple[str, int]:
+    """
+    Run grep over a remote input by piping it through grep's stdin.
+
+    Returns:
+        Tuple of (grep output, number of input lines)
+    """
+    total_lines = 0
+    feed_errors: List[BaseException] = []
+    # pylint: disable-next=consider-using-with  # closed by the feeder thread and wait()
+    proc = subprocess.Popen(cmd + ["-"], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+    stdin, stdout = proc.stdin, proc.stdout
+    assert stdin is not None and stdout is not None  # both are PIPE
+
+    def feed() -> None:
+        nonlocal total_lines
+        last = b"\n"
+        try:
+            with storage.open_input(input_path, "rb") as src:
+                for chunk in iter(lambda: src.read(_FEED_CHUNK), b""):
+                    total_lines += chunk.count(b"\n")
+                    last = chunk[-1:]
+                    stdin.write(chunk)
+            if last != b"\n":
+                total_lines += 1  # final line without a newline
+        except BrokenPipeError:
+            pass
+        except Exception as exc:  # pylint: disable=broad-exception-caught  # re-raised below
+            feed_errors.append(exc)
+        finally:
+            try:
+                stdin.close()
+            except BrokenPipeError:
+                pass
+
+    feeder = threading.Thread(target=feed, daemon=True)
+    feeder.start()
+    output = stdout.read().decode("utf-8")
+    stdout.close()
+    proc.wait()
+    feeder.join()
+    if feed_errors:
+        raise feed_errors[0]
+    return output, total_lines
+
+
 def filter_cdxj_by_blocklist(
     input_path: str,
     blocklist_patterns: List[Pattern],
@@ -133,7 +185,8 @@ def filter_cdxj_by_blocklist(
         grep -E -v -f blocklist.txt input.cdxj > output.cdxj
 
     Args:
-        input_path: Input CDXJ file, or '-' for stdin
+        input_path: Input CDXJ file, remote location (see storage.is_remote), or '-'
+            for stdin
         blocklist_patterns: List of compiled regex Pattern objects to block
             (deprecated, use blocklist_file)
         output_path: Output file, or '-' for stdout (default: stdout)
@@ -165,6 +218,16 @@ def filter_cdxj_by_blocklist(
     try:
         # Build grep command
         cmd = ["grep", "-a", "-E", "-v", "-f", blocklist_file]
+
+        if input_path != "-" and storage.is_remote(input_path):
+            kept_text, total_lines = _grep_remote(cmd, input_path)
+            if output_path == "-":
+                sys.stdout.write(kept_text)
+            else:
+                with open(output_path, "w", encoding="utf-8") as f:
+                    f.write(kept_text)
+            lines_kept = kept_text.count("\n")
+            return lines_kept, total_lines - lines_kept
 
         # Handle input
         if input_path == "-":
@@ -241,7 +304,12 @@ Blocklist file format:
         """,
     )
 
-    parser.add_argument("-i", "--input", required=True, help="Input CDXJ file, or - for stdin")
+    parser.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        help="Input CDXJ file, http(s):// or s3:// URL, or - for stdin",
+    )
     parser.add_argument(
         "-b", "--blocklist", required=True, help="Blocklist file with regex patterns (one per line)"
     )

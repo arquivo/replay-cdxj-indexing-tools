@@ -2,6 +2,8 @@
 
 Convert ZipNum format indexes back to flat CDXJ - decompress and merge sharded indexes into a single flat CDXJ stream. Enables round-trip conversion, data recovery, and pipeline reprocessing.
 
+The `.idx`, `.loc` and shards can also be read from `http(s)://` or `s3://` URLs, without downloading the index first; see [Remote Indexes](../remote-indexes.md).
+
 ## Command-Line Usage
 
 ### Basic Syntax
