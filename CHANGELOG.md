@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.3.0 (2026-11-19)
+
+### Features
+
+- Add cdxj-to-csv to convert CDXJ records to CSV/TSV
+  ([`51056b9`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/51056b9de186495a429989d9b562d28681025569))
+
+
 ## v1.2.8 (2026-10-20)
 
 ### Bug Fixes
