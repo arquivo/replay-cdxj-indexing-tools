@@ -79,6 +79,14 @@ def read_loc_file(loc_filepath: str) -> Dict[str, str]:
     return loc_map
 
 
+def _read_loc_if_present(loc_filepath: str) -> Optional[Dict[str, str]]:
+    """read_loc_file(), or None if there is no such file (one request when remote)."""
+    try:
+        return read_loc_file(loc_filepath)
+    except FileNotFoundError:
+        return None
+
+
 def search_zipnum_index(
     idx_filepath: str, search_key: str, match_prefix: bool = False, verbose: bool = False
 ) -> List[Tuple[str, str, int, int]]:
@@ -399,8 +407,11 @@ def _search_remote_shard_blocks(
     """
     all_results: List[str] = []
 
-    with storage.RemoteFile(shard_location) as remote:
-        for group in _coalesce_blocks(blocks):
+    groups = _coalesce_blocks(blocks)
+    # The .idx gives every range to read, so the shard's size is not fetched
+    read_end = max(offset + min(length, _MAX_BLOCK_READ) for _, offset, length in blocks)
+    with storage.RemoteFile(shard_location, size=read_end) as remote:
+        for group in groups:
             group_start = group[0][1]
             group_end = group[-1][1] + min(group[-1][2], _MAX_BLOCK_READ)
             if verbose:
@@ -536,21 +547,20 @@ def search_zipnum_file(
     if base_dir is None:
         base_dir = storage.parent_location(idx_filepath)
 
-    # Try to find and read .loc file
+    # Try to find and read .loc file. Without one, shard names in the .idx are
+    # resolved relative to base_dir.
     loc_map = None
     if loc_filepath:
-        if storage.exists(loc_filepath):
-            loc_map = read_loc_file(loc_filepath)
-            if verbose:
-                print(f"  Using .loc file: {loc_filepath}", file=sys.stderr)
+        loc_map = _read_loc_if_present(loc_filepath)
+        if loc_map is not None and verbose:
+            print(f"  Using .loc file: {loc_filepath}", file=sys.stderr)
     else:
         # Auto-detect .loc file
         base, _ = os.path.splitext(idx_filepath)
         auto_loc = base + ".loc"
-        if storage.exists(auto_loc):
-            loc_map = read_loc_file(auto_loc)
-            if verbose:
-                print(f"  Found .loc file: {auto_loc}", file=sys.stderr)
+        loc_map = _read_loc_if_present(auto_loc)
+        if loc_map is not None and verbose:
+            print(f"  Found .loc file: {auto_loc}", file=sys.stderr)
 
     # Search index for matching blocks
     blocks = search_zipnum_index(idx_filepath, search_key, match_prefix, verbose)

@@ -187,6 +187,16 @@ class TestResolveShardPath:
         path = resolve_shard_path("test-01", base_dir, None)
         assert path == os.path.join(base_dir, "test-01.cdx.gz")
 
+    def test_resolve_without_loc_map_keeps_shard_extension(self, tmp_path):
+        """Shard names written by flat-cdxj-to-zipnum already end in .cdx.gz"""
+        base_dir = str(tmp_path)
+        assert resolve_shard_path("test-01.cdx.gz", base_dir, None) == os.path.join(
+            base_dir, "test-01.cdx.gz"
+        )
+        assert resolve_shard_path("test-01.cdxj.gz", base_dir, None) == os.path.join(
+            base_dir, "test-01.cdxj.gz"
+        )
+
     def test_resolve_shard_not_in_loc(self, tmp_path):
         """Test resolving when shard not in loc map (falls back to default)."""
         loc_map = {"test-01": "test-01.cdx.gz"}

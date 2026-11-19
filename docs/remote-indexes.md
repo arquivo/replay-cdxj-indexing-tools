@@ -74,16 +74,33 @@ cdxj-search --url https://example.pt/ --matchType subdomains \
 
 | Index | Requests per lookup |
 |-------|---------------------|
-| ZipNum | A few small requests for the `.loc` file, about log2(`.idx` size / 64 KB) small requests to binary-search the `.idx`, then, for each shard with matches, one request per run of adjacent matching blocks. Blocks that are next to each other in a shard are fetched together, up to 16 MB per request. |
-| Flat CDXJ | About log2(file size / 64 KB) small requests for the binary search, then sequential requests while reading the matches. |
+| ZipNum | Two requests for the `.loc` file (also when there is none), one `HEAD` for the `.idx` size and about log2(`.idx` size / 64 KB) small requests to binary-search it, then, for each shard with matches, one request per run of adjacent matching blocks. Blocks that are next to each other in a shard are fetched together, up to 16 MB per request. Shards need no `HEAD`: the `.idx` gives the byte ranges. |
+| Flat CDXJ | One `HEAD` for the file size, about log2(file size / 64 KB) small requests for the binary search, then sequential requests while reading the matches. |
 
-Each remote file opened also costs one `HEAD` request, to learn its size.
+For example, an exact lookup in a ZipNum index with a 40 KB `.idx` takes 5
+requests: `.loc` (2), `.idx` (2), and one block of one shard.
 
 Sequential reads (streaming tools, long result lists) start at 64 KB and double up
 to 4 MB per request.
 
 ZipNum is the better format for remote access: the `.idx` is small, and each
 matching block is a compressed range of a shard.
+
+### Where the shards are found
+
+Shards are found the same way as on local disk:
+
+- With a `.loc` file next to the `.idx` (same name, `.loc` extension), each shard
+  name in the `.idx` is looked up in it. Entries are usually relative to the
+  directory of the `.idx` (`index-01.cdx.gz`, `./index-01.cdx.gz`,
+  `shards/index-01.cdx.gz`), as `flat-cdxj-to-zipnum` writes them. Absolute URLs
+  inside that directory also work.
+- Without a `.loc` file, each shard name is taken as a file next to the `.idx`
+  (`.cdx.gz` is appended if the name has no `.cdx.gz` or `.cdxj.gz` extension).
+
+So publishing the `.idx` and the shards in one directory is enough; the `.loc`
+file is optional. See [Restrictions](#restrictions) for the locations that are
+refused.
 
 ### Remote file discovery
 
@@ -189,9 +206,10 @@ locations:
   string or a fragment. Use the environment or a config profile for credentials.
 - Shard locations read from a `.loc` file or an `.idx` must stay inside the
   index's base location: the directory of the `.idx`, or `--base-dir`. That means
-  the same scheme and host (or bucket), and a path under that directory. Relative
-  entries are resolved against the base. Absolute URLs are accepted only if they
-  fall inside it. `..` segments (including encoded ones like `%2e%2e`), local
+  the same scheme and host (or bucket), and a path in that directory or below it.
+  Relative entries are resolved against the base, and `.` segments are dropped
+  (S3 would otherwise take them literally). Absolute URLs are accepted only if
+  they fall inside it. `..` segments (including encoded ones like `%2e%2e`), local
   paths under a remote base, and URLs under a local base are all rejected. This is
   the remote counterpart of the existing check for local paths.
 

@@ -278,6 +278,82 @@ class TestRemoteFailures:
             assert other.requests == []
 
 
+LAYOUTS = ["no-loc", "loc-subdir", "loc-dot", "loc-absolute"]
+LOOKUPS = [
+    ("--surt", "pt,site07)/page/0287"),
+    ("--surt", "pt,site2", "--matchType", "prefix"),
+]
+
+
+def _make_layout(src: str, dest, layout: str, base_url: str) -> None:
+    """Copy the ZipNum index to dest, with shards located as the layout says."""
+    shutil.copytree(src, dest)
+    loc_path = dest / "index.loc"
+    names = [line.split("\t")[0] for line in loc_path.read_text().splitlines()]
+    if layout == "no-loc":
+        loc_path.unlink()
+        return
+    if layout == "loc-subdir":
+        (dest / "shards").mkdir()
+        for name in names:
+            (dest / name).rename(dest / "shards" / name)
+    prefix = {"loc-subdir": "shards/", "loc-dot": "./", "loc-absolute": f"{base_url}/"}[layout]
+    loc_path.write_text("".join(f"{name}\t{prefix}{name}\n" for name in names))
+
+
+class TestRelativeShardLocations:
+    """Shards are found relative to the .idx, with or without a .loc file."""
+
+    @pytest.mark.parametrize("query", LOOKUPS, ids=lambda q: " ".join(q))
+    @pytest.mark.parametrize("layout", LAYOUTS)
+    def test_http(self, index_root, tmp_path, layout, query):
+        expected = _search(*query, "--sort", f"{index_root}/zipnum/index.idx")
+        with serve_directory(str(tmp_path)) as server:
+            _make_layout(f"{index_root}/zipnum", tmp_path / "zn", layout, server.url("zn"))
+            assert _search(*query, "--sort", server.url("zn/index.idx")) == expected
+
+    @pytest.mark.parametrize("layout", LAYOUTS)
+    def test_s3(self, index_root, tmp_path, s3_endpoint, layout):
+        # pylint: disable=unused-argument  # s3_endpoint starts the server
+        s3fs = pytest.importorskip("s3fs")
+        base = f"s3://{BUCKET}/layout-{layout}"
+        _make_layout(f"{index_root}/zipnum", tmp_path / "zn", layout, base)
+        s3fs.S3FileSystem(skip_instance_cache=True).put(
+            str(tmp_path / "zn") + "/", base + "/", recursive=True
+        )
+        for query in LOOKUPS:
+            expected = _search(*query, "--sort", f"{index_root}/zipnum/index.idx")
+            assert _search(*query, "--sort", f"{base}/index.idx") == expected
+
+    @pytest.mark.parametrize("layout", LAYOUTS)
+    def test_zipnum_to_flat_cdxj_http(self, index_root, tmp_path, layout):
+        with serve_directory(str(tmp_path)) as server:
+            _make_layout(f"{index_root}/zipnum", tmp_path / "zn", layout, server.url("zn"))
+            result = _run_tool("zipnum.zipnum_to_flat_cdxj", "-i", server.url("zn/index.idx"))
+        assert result.returncode == 0, result.stderr.decode()
+        assert result.stderr == b""
+        with open(_flat(index_root), "rb") as fh:
+            assert result.stdout == fh.read()
+
+    @pytest.mark.parametrize("layout", ["no-loc", "loc-dot"])
+    def test_lookup_request_budget(self, index_root, tmp_path, layout):
+        with serve_directory(str(tmp_path)) as server:
+            _make_layout(f"{index_root}/zipnum", tmp_path / "zn", layout, server.url("zn"))
+            code, lines, _ = _search("--surt", "pt,site07)/page/0287", server.url("zn/index.idx"))
+            assert code == 0 and lines
+            requests = list(server.requests)
+        loc = [r for r in requests if r[1].endswith(".loc")]
+        idx = [r for r in requests if r[1].endswith(".idx")]
+        shard = [r for r in requests if r[1].endswith(".cdx.gz")]
+        # .loc: HEAD + GET to read it; when absent, fsspec retries the 404 HEAD as a GET
+        assert len(loc) == 2
+        # .idx: one HEAD for its size, then the binary search
+        idx_size = os.path.getsize(f"{index_root}/zipnum/index.idx")
+        assert len(idx) <= 2 + math.ceil(math.log2(max(2, idx_size / storage._MIN_FETCH)))
+        # Shard: the matching block only; its byte range comes from the .idx, so no HEAD
+        assert [method for method, _, _ in shard] == ["GET"]
+
+
 def _flat(index_root, name="index.cdxj"):
     return os.path.join(index_root, "flat", name)
 

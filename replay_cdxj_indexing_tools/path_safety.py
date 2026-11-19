@@ -5,7 +5,7 @@ Path containment checks shared by the tools that open files named in untrusted i
 import errno
 import os
 from typing import List
-from urllib.parse import unquote, urlsplit
+from urllib.parse import unquote, urlsplit, urlunsplit
 
 from replay_cdxj_indexing_tools import storage
 
@@ -94,6 +94,18 @@ def url_within(location: str, base_url: str) -> str:
     return location
 
 
+def _drop_dot_segments(location: str) -> str:
+    """
+    Remove ``.`` path segments from a URL, as RFC 3986 asks clients to do.
+
+    HTTP servers would ignore them anyway, but S3 keys are literal: ``a/./b`` is
+    not the object ``a/b``.
+    """
+    parts = urlsplit(location)
+    path = "/".join(segment for segment in parts.path.split("/") if segment != ".")
+    return urlunsplit(parts._replace(path=path))
+
+
 def resolve_location(entry: str, base_dir: str) -> str:
     """
     Resolve a file location read from an index (.loc entry, .idx shard name).
@@ -106,7 +118,7 @@ def resolve_location(entry: str, base_dir: str) -> str:
     inside a local one.
 
     Returns:
-        The resolved local path, or the URL
+        The resolved local path, or the URL without ``.`` path segments
 
     Raises:
         ValueError: If ``entry`` resolves outside ``base_dir`` or uses an
@@ -117,10 +129,11 @@ def resolve_location(entry: str, base_dir: str) -> str:
     entry_is_remote = storage.is_remote(entry)
     if storage.is_remote(base_dir):
         if entry_is_remote:
-            return url_within(entry, base_dir)
+            return url_within(_drop_dot_segments(entry), base_dir)
         if os.path.isabs(entry):
             raise ValueError(f"{entry!r} is a local path, outside remote base {base_dir!r}")
-        return url_within(storage.join_location(base_dir, entry), base_dir)
+        joined = storage.join_location(base_dir, entry)
+        return url_within(_drop_dot_segments(joined), base_dir)
     if entry_is_remote:
         raise ValueError(f"{entry!r} is a remote location, outside local base {base_dir!r}")
     if not os.path.isabs(entry):

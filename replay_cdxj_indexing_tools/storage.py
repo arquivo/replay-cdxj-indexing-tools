@@ -40,7 +40,8 @@ REMOTE_SCHEMES = ("http", "https", "s3")
 _SCHEME_RE = re.compile(r"^([A-Za-z][A-Za-z0-9+.-]*)://")
 _WILDCARD_CHARS = ("*", "?", "[")
 
-# First fetch at a new position; doubled on each sequential fetch up to the maximum
+# First fetch at a new position, aligned to a multiple of its size; doubled on each
+# sequential fetch up to the maximum
 _MIN_FETCH = 64 * 1024
 _MAX_FETCH = 4 * 1024 * 1024
 # Bytes of fetched data kept per open remote object
@@ -181,11 +182,14 @@ def _is_transient(exc: BaseException) -> bool:
 def _underlying_error(exc: BaseException) -> BaseException:
     """
     The error to classify: fsspec reports an HTTP file whose size it cannot get
-    as FileNotFoundError, even when the cause was a transient failure.
+    as FileNotFoundError, even when the cause was a transient failure, and a 404
+    on a range read as a plain HTTP error.
     """
     cause = exc.__cause__
     if isinstance(exc, FileNotFoundError) and cause is not None and _is_transient(cause):
         return cause
+    if getattr(exc, "status", None) == 404:  # a range read of a missing HTTP object
+        return FileNotFoundError(str(exc))
     return exc
 
 
@@ -213,16 +217,21 @@ class RemoteFile(io.RawIOBase):
 
     Recently fetched ranges are kept so that the back-and-forth of a binary search
     near its end, or a line that crosses a fetch boundary, needs no new request.
+
+    Opening costs one request to learn the object's size, unless ``size`` is given.
+    A caller that knows which ranges it will read can pass the end of the last one
+    as ``size``: reads stop there, and an object shorter than that is reported as a
+    short read.
     """
 
-    def __init__(self, location: str):
+    def __init__(self, location: str, size: Optional[int] = None):
         super().__init__()
         self.location = location
         scheme = _scheme(location) or ""
         fs = _filesystem(scheme)
         # cache_type="none": every read() is one range request; caching happens here
         self._fh = _with_retries(
-            location, "open", lambda: fs.open(location, "rb", cache_type="none")
+            location, "open", lambda: fs.open(location, "rb", cache_type="none", size=size)
         )
         size = getattr(self._fh, "size", None)
         if size is None:
@@ -284,15 +293,19 @@ class RemoteFile(io.RawIOBase):
                 self._chunks.move_to_end(start)
                 return start, data
         if pos == self._sequential_end:
+            start = pos
             self._fetch_size = min(self._fetch_size * 2, _MAX_FETCH)
         else:
+            # Aligned, so nearby binary-search probes land in the same cached range,
+            # and a file smaller than one fetch is read once
+            start = pos - pos % _MIN_FETCH
             self._fetch_size = _MIN_FETCH
-        data = self.read_range(pos, pos + self._fetch_size)
-        self._sequential_end = pos + len(data)
-        self._chunks[pos] = data
+        data = self.read_range(start, start + self._fetch_size)
+        self._sequential_end = start + len(data)
+        self._chunks[start] = data
         while len(self._chunks) > 1 and sum(map(len, self._chunks.values())) > _CACHE_BYTES:
             self._chunks.popitem(last=False)
-        return pos, data
+        return start, data
 
     def readinto(self, buffer) -> int:  # type: ignore[override]
         if self._pos >= self.size or len(buffer) == 0:
@@ -360,11 +373,16 @@ def open_input(
 
 
 def exists(location: str) -> bool:
-    """os.path.exists() for local paths and remote locations."""
+    """os.path.exists() for local paths and remote locations (one HEAD request)."""
     if not is_remote(location):
         return os.path.exists(location)
     fs = _filesystem(_scheme(location) or "")
-    return bool(_with_retries(location, "check", lambda: fs.exists(location)))
+    try:
+        # info() rather than exists(): over HTTP, fsspec's exists() sends a GET
+        _with_retries(location, "check", lambda: fs.info(location))
+    except FileNotFoundError:
+        return False
+    return True
 
 
 def has_wildcards(location: str) -> bool:

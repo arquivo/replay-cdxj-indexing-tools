@@ -205,7 +205,8 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
     Resolve the full path to a shard file.
 
     1. If loc_map provided, use it to find filepath
-    2. Otherwise, construct path as: base_dir/shard_name.cdx.gz
+    2. Otherwise, construct path as: base_dir/shard_name, adding .cdx.gz unless the
+       name already ends in .cdx.gz or .cdxj.gz (as cdxj-search does)
 
     base_dir may be a local directory or a remote URL (see storage.is_remote).
     Path traversal defense: all resolved locations must remain within base_dir
@@ -219,9 +220,13 @@ def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] =
         except ValueError as e:
             raise ValueError(f"Path traversal detected in .loc file: {loc_path!r}") from e
 
-    # Default: shard_name.cdx.gz in base_dir
+    # Default: the shard file in base_dir
+    if shard_name.endswith((".cdx.gz", ".cdxj.gz")):
+        shard_file = shard_name
+    else:
+        shard_file = f"{shard_name}.cdx.gz"
     try:
-        return resolve_location(f"{shard_name}.cdx.gz", base_dir)
+        return resolve_location(shard_file, base_dir)
     except ValueError as e:
         raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}") from e
 
