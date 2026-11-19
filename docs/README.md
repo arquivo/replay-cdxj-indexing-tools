@@ -34,6 +34,7 @@ Individual tool documentation:
 - **[zipnum-to-flat-cdxj](tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
 - **[cdxj-search](tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 - **[cdxj-extract-field](tools/cdxj-extract-field.md)** - Extract JSON fields from CDXJ records
+- **[cdxj-to-csv](tools/cdxj-to-csv.md)** - Convert CDXJ records to CSV/TSV
 - **[arclist-to-path-index](tools/arclist-to-path-index.md)** - Convert arclist to path index format
 - **[arclist-index-to-redis](tools/arclist-index-to-redis.md)** - Complete arclist to Redis pipeline
 
@@ -176,6 +177,7 @@ arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 | `zipnum-to-flat-cdxj` | Convert ZipNum back to flat CDXJ | [docs](tools/zipnum-to-flat-cdxj.md) |
 | `cdxj-search` | Binary search indexes | [docs](tools/cdxj-search.md) |
 | `cdxj-extract-field` | Extract JSON fields from records | [docs](tools/cdxj-extract-field.md) |
+| `cdxj-to-csv` | Convert records to CSV/TSV | [docs](tools/cdxj-to-csv.md) |
 | `arclist-to-path-index` | Convert arclist to path index | [docs](tools/arclist-to-path-index.md) |
 | `arclist-index-to-redis` | Arclist to Redis pipeline | [docs](tools/arclist-index-to-redis.md) |
 | `cdxj-index-collection` | Complete pipeline script | [docs](reference-implementation.md) |
