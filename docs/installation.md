@@ -44,7 +44,15 @@ docker run -v $(pwd)/data:/data arquivo/replay-cdxj-indexing-tools:latest \
 # Process a collection
 docker run -v /path/to/collections:/data arquivo/replay-cdxj-indexing-tools:latest \
     cdxj-index-collection AWP999 --incremental
+
+# Search a remote index over HTTPS, without downloading it
+docker run --rm arquivo/replay-cdxj-indexing-tools:latest \
+    cdxj-search --url https://example.pt/ --matchType domain \
+    https://example.org/indexes/collection/collection.idx
 ```
+
+The image includes the `http` and `s3` extras; see [Remote Indexes](remote-indexes.md)
+for S3 settings.
 
 ### Building Docker Image Locally
 
@@ -94,6 +102,16 @@ pip install git+https://github.com/arquivo/replay-cdxj-indexing-tools.git
 pip install replay-cdxj-indexing-tools
 ```
 
+## Optional: Remote Index Support
+
+To read indexes from `http(s)://` or `s3://` locations, install the matching extras
+(see [Remote Indexes](remote-indexes.md)):
+
+```bash
+pip install "replay-cdxj-indexing-tools[http]"      # http:// and https://
+pip install "replay-cdxj-indexing-tools[s3]"        # s3://
+```
+
 ## Verify Installation
 
 Check that all commands are available:
@@ -139,6 +157,11 @@ mypy replay_cdxj_indexing_tools/
 Core dependencies (automatically installed):
 - **pywb >= 2.9.1** - Web archive replay toolkit
   - Includes warcio, surt, and other web archive tools
+
+Remote access dependencies (optional, see [Remote Indexes](remote-indexes.md)):
+- **fsspec >= 2023.1.0** - Filesystem abstraction (`http` and `s3` extras)
+- **aiohttp >= 3.8** - HTTP client (`http` extra)
+- **s3fs >= 2023.1.0** - S3 client (`s3` extra)
 
 Development dependencies (optional):
 - **pytest >= 7.0** - Testing framework

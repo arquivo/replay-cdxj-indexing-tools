@@ -2,6 +2,8 @@
 
 Convert CDXJ records to CSV or TSV, one row per record, from stdin or a file to stdout or a file.
 
+The input can also be an `http(s)://` or `s3://` URL, streamed without downloading it first; see [Remote Indexes](../remote-indexes.md).
+
 ## Purpose
 
 - **Spreadsheets and databases** - Load index metadata into tools that read delimited text

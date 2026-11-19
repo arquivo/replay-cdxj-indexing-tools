@@ -58,6 +58,8 @@ import sys
 from collections import defaultdict
 from typing import Dict, Set, Tuple
 
+from replay_cdxj_indexing_tools import storage
+
 
 def extract_surt_key(line: str) -> str:
     """
@@ -101,7 +103,7 @@ def find_excessive_urls(input_path: str, threshold: int = 1000) -> Dict[str, int
     if input_path == "-":
         fh = sys.stdin
     else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
-        fh = open(input_path, "r", encoding="utf-8")
+        fh = storage.open_input(input_path, "r", encoding="utf-8")
 
     try:
         for line in fh:
@@ -153,7 +155,7 @@ def filter_excessive_urls(
     if input_path == "-":
         input_fh = sys.stdin
     else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
-        input_fh = open(input_path, "r", encoding="utf-8", buffering=buffer_size)
+        input_fh = storage.open_input(input_path, "r", encoding="utf-8", buffering=buffer_size)
 
     # Open output
     if output_path == "-":
@@ -281,7 +283,12 @@ Examples:
         help="Find excessive URLs (Pass 1)",
         description="Find URLs that appear more than threshold times",
     )
-    find_parser.add_argument("-i", "--input", required=True, help="Input CDXJ file, or - for stdin")
+    find_parser.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        help="Input CDXJ file, http(s):// or s3:// URL, or - for stdin",
+    )
     find_parser.add_argument(
         "-n",
         "--threshold",
@@ -297,7 +304,10 @@ Examples:
         description="Filter out URLs from a blacklist",
     )
     remove_parser.add_argument(
-        "-i", "--input", required=True, help="Input CDXJ file, or - for stdin"
+        "-i",
+        "--input",
+        required=True,
+        help="Input CDXJ file, http(s):// or s3:// URL, or - for stdin",
     )
     remove_parser.add_argument(
         "-b",
@@ -316,7 +326,10 @@ Examples:
         description="Automatically find and filter excessive URLs",
     )
     auto_parser.add_argument(
-        "-i", "--input", required=True, help="Input CDXJ file (cannot be stdin for auto mode)"
+        "-i",
+        "--input",
+        required=True,
+        help="Input CDXJ file or http(s):// or s3:// URL (cannot be stdin for auto mode)",
     )
     auto_parser.add_argument(
         "-o", "--output", default="-", help="Output file, or - for stdout (default: stdout)"

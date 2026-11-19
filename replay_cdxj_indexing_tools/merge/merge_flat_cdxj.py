@@ -52,6 +52,7 @@ import heapq
 import os
 import sys
 
+from replay_cdxj_indexing_tools import storage
 from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter
 
 
@@ -111,7 +112,8 @@ def get_all_files(paths, exclude_patterns=None, verbose=False):
     total_included = 0
 
     for path in paths:
-        if os.path.isfile(path):
+        # Remote URLs are taken as files; there is no directory walk over HTTP or S3
+        if storage.is_remote(path) or os.path.isfile(path):
             total_found += 1
             excluded, pattern = should_exclude(path, exclude_patterns)
             if excluded:
@@ -204,7 +206,9 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
     with contextlib.ExitStack() as stack:
         # Open all input files; ExitStack ensures every handle is closed on exit
         # pylint: disable-next=unspecified-encoding  # system locale follows caller's environment
-        file_handles = [stack.enter_context(open(f, "r", buffering=buffer_size)) for f in files]
+        file_handles = [
+            stack.enter_context(storage.open_input(f, "r", buffering=buffer_size)) for f in files
+        ]
         line_filter = CdxjLineFilter()
         readers = [iter_records(fh, f, line_filter) for f, fh in zip(files, file_handles)]
 
@@ -267,7 +271,11 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("output", help="Output file name (use '-' for stdout)")
-    parser.add_argument("paths", nargs="+", help="List of sorted input files or directories")
+    parser.add_argument(
+        "paths",
+        nargs="+",
+        help="List of sorted input files, directories, or http(s):// and s3:// URLs",
+    )
     parser.add_argument(
         "--exclude",
         action="append",

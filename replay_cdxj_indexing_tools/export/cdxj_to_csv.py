@@ -89,6 +89,7 @@ from typing import (
     Union,
 )
 
+from replay_cdxj_indexing_tools import storage
 from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter
 from replay_cdxj_indexing_tools.cli_utils import positive_int
 from replay_cdxj_indexing_tools.search.extract_field import parse_cdxj_line
@@ -287,8 +288,7 @@ def _open_input(input_file: str) -> IO[str]:
     if input_file == "-":
         return sys.stdin
     # CDXJ is UTF-8 regardless of the process locale
-    # pylint: disable-next=consider-using-with
-    return open(input_file, "r", encoding="utf-8")
+    return storage.open_input(input_file, "r", encoding="utf-8")
 
 
 def list_columns(
@@ -435,7 +435,7 @@ Examples:
         "-i",
         dest="input_file",
         default="-",
-        help="Input CDXJ file (default: stdin)",
+        help="Input CDXJ file or http(s):// or s3:// URL (default: stdin)",
     )
     parser.add_argument(
         "--output",

@@ -16,6 +16,7 @@ Tools for processing web archive CDXJ indexes at scale. Features parallel indexi
 - 🔁 **Incremental processing** for daily updates (90% time reduction)
 - 🛡️ **Atomic write protection** prevents data corruption
 - 🔧 **Unix pipe workflows** for efficient processing
+- 🌐 **Remote indexes**: search and stream CDXJ/ZipNum over HTTP(S) or S3 without downloading them
 
 ## Quick Start
 
@@ -42,6 +43,7 @@ cdxj-index-collection AWP-999
 - **[Installation](docs/installation.md)** - Detailed setup guide
 - **[Reference Implementation](docs/reference-implementation.md)** - Complete workflow script guide
 - **[Incremental Workflow](docs/incremental-workflow.md)** - Daily updates (90% faster)
+- **[Remote Indexes](docs/remote-indexes.md)** - Query indexes over HTTP(S) and S3
 - **[Troubleshooting](docs/troubleshooting.md)** - Common issues
 
 ### Tool Reference

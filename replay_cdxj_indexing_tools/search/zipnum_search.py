@@ -10,11 +10,14 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Dict, Iterator, List, Optional, Tuple
 
-from replay_cdxj_indexing_tools.path_safety import resolve_within
+from replay_cdxj_indexing_tools import storage
+from replay_cdxj_indexing_tools.path_safety import resolve_location
 
 logger = logging.getLogger(__name__)
 
 _MAX_BLOCK_READ = 512 * 1024 * 1024  # 512 MB hard cap against crafted .idx files
+# Adjacent blocks of a remote shard are fetched together, up to this many bytes
+_MAX_REMOTE_FETCH = 16 * 1024 * 1024
 
 
 def parse_idx_line(line: str) -> Tuple[str, str, int, int, int]:
@@ -59,7 +62,7 @@ def read_loc_file(loc_filepath: str) -> Dict[str, str]:
     """
     loc_map = {}
 
-    with open(loc_filepath, "r", encoding="utf-8") as fh:
+    with storage.open_input(loc_filepath, "r", encoding="utf-8") as fh:
         for line in fh:
             line = line.strip()
             if not line or line.startswith("#"):
@@ -74,6 +77,14 @@ def read_loc_file(loc_filepath: str) -> Dict[str, str]:
             loc_map[shard_name] = filepath
 
     return loc_map
+
+
+def _read_loc_if_present(loc_filepath: str) -> Optional[Dict[str, str]]:
+    """read_loc_file(), or None if there is no such file (one request when remote)."""
+    try:
+        return read_loc_file(loc_filepath)
+    except FileNotFoundError:
+        return None
 
 
 def search_zipnum_index(
@@ -99,7 +110,7 @@ def search_zipnum_index(
     matching_blocks = []
 
     try:
-        with open(idx_filepath, "rb") as fp:
+        with storage.open_input(idx_filepath, "rb") as fp:
             # Get file size for binary search
             fp.seek(0, 2)
             file_size = fp.tell()
@@ -315,6 +326,112 @@ def search_zipnum_data_block(
     return results
 
 
+def _block_matches(
+    compressed_data: bytes, offset: int, search_key: str, match_prefix: bool, verbose: bool
+) -> List[str]:
+    """Decompress one ZipNum block and return its lines that match search_key."""
+    matches: List[str] = []
+
+    try:
+        decompressed_data = gzip.decompress(compressed_data)
+    except Exception as decompress_error:  # pylint: disable=broad-exception-caught
+        if verbose:
+            error_msg = f"Failed to decompress block at offset {offset}: {decompress_error}"
+            print(f"  Warning: {error_msg}", file=sys.stderr)
+        return matches
+
+    try:
+        text = decompressed_data.decode("utf-8")
+    except UnicodeDecodeError:
+        logger.warning(
+            "Invalid UTF-8 in compressed block at offset %d, using replace mode",
+            offset,
+        )
+        text = decompressed_data.decode("utf-8", errors="replace")
+    for line in text.split("\n"):
+        if "\ufffd" in line:  # replacement char indicates corrupt data
+            continue
+        line_str = line.strip()
+        if not line_str:
+            continue
+
+        parts = line_str.split(" ", 1)
+        if not parts:
+            continue
+
+        line_key = parts[0]
+
+        if match_prefix:
+            if line_key.startswith(search_key):
+                matches.append(line_str)
+            elif line_key > search_key and not line_key.startswith(search_key):
+                break
+        else:
+            if line_key == search_key:
+                matches.append(line_str)
+            elif line_key > search_key:
+                break
+
+    return matches
+
+
+def _coalesce_blocks(blocks: List[Tuple[str, int, int]]) -> List[List[Tuple[str, int, int]]]:
+    """Group blocks that are back to back in the shard, so each group is one range read."""
+    groups: List[List[Tuple[str, int, int]]] = []
+    group_end = group_size = 0
+    for block in sorted(blocks, key=lambda b: b[1]):
+        _, offset, length = block
+        length = min(length, _MAX_BLOCK_READ)
+        if groups and offset == group_end and group_size + length <= _MAX_REMOTE_FETCH:
+            groups[-1].append(block)
+            group_size += length
+        else:
+            groups.append([block])
+            group_size = length
+        group_end = offset + length
+    return groups
+
+
+def _search_remote_shard_blocks(
+    shard_location: str,
+    blocks: List[Tuple[str, int, int]],
+    search_key: str,
+    match_prefix: bool,
+    verbose: bool,
+) -> List[str]:
+    """
+    search_shard_blocks() for a remote shard: one range request per run of adjacent blocks.
+
+    Read errors are raised (as storage.RemoteReadError or FileNotFoundError) rather
+    than skipped, so that an unavailable remote shard is not mistaken for no matches.
+    """
+    all_results: List[str] = []
+
+    groups = _coalesce_blocks(blocks)
+    # The .idx gives every range to read, so the shard's size is not fetched
+    read_end = max(offset + min(length, _MAX_BLOCK_READ) for _, offset, length in blocks)
+    with storage.RemoteFile(shard_location, size=read_end) as remote:
+        for group in groups:
+            group_start = group[0][1]
+            group_end = group[-1][1] + min(group[-1][2], _MAX_BLOCK_READ)
+            if verbose:
+                print(
+                    f"  Fetching {len(group)} block(s) from {shard_location} "
+                    f"(bytes {group_start}-{group_end - 1})",
+                    file=sys.stderr,
+                )
+            data = remote.read_range(group_start, group_end)
+            for _surt_key, offset, length in group:
+                rel = offset - group_start
+                compressed_data = data[rel : rel + min(length, _MAX_BLOCK_READ)]
+                if compressed_data:
+                    all_results.extend(
+                        _block_matches(compressed_data, offset, search_key, match_prefix, verbose)
+                    )
+
+    return all_results
+
+
 def search_shard_blocks(
     shard_path: str,
     blocks: List[Tuple[str, int, int]],
@@ -326,9 +443,11 @@ def search_shard_blocks(
     Search multiple blocks in a single shard file efficiently.
 
     Opens the file once and seeks to each block, avoiding repeated file opens.
+    Errors reading a local shard are reported (with verbose) and skipped; errors
+    reading a remote shard are raised.
 
     Args:
-        shard_path: Path to shard file
+        shard_path: Path to shard file, or remote location (see storage.is_remote)
         blocks: List of (surt_key, offset, length) tuples for this shard
         search_key: SURT key to search for
         match_prefix: If True, match all entries starting with search_key
@@ -337,6 +456,9 @@ def search_shard_blocks(
     Returns:
         List of matching CDXJ lines
     """
+    if storage.is_remote(shard_path):
+        return _search_remote_shard_blocks(shard_path, blocks, search_key, match_prefix, verbose)
+
     all_results = []
 
     try:
@@ -360,49 +482,9 @@ def search_shard_blocks(
                 if not compressed_data:
                     continue
 
-                # Decompress the block
-                try:
-                    decompressed_data = gzip.decompress(compressed_data)
-                except Exception as decompress_error:  # pylint: disable=broad-exception-caught
-                    if verbose:
-                        error_msg = (
-                            f"Failed to decompress block at offset {offset}: {decompress_error}"
-                        )
-                        print(f"  Warning: {error_msg}", file=sys.stderr)
-                    continue
-
-                # Parse and filter lines
-                try:
-                    text = decompressed_data.decode("utf-8")
-                except UnicodeDecodeError:
-                    logger.warning(
-                        "Invalid UTF-8 in compressed block at offset %d, using replace mode",
-                        offset,
-                    )
-                    text = decompressed_data.decode("utf-8", errors="replace")
-                for line in text.split("\n"):
-                    if "\ufffd" in line:  # replacement char indicates corrupt data
-                        continue
-                    line_str = line.strip()
-                    if not line_str:
-                        continue
-
-                    parts = line_str.split(" ", 1)
-                    if not parts:
-                        continue
-
-                    line_key = parts[0]
-
-                    if match_prefix:
-                        if line_key.startswith(search_key):
-                            all_results.append(line_str)
-                        elif line_key > search_key and not line_key.startswith(search_key):
-                            break
-                    else:
-                        if line_key == search_key:
-                            all_results.append(line_str)
-                        elif line_key > search_key:
-                            break
+                all_results.extend(
+                    _block_matches(compressed_data, offset, search_key, match_prefix, verbose)
+                )
 
     except Exception as e:  # pylint: disable=broad-exception-caught  # non-fatal; caller skips
         if verbose:
@@ -431,12 +513,13 @@ def search_zipnum_file(
     flat-cdxj-to-zipnum; otherwise matches may be missed.
 
     Args:
-        idx_filepath: Path to .idx file
+        idx_filepath: Path to .idx file, or remote location (see storage.is_remote)
         search_key: SURT key to search for
         match_prefix: If True, match all entries starting with search_key
         verbose: If True, print debug info to stderr
         loc_filepath: Optional path to .loc file (auto-detected if None)
-        base_dir: Optional base directory for shard files (defaults to idx file directory)
+        base_dir: Optional base directory or URL for shard files (defaults to the
+            directory of the idx file)
         max_workers: Maximum number of parallel workers for searching shards (default: 4)
 
     Yields:
@@ -444,8 +527,9 @@ def search_zipnum_file(
 
     Security:
         Path traversal: .loc file entries and .idx shard names are validated with
-        path_safety.resolve_within(path, base_dir) before any file open. Detected
-        attempts are logged as warnings and raise ValueError. (CWE-22)
+        path_safety.resolve_location(entry, base_dir) before any file open, so they
+        cannot leave base_dir, whether it is a local directory or a URL. Detected
+        attempts are logged as warnings and raise ValueError. (CWE-22, CWE-918)
         Trust boundary: base_dir is trusted (caller-supplied); .loc/.idx contents
         are untrusted. See test_zipnum_path_traversal_* for attack scenarios.
     """
@@ -461,23 +545,22 @@ def search_zipnum_file(
 
     # Determine base directory
     if base_dir is None:
-        base_dir = os.path.dirname(os.path.abspath(idx_filepath))
+        base_dir = storage.parent_location(idx_filepath)
 
-    # Try to find and read .loc file
+    # Try to find and read .loc file. Without one, shard names in the .idx are
+    # resolved relative to base_dir.
     loc_map = None
     if loc_filepath:
-        if os.path.exists(loc_filepath):
-            loc_map = read_loc_file(loc_filepath)
-            if verbose:
-                print(f"  Using .loc file: {loc_filepath}", file=sys.stderr)
+        loc_map = _read_loc_if_present(loc_filepath)
+        if loc_map is not None and verbose:
+            print(f"  Using .loc file: {loc_filepath}", file=sys.stderr)
     else:
         # Auto-detect .loc file
         base, _ = os.path.splitext(idx_filepath)
         auto_loc = base + ".loc"
-        if os.path.exists(auto_loc):
-            loc_map = read_loc_file(auto_loc)
-            if verbose:
-                print(f"  Found .loc file: {auto_loc}", file=sys.stderr)
+        loc_map = _read_loc_if_present(auto_loc)
+        if loc_map is not None and verbose:
+            print(f"  Found .loc file: {auto_loc}", file=sys.stderr)
 
     # Search index for matching blocks
     blocks = search_zipnum_index(idx_filepath, search_key, match_prefix, verbose)
@@ -494,27 +577,27 @@ def search_zipnum_file(
         # Resolve shard path using .loc file or base_dir
         if loc_map and shard_name in loc_map:
             shard_path = loc_map[shard_name]
-            if not os.path.isabs(shard_path):
-                shard_path = os.path.join(base_dir, shard_path)
             try:
-                shard_path = resolve_within(shard_path, base_dir)
+                shard_path = resolve_location(shard_path, base_dir)
             except ValueError as e:
                 logger.warning("Path traversal attempt via .loc file: %s", e)
                 raise ValueError(f"Path traversal detected in .loc file: {shard_path!r}") from e
         else:
             if not shard_name.endswith(".cdx.gz") and not shard_name.endswith(".cdxj.gz"):
-                shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
+                shard_path = f"{shard_name}.cdx.gz"
             else:
-                shard_path = os.path.join(base_dir, shard_name)
+                shard_path = shard_name
             try:
-                shard_path = resolve_within(shard_path, base_dir)
+                shard_path = resolve_location(shard_path, base_dir)
             except ValueError as e:
                 logger.warning("Path traversal attempt via .idx shard name: %s", e)
                 raise ValueError(
                     f"Path traversal detected in .idx shard name: {shard_name!r}"
                 ) from e
 
-        if not os.path.exists(shard_path):
+        # Remote shards are not checked up front: that would cost a request per
+        # shard, and a missing one raises when it is read.
+        if not storage.is_remote(shard_path) and not os.path.exists(shard_path):
             if verbose:
                 print(f"  Warning: Shard file not found: {shard_path}", file=sys.stderr)
             continue
@@ -552,6 +635,8 @@ def search_zipnum_file(
                         yield result
                 except Exception as e:  # pylint: disable=broad-exception-caught  # non-fatal shard
                     shard_path = futures[future]
+                    if storage.is_remote(shard_path):
+                        raise
                     if verbose:
                         print(f"  Error processing {shard_path}: {e}", file=sys.stderr)
 
