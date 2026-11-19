@@ -55,6 +55,7 @@ cdxj-index-collection AWP-999
 - **[cdxj-search](docs/tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 - **[cdxj-extract-field](docs/tools/cdxj-extract-field.md)** - Extract JSON fields from CDXJ records
 - **[cdxj-stats](docs/tools/cdxj-stats.md)** - Pluggable capture-count statistics (mimetype, per-domain) from CDXJ streams
+- **[cdxj-to-csv](docs/tools/cdxj-to-csv.md)** - Convert CDXJ records to CSV/TSV
 - **[arclist-to-path-index](docs/tools/arclist-to-path-index.md)** - Convert arclist files to path index format
 - **[arclist-index-to-redis](docs/tools/arclist-index-to-redis.md)** - Complete arclist to Redis pipeline
 - **[cdxj-index-collection](docs/reference-implementation.md)** - Complete collection processing pipeline

@@ -73,6 +73,7 @@ arclist-index-to-redis = "replay_cdxj_indexing_tools.arclist_index_to_redis:main
 cdxj-search = "replay_cdxj_indexing_tools.search.cdxj_search:main"
 cdxj-extract-field = "replay_cdxj_indexing_tools.search.extract_field:main"
 cdxj-stats = "replay_cdxj_indexing_tools.stats.cdxj_stats:main"
+cdxj-to-csv = "replay_cdxj_indexing_tools.export.cdxj_to_csv:main"
 
 [project.entry-points."replay_cdxj_indexing_tools.sinks"]
 mimetype = "replay_cdxj_indexing_tools.stats.sinks.mimetype:MimetypeSink"
