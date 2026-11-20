@@ -36,13 +36,15 @@ TEST COVERAGE SUMMARY
 =====================
 Total: 22 tests across 4 test classes
 
-1. TestExtractPrejson (5 tests) - CDXJ Line Parsing
-   Tests the extract_prejson() function that separates CDXJ keys from JSON metadata.
+1. TestExtractPrejson (6 tests) - CDXJ Line Parsing
+   Tests the extract_prejson() function that returns the .idx key (SURT URL key and
+   timestamp, as raw bytes) of a CDXJ line.
 
    - test_extract_prejson_with_json: Standard CDXJ line with space-separated key and JSON
-   - test_extract_prejson_without_json: Plain CDX line without JSON metadata
-   - test_extract_prejson_empty_line: Empty line handling (should return empty strings)
-   - test_extract_prejson_only_json: Malformed line with only JSON, no key
+   - test_extract_prejson_without_json: Key-only and legacy CDX lines without JSON
+   - test_extract_prejson_empty_line: Empty line handling (should return empty bytes)
+   - test_extract_prejson_brace_in_url_key: '{' and '{{' inside the URL key are kept
+   - test_extract_prejson_non_utf8_url_key: Invalid UTF-8 bytes are kept unchanged
    - test_extract_prejson_with_newline: Line with trailing newline character
 
 2. TestOpenInputPath (2 tests) - File Input Handling
@@ -240,8 +242,8 @@ class TestExtractPrejson(unittest.TestCase):
     """
     Tests for the extract_prejson() function.
 
-    This function parses CDXJ lines to extract the key portion (SURT URL + timestamp)
-    from the optional JSON metadata. The key is used for sorting and indexing.
+    This function returns the .idx key of a CDXJ line: its first two space-separated
+    fields, the SURT URL key and the timestamp, as raw bytes.
 
     CDXJ Format: <surt_url> <timestamp> [<json_metadata>]
     Example: org,example)/ 20200101120000 {"url": "http://example.org/", "status": "200"}
@@ -249,75 +251,90 @@ class TestExtractPrejson(unittest.TestCase):
 
     def test_extract_prejson_with_json(self):
         """
-        Test extracting pre-JSON portion from a standard CDXJ line.
-
-        Validates that the function correctly splits a CDXJ line containing JSON metadata,
-        returning only the SURT key and timestamp (everything before the opening brace).
+        Test extracting the key from a standard CDXJ line.
 
         Input: 'org,example)/ 20200101120000 {"url": "http://example.org/", "status": "200"}'
         Expected: 'org,example)/ 20200101120000'
         """
         line = b'org,example)/ 20200101120000 {"url": "http://example.org/", "status": "200"}'
         result = extract_prejson(line)
-        self.assertEqual(result, "org,example)/ 20200101120000")
+        self.assertEqual(result, b"org,example)/ 20200101120000")
 
     def test_extract_prejson_without_json(self):
         """
-        Test extracting from a plain CDX line without JSON metadata.
+        Test extracting from a line without JSON metadata.
 
-        Some legacy CDX indexes don't include JSON. The function should return
-        the entire line (minus whitespace) when no JSON is present.
-
-        Input: 'org,example)/ 20200101120000'
-        Expected: 'org,example)/ 20200101120000'
+        A line with only the key, or a legacy space-separated CDX line, still yields
+        the first two fields.
         """
-        line = b"org,example)/ 20200101120000 http://example.org/ text/html 200"
-        result = extract_prejson(line)
-        # Should return the entire line since there's no JSON
-        self.assertEqual(result, "org,example)/ 20200101120000 http://example.org/ text/html 200")
+        self.assertEqual(
+            extract_prejson(b"org,example)/ 20200101120000\n"), b"org,example)/ 20200101120000"
+        )
+        self.assertEqual(
+            extract_prejson(b"org,example)/ 20200101120000 http://example.org/ text/html 200"),
+            b"org,example)/ 20200101120000",
+        )
 
     def test_extract_prejson_empty_line(self):
         """
         Test extracting from an empty line.
 
-        Empty lines can occur in malformed CDXJ files or during streaming.
-        The function should gracefully return an empty string without errors.
-
         Input: '' (empty bytes)
-        Expected: '' (empty string)
+        Expected: '' (empty bytes)
         """
         line = b""
         result = extract_prejson(line)
-        self.assertEqual(result, "")
+        self.assertEqual(result, b"")
 
-    def test_extract_prejson_only_json(self):
+    def test_extract_prejson_brace_in_url_key(self):
         """
-        Test line that starts with JSON (malformed CDXJ).
+        Test that a '{' inside the SURT URL key is kept, with the timestamp.
 
-        A malformed CDXJ line might contain only JSON without a key.
-        When the opening brace is at position 0, there's no key to extract.
-
-        Input: '{"url": "http://example.org/"}'
-        Expected: '' (empty string, since no key before JSON)
+        Templated URLs such as WordPress/schema.org SearchAction targets put '{' in the
+        URL key. Cutting at the first '{' truncated the key mid-URL, dropped the
+        timestamp and broke the .idx sort order.
         """
-        line = b'{"url": "http://example.org/"}'
-        result = extract_prejson(line)
-        # Should return empty string since JSON starts at position 0
-        self.assertEqual(result, "")
+        cases = [
+            (
+                b"com,example)/?s={search_term_string} 20250304171133 "
+                b'{"url": "https://example.com/?s=%7Bsearch_term_string%7D"}\n',
+                b"com,example)/?s={search_term_string} 20250304171133",
+            ),
+            (
+                b"16,139,100,39)/kayleighwanless7258/kayleigh-wanless-escort2018/-/"
+                b"{{avatar_url}} 20250304171133 "
+                b'{"url": "http://39.100.139.16/kayleighwanless7258/'
+                b'kayleigh-wanless-escort2018/-/%7B%7Bavatar_url%7D%7D"}\n',
+                b"16,139,100,39)/kayleighwanless7258/kayleigh-wanless-escort2018/-/"
+                b"{{avatar_url}} 20250304171133",
+            ),
+        ]
+        for line, expected in cases:
+            with self.subTest(line=line):
+                self.assertEqual(extract_prejson(line), expected)
+
+    def test_extract_prejson_non_utf8_url_key(self):
+        """
+        Test that bytes that are not valid UTF-8 are kept as they are.
+
+        The key must be byte-identical to the start of the shard line; decoding with
+        errors="replace" would turn them into U+FFFD.
+        """
+        line = b'pt,caf\xe9)/men\xfa 20200101120000 {"url": "http://caf\xe9.pt/men\xfa"}\n'
+        self.assertEqual(extract_prejson(line), b"pt,caf\xe9)/men\xfa 20200101120000")
+        self.assertTrue(line.startswith(extract_prejson(line)))
 
     def test_extract_prejson_with_newline(self):
         """
         Test line with trailing newline characters.
 
-        CDXJ files typically have newline-terminated lines. The function should
-        handle newlines correctly and strip them from the output.
-
-        Input: 'org,example)/ 20200101120000 {"status": "200"}\n'
+        Input: 'org,example)/ 20200101120000 {"status": "200"}\r\n'
         Expected: 'org,example)/ 20200101120000' (newline removed, JSON removed)
         """
         line = b'org,example)/ 20200101120000 {"status": "200"}\r\n'
         result = extract_prejson(line)
-        self.assertEqual(result, "org,example)/ 20200101120000")
+        self.assertEqual(result, b"org,example)/ 20200101120000")
+        self.assertEqual(extract_prejson(b"org,example)/ 20200101120000\r\n"), result)
 
 
 class TestOpenInputPath(unittest.TestCase):
@@ -1193,6 +1210,93 @@ class TestCdxjToZipnum(unittest.TestCase):
         self.assertGreater(len({row[1] for row in rows}), 1, "Test needs multiple shards")
         self.assertEqual([row[4] for row in rows], [str(n) for n in range(1, len(rows) + 1)])
 
+    def _build_and_read_idx(self, lines, chunk_size, shard_size_mb, base):
+        """Build a ZipNum from lines; return (idx rows split on tab, {shard: data})."""
+        input_file = os.path.join(self.input_dir, f"{base}.cdxj")
+        with open(input_file, "wb") as f:
+            f.writelines(lines)
+        cdxj_to_zipnum(
+            self.output_dir,
+            input_file,
+            shard_size_mb=shard_size_mb,
+            chunk_size=chunk_size,
+            base=base,
+            # Chunks left in the compression queue at the end do not rotate shards
+            workers=1,
+        )
+        with open(os.path.join(self.output_dir, f"{base}.idx"), "rb") as f:
+            rows = [line.rstrip(b"\n").split(b"\t") for line in f]
+        shards = {}
+        for name in {row[1].decode() for row in rows}:
+            with open(os.path.join(self.output_dir, name), "rb") as f:
+                shards[name] = f.read()
+        return rows, shards
+
+    def _assert_idx_matches_blocks(self, rows, shards):
+        """Each key is "<urlkey> <timestamp>" of its block's first line, byte for byte."""
+        for key, shard, offset, length, _ in rows:
+            block = shards[shard.decode()][int(offset) : int(offset) + int(length)]
+            first_line = gzip.decompress(block).split(b"\n", 1)[0]
+            self.assertEqual(key, b" ".join(first_line.split(b" ", 2)[:2]))
+
+    def _assert_idx_sorted(self, rows):
+        """The .idx is in C byte order of key + tab, as pywb and LMDB loaders expect."""
+        keys = [row[0] + b"\t" for row in rows]
+        self.assertEqual(keys, sorted(keys))
+
+    def test_idx_keys_with_braces_and_non_utf8_bytes(self):
+        """
+        URL keys containing '{', '{{' or invalid UTF-8 keep their full key and
+        timestamp in the .idx, and the .idx stays sorted.
+
+        Cutting at the first '{' wrote "com,example)/-/" for the "-/{{avatar_url}}"
+        block, which sorts before the previous "com,example)/-/abc ..." key.
+        """
+        lines = sorted(
+            [
+                b'com,example)/-/abc 20200101000000 {"url": "http://example.com/-/abc"}\n',
+                b"com,example)/-/{{avatar_url}} 20250304171133 "
+                b'{"url": "http://example.com/-/%7B%7Bavatar_url%7D%7D"}\n',
+                b'com,example)/?s=foo 20200101000000 {"url": "http://example.com/?s=foo"}\n',
+                b"com,example)/?s={search_term_string} 20200101000000 "
+                b'{"url": "http://example.com/?s=%7Bsearch_term_string%7D"}\n',
+                b'pt,caf\xe9)/ 20200101000000 {"url": "http://caf\xe9.pt/"}\n',
+                b'pt,caf\xe9)/men\xfa 20200101000000 {"url": "http://caf\xe9.pt/men\xfa"}\n',
+            ]
+        )
+        for shard_size_mb, label in [(1000, "single"), (0.0001, "multi")]:
+            with self.subTest(shards=label):
+                rows, shards = self._build_and_read_idx(lines, 1, shard_size_mb, label)
+                self.assertEqual(len(rows), len(lines))
+                self.assertEqual(len(shards) > 1, label == "multi")
+                self.assertEqual([row[0] for row in rows], [extract_prejson(x) for x in lines])
+                self._assert_idx_matches_blocks(rows, shards)
+                self._assert_idx_sorted(rows)
+
+    def test_idx_sorted_for_sorted_input(self):
+        """
+        For any sorted CDXJ input the .idx keys are sorted too, whatever bytes the URL
+        keys contain ('{', '}', '%', non-ASCII and invalid UTF-8).
+        """
+        import random
+
+        rng = random.Random(1504)
+        alphabet = [b"a", b"b", b"z", b"/", b"-", b"{", b"}", b"{{", b"%7B", b"\xc3\xa9", b"\xff"]
+        lines = set()
+        while len(lines) < 600:
+            path = b"".join(rng.choice(alphabet) for _ in range(rng.randint(0, 6)))
+            ts = b"20%02d0101000000" % rng.randint(0, 25)
+            lines.add(b"com,example)/" + path + b" " + ts + b' {"url": "http://example.com/"}\n')
+        lines = sorted(lines)
+
+        for shard_size_mb, label in [(1000, "single"), (0.002, "multi")]:
+            with self.subTest(shards=label):
+                rows, shards = self._build_and_read_idx(lines, 3, shard_size_mb, label)
+                self.assertEqual(len(rows), 200)
+                self.assertEqual(len(shards) > 1, label == "multi")
+                self._assert_idx_matches_blocks(rows, shards)
+                self._assert_idx_sorted(rows)
+
 
 class TestPywbCompatibility(unittest.TestCase):
     """
@@ -1269,6 +1373,28 @@ class TestPywbCompatibility(unittest.TestCase):
         shards = sorted(f for f in os.listdir(self.output_dir) if f.endswith(".cdx.gz"))
         self.assertEqual(shards, ["test.cdx.gz"])
         self._assert_all_found(os.path.join(self.output_dir, "test.idx"), counts)
+
+    def test_pywb_finds_urls_with_braces_in_url_key(self):
+        """
+        URL keys containing '{' (templated URLs such as "-/{{avatar_url}}") keep their
+        full .idx key, so pywb's binary search over the .idx finds every url around them.
+        Cutting the key at the first '{' left it unsorted and made pywb miss urls.
+        """
+        paths = [f"-/a{i:04d}" for i in range(300)]
+        paths += [f"-/{{{{avatar_url}}}}/{i:03d}" for i in range(30)]
+        paths += [f"-/{{x{i:03d}}}" for i in range(30)]
+        rows = sorted(
+            f'com,example)/{path} 20200101000000 {{"url": "http://example.com/{path}"}}'
+            for path in paths
+        )
+        with open(self.input_file, "w", encoding="utf-8") as f:
+            f.write("\n".join(rows) + "\n")
+
+        cdxj_to_zipnum(
+            self.output_dir, self.input_file, shard_size_mb=1000, chunk_size=7, base="test"
+        )
+
+        self._assert_all_found(os.path.join(self.output_dir, "test.idx"), dict.fromkeys(paths, 1))
 
 
 class TestNumericArgValidation(unittest.TestCase):
