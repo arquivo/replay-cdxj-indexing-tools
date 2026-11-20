@@ -127,17 +127,20 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
     Supports idx_path == '-' for stdin.
 
     Returns entries grouped by shard in order they appear.
+
+    Keys are the raw bytes of the shard lines and need not be valid UTF-8;
+    invalid bytes are replaced with U+FFFD in the returned key.
     """
     entries = []
 
     if idx_path == "-":
-        fh = sys.stdin
+        fh = sys.stdin.buffer
     else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
-        fh = open(idx_path, "r", encoding="utf-8")
+        fh = open(idx_path, "rb")
 
     try:
-        for line in fh:
-            line = line.strip()
+        for raw_line in fh:
+            line = raw_line.decode("utf-8", errors="replace").strip()
             if not line or line.startswith("#"):
                 continue
 

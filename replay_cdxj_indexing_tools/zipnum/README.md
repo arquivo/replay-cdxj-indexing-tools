@@ -128,6 +128,11 @@ Tab-separated index for binary search.
 <cdxj_key>\t<shard_name.cdx.gz>\t<byte_offset>\t<byte_length>\t<lineno>
 ```
 
+`<cdxj_key>` is `<urlkey> <timestamp>`, the first two space-separated fields of the
+block's first CDXJ line, copied byte for byte. It is the start of that shard line, so a
+sorted input gives an `.idx` sorted in byte order (`LC_ALL=C`), which pywb's binary search
+relies on.
+
 `<lineno>` is the line number of the entry in the `.idx`, starting at 1 and continuing
 across shards. It is **not** the shard number: pywb subtracts the `<lineno>` of the first
 and last matching entries to decide how many blocks to load.
@@ -137,6 +142,18 @@ and last matching entries to decide how many blocks to load.
 pt,governo,www)/ 20230615120200	arquivo-01.cdx.gz	186	193	1
 pt,sapo,www)/ 20230615120300	arquivo-01.cdx.gz	379	155	2
 ```
+
+**Indexes built with 1.3.0 or earlier** cut the key at the first `{` of the line. A URL
+key that contains `{` (e.g. templated URLs such as `/?s={search_term_string}` or
+`/-/{{avatar_url}}`) was truncated mid-URL and lost its timestamp, which leaves the `.idx`
+unsorted: pywb's binary search can load the wrong blocks and sorted-index loaders reject
+it. An affected key has no space; list them with:
+
+```bash
+awk -F'\t' 'index($1, " ") == 0' index.idx
+```
+
+The shards and the `.loc` are not affected.
 
 **Indexes built with 1.2.0 or earlier** wrote the shard number in this column, which
 makes pywb miss urls that start a chunk and truncate urls whose captures span several

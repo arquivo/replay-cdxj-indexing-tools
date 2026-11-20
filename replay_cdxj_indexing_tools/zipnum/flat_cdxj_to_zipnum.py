@@ -62,6 +62,7 @@ The tool creates three types of files:
 2. Index File (.idx)
    - Tab-separated index for binary search
    - Format: <key>\\t<shard>\\t<offset>\\t<length>\\t<lineno>
+   - <key> is "<urlkey> <timestamp>" of the chunk's first line, byte for byte
    - <lineno> is the 1-based line number of the entry in the .idx, counted
      across all shards (not the shard number); pywb relies on it
    - One entry per chunk (default: every 3000 lines)
@@ -205,17 +206,23 @@ def open_input_path(path: str) -> Union[BinaryIO, gzip.GzipFile]:
     return open(path, "rb")
 
 
-def extract_prejson(line_bytes: bytes) -> str:
+def extract_prejson(line_bytes: bytes) -> bytes:
     """
-    Return the CDXJ pre-JSON portion of a line.
-    If a '{' exists in the line, returns everything before the first '{'.
-    Otherwise returns the entire line (trimmed).
+    Return the .idx key of a CDXJ line: its first two space-separated fields
+    (``<urlkey> <timestamp>``).
+
+    The line is split on spaces rather than cut at the first '{', because a
+    SURT URL key never contains a space but can contain '{' (e.g. templated
+    URLs such as ``/?s={search_term_string}``). The key stays raw bytes so it
+    is byte-identical to the start of the shard line, which is what pywb's
+    binary search compares and what keeps the .idx sorted.
     """
-    line = line_bytes.decode("utf-8", errors="replace").rstrip("\r\n")
-    idx = line.find("{")
-    if idx != -1:
-        return line[:idx].strip()
-    return line.strip()
+    return b" ".join(line_bytes.rstrip(b"\r\n").split(b" ", 2)[:2])
+
+
+def _idx_line(key: bytes, shard_name: str, offset: int, length: int, lineno: int) -> bytes:
+    """Format one .idx line: <key>\\t<shard>\\t<offset>\\t<length>\\t<lineno>\\n."""
+    return key + f"\t{shard_name}\t{offset}\t{length}\t{lineno}\n".encode("utf-8")
 
 
 def stream_chunks_from_input(input_path: str, chunk_size: int) -> Iterable[Tuple[int, List[bytes]]]:
@@ -259,19 +266,25 @@ def compress_chunk_worker(chunk_data: bytes, compress_level: int) -> bytes:
 
 
 def rename_idx_shard(idx_path: str, old_name: str, new_name: str):
-    """Rewrite the shard column (2nd) of an idx file from old_name to new_name, streaming."""
+    """
+    Rewrite the shard column (2nd) of an idx file from old_name to new_name, streaming.
+
+    Works on bytes so keys that are not valid UTF-8 are copied unchanged.
+    """
+    old = old_name.encode("utf-8")
+    new = new_name.encode("utf-8")
     idx_dir = os.path.dirname(os.path.abspath(idx_path))
     tmp_fd, tmp_path = tempfile.mkstemp(dir=idx_dir, suffix=".tmp")
     try:
         with (
-            open(idx_path, "r", encoding="utf-8") as src,
-            os.fdopen(tmp_fd, "w", encoding="utf-8", buffering=65536) as dst,
+            open(idx_path, "rb") as src,
+            os.fdopen(tmp_fd, "wb", buffering=65536) as dst,
         ):
             for line in src:
-                parts = line.split("\t")
-                if len(parts) >= 2 and parts[1] == old_name:
-                    parts[1] = new_name
-                dst.write("\t".join(parts))
+                parts = line.split(b"\t")
+                if len(parts) >= 2 and parts[1] == old:
+                    parts[1] = new
+                dst.write(b"\t".join(parts))
         os.replace(tmp_path, idx_path)
     except BaseException:
         if os.path.exists(tmp_path):
@@ -336,7 +349,7 @@ def cdxj_to_zipnum(
     # This maintains the sorted order for binary search
 
     # Buffer for idx writes to reduce I/O calls
-    idx_buffer = []
+    idx_buffer: List[bytes] = []
     idx_buffer_size = 100  # Write idx in batches of 100 entries
     # 5th idx column: 1-based line number across all shards. pywb's ZipNum reader
     # subtracts these to count the blocks to load, so it must not be the shard number.
@@ -349,7 +362,8 @@ def cdxj_to_zipnum(
             compression_queue: deque = deque()
             max_queue_size = workers * 2  # Keep reasonable memory usage
 
-            with open(idx_name, "w", encoding="utf-8", buffering=65536) as idxf:
+            # Binary, so each key is written byte for byte as it appears in the shard
+            with open(idx_name, "wb", buffering=65536) as idxf:
                 for _, chunk_lines in chunk_generator:
                     # Prepare chunk data for compression
                     chunk_data = b"".join(chunk_lines)
@@ -377,7 +391,7 @@ def cdxj_to_zipnum(
                         end_offset = current_raw_fh.tell()
                         comp_len = end_offset - start_offset
 
-                        # Extract pre-JSON from first line in chunk for index key
+                        # Index key: "<urlkey> <timestamp>" of the chunk's first line
                         pre = extract_prejson(first_line)
 
                         shard_basename = os.path.basename(created_shards[current_shard])
@@ -386,12 +400,11 @@ def cdxj_to_zipnum(
                         # Buffer idx entries to reduce I/O calls
                         idx_lineno += 1
                         idx_buffer.append(
-                            f"{pre}\t{shard_basename}\t{start_offset}\t"
-                            f"{comp_len}\t{idx_lineno}\n"
+                            _idx_line(pre, shard_basename, start_offset, comp_len, idx_lineno)
                         )
 
                         if len(idx_buffer) >= idx_buffer_size:
-                            idxf.write("".join(idx_buffer))
+                            idxf.write(b"".join(idx_buffer))
                             idx_buffer.clear()
 
                         # Check if current shard has reached target size
@@ -399,7 +412,7 @@ def cdxj_to_zipnum(
                         if end_offset >= target_shard_size:
                             # Flush idx buffer before closing shard
                             if idx_buffer:
-                                idxf.write("".join(idx_buffer))
+                                idxf.write(b"".join(idx_buffer))
                                 idx_buffer.clear()
 
                             # Close and commit the current shard. A close() failure
@@ -431,7 +444,7 @@ def cdxj_to_zipnum(
                     end_offset = current_raw_fh.tell()
                     comp_len = end_offset - start_offset
 
-                    # Extract pre-JSON from first line in chunk for index key
+                    # Index key: "<urlkey> <timestamp>" of the chunk's first line
                     pre = extract_prejson(first_line)
 
                     shard_basename = os.path.basename(created_shards[current_shard])
@@ -440,16 +453,16 @@ def cdxj_to_zipnum(
                     # Buffer idx entries to reduce I/O calls
                     idx_lineno += 1
                     idx_buffer.append(
-                        f"{pre}\t{shard_basename}\t{start_offset}\t{comp_len}\t{idx_lineno}\n"
+                        _idx_line(pre, shard_basename, start_offset, comp_len, idx_lineno)
                     )
 
                     if len(idx_buffer) >= idx_buffer_size:
-                        idxf.write("".join(idx_buffer))
+                        idxf.write(b"".join(idx_buffer))
                         idx_buffer.clear()
 
                 # Flush any remaining idx entries
                 if idx_buffer:
-                    idxf.write("".join(idx_buffer))
+                    idxf.write(b"".join(idx_buffer))
 
         # Close and commit the final shard; close errors (e.g. ENOSPC while
         # flushing) propagate so callers learn about them.

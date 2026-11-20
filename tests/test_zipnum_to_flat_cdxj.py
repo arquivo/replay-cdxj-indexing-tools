@@ -7,6 +7,7 @@ Tests ZipNum to flat CDXJ conversion functionality.
 """
 
 import gzip
+import io
 import os
 import subprocess
 import sys
@@ -94,6 +95,23 @@ class TestReadIdxFile:
 
         entries = read_idx_file(str(idx_file))
         assert len(entries) == 2
+
+    def test_read_idx_non_utf8_key(self, tmp_path, monkeypatch):
+        """Keys are raw shard bytes and need not be valid UTF-8, from a file or stdin."""
+        data = (
+            b"pt,caf\xe9)/ 20230101000000\ttest\t0\t100\t1\n"
+            b"pt,caf\xe9)/men\xfa 20230102000000\ttest\t100\t150\t2\n"
+        )
+        idx_file = tmp_path / "test.idx"
+        idx_file.write_bytes(data)
+        monkeypatch.setattr(sys, "stdin", types.SimpleNamespace(buffer=io.BytesIO(data)))
+
+        for source in (str(idx_file), "-"):
+            entries = read_idx_file(source)
+            assert entries == [
+                ("pt,caf\ufffd)/ 20230101000000", "test", 0, 100, 1),
+                ("pt,caf\ufffd)/men\ufffd 20230102000000", "test", 100, 150, 2),
+            ]
 
 
 class TestReadLocFile:
