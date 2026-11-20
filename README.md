@@ -52,6 +52,7 @@ cdxj-index-collection AWP-999
 - **[filter-excessive-urls](docs/tools/filter-excessive-urls.md)** - Crawler trap removal
 - **[flat-cdxj-to-zipnum](docs/tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
 - **[zipnum-to-flat-cdxj](docs/tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
+- **[zipnum-repair-idx](docs/tools/zipnum-repair-idx.md)** - Repair .idx keys truncated at a `{` in the URL key
 - **[cdxj-search](docs/tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 - **[cdxj-extract-field](docs/tools/cdxj-extract-field.md)** - Extract JSON fields from CDXJ records
 - **[cdxj-stats](docs/tools/cdxj-stats.md)** - Pluggable capture-count statistics (mimetype, per-domain) from CDXJ streams

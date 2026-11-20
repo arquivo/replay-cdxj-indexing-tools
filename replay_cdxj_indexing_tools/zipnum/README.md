@@ -153,7 +153,12 @@ it. An affected key has no space; list them with:
 awk -F'\t' 'index($1, " ") == 0' index.idx
 ```
 
-The shards and the `.loc` are not affected.
+The shards and the `.loc` are not affected, so rewrite only those keys from their blocks
+with [zipnum-repair-idx](../../docs/tools/zipnum-repair-idx.md):
+
+```bash
+zipnum-repair-idx -i index.idx -o index.fixed.idx
+```
 
 **Indexes built with 1.2.0 or earlier** wrote the shard number in this column, which
 makes pywb miss urls that start a chunk and truncate urls whose captures span several

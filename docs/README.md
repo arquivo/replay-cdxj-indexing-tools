@@ -32,6 +32,7 @@ Individual tool documentation:
 - **[filter-excessive-urls](tools/filter-excessive-urls.md)** - Remove crawler traps
 - **[flat-cdxj-to-zipnum](tools/flat-cdxj-to-zipnum.md)** - Convert flat CDXJ to ZipNum format
 - **[zipnum-to-flat-cdxj](tools/zipnum-to-flat-cdxj.md)** - Convert ZipNum back to flat CDXJ
+- **[zipnum-repair-idx](tools/zipnum-repair-idx.md)** - Repair .idx keys truncated at a `{` in the URL key
 - **[cdxj-search](tools/cdxj-search.md)** - Binary search for CDXJ/ZipNum indexes
 - **[cdxj-extract-field](tools/cdxj-extract-field.md)** - Extract JSON fields from CDXJ records
 - **[cdxj-to-csv](tools/cdxj-to-csv.md)** - Convert CDXJ records to CSV/TSV
@@ -175,6 +176,7 @@ arclist-index-to-redis -d /data/arclists -k pathindex:branchA --clear -v
 | `filter-excessive-urls` | Remove crawler traps | [docs](tools/filter-excessive-urls.md) |
 | `flat-cdxj-to-zipnum` | Convert flat CDXJ to ZipNum format | [docs](tools/flat-cdxj-to-zipnum.md) |
 | `zipnum-to-flat-cdxj` | Convert ZipNum back to flat CDXJ | [docs](tools/zipnum-to-flat-cdxj.md) |
+| `zipnum-repair-idx` | Repair truncated .idx keys | [docs](tools/zipnum-repair-idx.md) |
 | `cdxj-search` | Binary search indexes | [docs](tools/cdxj-search.md) |
 | `cdxj-extract-field` | Extract JSON fields from records | [docs](tools/cdxj-extract-field.md) |
 | `cdxj-to-csv` | Convert records to CSV/TSV | [docs](tools/cdxj-to-csv.md) |
