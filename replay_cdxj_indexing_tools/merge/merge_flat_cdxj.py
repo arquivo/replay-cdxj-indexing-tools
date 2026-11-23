@@ -33,7 +33,8 @@ Usage Examples:
     python merge_sorted_files.py - file1.cdxj file2.cdxj 2> errors.log | gzip > merged.gz
 
 Requirements:
-    - All input files must be sorted in lexicographic order
+    - All input files must be sorted in byte order (LC_ALL=C sort); the merge stops
+      with an error naming the file and lines at the first line out of order
     - Input files should use the same encoding (default: system encoding)
     - Sufficient disk space for the output file
 
@@ -52,7 +53,11 @@ import heapq
 import os
 import sys
 
-from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter
+from replay_cdxj_indexing_tools.cdxj_lines import (
+    CdxjLineFilter,
+    SortOrderChecker,
+    UnsortedInputError,
+)
 
 
 def should_exclude(filename, exclude_patterns):
@@ -160,14 +165,19 @@ def get_all_files(paths, exclude_patterns=None, verbose=False):
 
 def iter_records(fh, source, line_filter):
     """
-    Yield the lines of fh that line_filter accepts.
+    Yield the lines of fh that line_filter accepts, checking that they are sorted.
 
     Blank and corrupt lines (NUL bytes, no key before the JSON block) are skipped:
     they sort before every real key, so letting one through would make it the first
     line of the merged output (and the first key of any ZipNum index built from it).
+
+    Raises UnsortedInputError at the first line that sorts before the previous one:
+    the k-way merge only yields sorted output from sorted inputs.
     """
+    order = SortOrderChecker(source)
     for lineno, line in enumerate(fh, 1):
         if line_filter.accept(line, source, lineno):
+            order.check(line, lineno)
             yield line
 
 
@@ -194,6 +204,9 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
 
     Blank lines are skipped; corrupt lines are skipped with a warning on stderr
     (see iter_records and CdxjLineFilter).
+
+    Raises UnsortedInputError if an input file is not sorted; a partially written
+    output file is removed first.
 
     Time Complexity: O(N log k) where N is total lines and k is number of files
     Space Complexity: O(k) for the heap
@@ -235,19 +248,25 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                     # Add the new line back to the heap if file has more content
                     heapq.heappush(heap, (next_line, idx))
         else:
-            with open(output_file, "w", buffering=buffer_size, encoding="utf-8") as out:
-                # Process all lines in sorted order
-                while heap:
-                    # Extract the lexicographically smallest line
-                    value, idx = heapq.heappop(heap)
-                    out.write(value)
-                    lines_written += 1
+            try:
+                with open(output_file, "w", buffering=buffer_size, encoding="utf-8") as out:
+                    # Process all lines in sorted order
+                    while heap:
+                        # Extract the lexicographically smallest line
+                        value, idx = heapq.heappop(heap)
+                        out.write(value)
+                        lines_written += 1
 
-                    # Read the next line from the same file that just provided a line
-                    next_line = next(readers[idx], "")
-                    if next_line:
-                        # Add the new line back to the heap if file has more content
-                        heapq.heappush(heap, (next_line, idx))
+                        # Read the next line from the same file that just provided a line
+                        next_line = next(readers[idx], "")
+                        if next_line:
+                            # Add the new line back to the heap if file has more content
+                            heapq.heappush(heap, (next_line, idx))
+            except UnsortedInputError:
+                # The output so far is a valid-looking prefix of a wrong merge
+                with contextlib.suppress(OSError):
+                    os.unlink(output_file)
+                raise
 
     line_filter.report()
     log_progress(f"[MERGE] Complete: {lines_written} lines written", verbose)
@@ -301,7 +320,11 @@ def main():
         sys.exit(1)
 
     # Perform the k-way merge operation
-    merge_sorted_files(files, args.output, verbose=verbose)
+    try:
+        merge_sorted_files(files, args.output, verbose=verbose)
+    except UnsortedInputError as exc:
+        log_progress(f"[ERROR] Merge stopped: {exc}", verbose=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

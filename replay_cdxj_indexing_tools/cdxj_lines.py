@@ -1,14 +1,19 @@
 """
-Filtering of flat CDXJ input lines shared by merge-flat-cdxj and flat-cdxj-to-zipnum.
+Checks on flat CDXJ input lines shared by merge-flat-cdxj and flat-cdxj-to-zipnum.
 
 Blank lines are dropped silently. Corrupt lines (NUL bytes, or no key before the JSON
 block) are dropped with a warning on stderr naming the input and line number, so the
 damaged source file can be found and regenerated. Such lines would otherwise sort to
 the top of the merged output and become a bogus first key in the ZipNum index.
+
+Each input must also be sorted in byte order (the order of ``LC_ALL=C sort``). The
+k-way merge and pywb's ZipNum binary search both rely on it, and a file sorted in
+another order silently yields an index that misses records, so SortOrderChecker
+raises UnsortedInputError at the first line that is out of order.
 """
 
 import sys
-from typing import Optional, Union
+from typing import Any, AnyStr, Optional, Union
 
 # Per-line warnings printed before the rest are only counted in the summary
 MAX_WARNINGS = 10
@@ -85,3 +90,64 @@ class CdxjLineFilter:
             "The source CDXJ should be regenerated.",
             file=sys.stderr,
         )
+
+
+class UnsortedInputError(Exception):
+    """An input line sorts before the line preceding it."""
+
+    def __init__(
+        self,
+        source: str,
+        prev_lineno: int,
+        prev_line: Union[str, bytes],
+        lineno: int,
+        line: Union[str, bytes],
+    ):
+        self.source = source
+        self.prev_lineno = prev_lineno
+        self.lineno = lineno
+        super().__init__(
+            f"{source} is not sorted: line {lineno} sorts before line {prev_lineno}\n"
+            f"  line {prev_lineno}: {_preview(prev_line)}\n"
+            f"  line {lineno}: {_preview(line)}\n"
+            "CDXJ input must be sorted in byte order, e.g. with: LC_ALL=C sort"
+        )
+
+
+class SortOrderChecker:  # pylint: disable=too-few-public-methods
+    """
+    Check that the lines of one input are in byte order, as ``LC_ALL=C sort`` leaves them.
+
+    Whole lines are compared, and equal lines are allowed. A line is reported when it
+    sorts before the previous one both as read and without its line terminator (sort
+    ignores the terminator), so a duplicate last line without a newline still passes.
+    Text lines compare by code point, which for UTF-8 input is the same order as
+    comparing their bytes.
+    """
+
+    __slots__ = ("source", "prev", "prev_lineno")
+
+    def __init__(self, source: str):
+        self.source = source
+        # str or bytes, the same type as the input lines; None before the first line
+        self.prev: Any = None
+        self.prev_lineno = 0
+
+    def check(self, line: AnyStr, lineno: int) -> None:
+        """Raise UnsortedInputError if line sorts before the previously checked line."""
+        prev = self.prev
+        # Runs for every input line, so the terminators are only stripped to confirm
+        # an out-of-order raw comparison.
+        if prev is not None and line < prev and _strip_eol(line) < _strip_eol(prev):
+            raise UnsortedInputError(
+                self.source, self.prev_lineno, _strip_eol(prev), lineno, _strip_eol(line)
+            )
+        self.prev = line
+        self.prev_lineno = lineno
+
+
+def _strip_eol(line: AnyStr) -> AnyStr:
+    """Return line without its trailing CR/LF characters."""
+    if isinstance(line, bytes):
+        return line.rstrip(b"\r\n")
+    return line.rstrip("\r\n")

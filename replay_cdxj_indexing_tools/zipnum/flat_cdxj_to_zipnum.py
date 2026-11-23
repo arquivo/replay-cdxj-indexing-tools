@@ -92,6 +92,9 @@ NOTES
 =====
 
 - Input can be plain text, gzipped (.gz), or stdin (-)
+- Input must be sorted in byte order (LC_ALL=C sort); conversion stops with an
+  error naming the input and lines at the first line out of order, and the
+  partially written shards and .idx are removed
 - Shards are created dynamically as data is processed
 - Compressed offsets enable HTTP range requests on shard files
 - Maintains sorted order required for binary search
@@ -137,7 +140,11 @@ from collections import deque
 from concurrent.futures import ThreadPoolExecutor
 from typing import BinaryIO, Iterable, List, Optional, Tuple, Union
 
-from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter
+from replay_cdxj_indexing_tools.cdxj_lines import (
+    CdxjLineFilter,
+    SortOrderChecker,
+    UnsortedInputError,
+)
 from replay_cdxj_indexing_tools.cli_utils import positive_int
 
 logger = logging.getLogger(__name__)
@@ -164,7 +171,7 @@ def _open_temp_shard(output_dir: str) -> Tuple[BinaryIO, str]:
 
 
 def _remove_temp_shard(temp_path: str) -> None:
-    """Best-effort removal of a temp shard file; failures are logged, never raised."""
+    """Best-effort removal of an output file; failures are logged, never raised."""
     if temp_path and os.path.exists(temp_path):
         try:
             os.unlink(temp_path)
@@ -217,15 +224,19 @@ def stream_chunks_from_input(input_path: str, chunk_size: int) -> Iterable[Tuple
     Blank lines are skipped, and corrupt lines (NUL bytes, no key before the JSON
     block) are skipped with a warning on stderr, so they never end up in a shard
     or become a bogus index key.
+    Raises UnsortedInputError at the first line that sorts before the previous one,
+    since pywb's binary search over the shards only finds records in sorted input.
     """
     chunk: List[bytes] = []
     chunk_idx = 0
     source = "<stdin>" if input_path == "-" else input_path
     line_filter = CdxjLineFilter()
+    order = SortOrderChecker(source)
     with open_input_path(input_path) as fh:
         for lineno, line in enumerate(fh, 1):
             if not line_filter.accept(line, source, lineno):
                 continue
+            order.check(line, lineno)
             chunk.append(line)
             if len(chunk) >= chunk_size:
                 yield (chunk_idx, chunk)
@@ -443,9 +454,13 @@ def cdxj_to_zipnum(
         # flushing) propagate so callers learn about them.
         current_raw_fh.close()
         os.replace(current_temp_path, created_shards[current_shard])
-    except BaseException:
+    except BaseException as exc:
         # Never leave an unfinished temp shard behind; re-raise the original error.
         _discard_temp_shard(current_raw_fh, current_temp_path)
+        if isinstance(exc, UnsortedInputError):
+            # The .idx and the shards committed so far index a wrongly ordered input
+            for path in [idx_name, *created_shards[:current_shard]]:
+                _remove_temp_shard(path)
         raise
 
     # If only one shard was created, rename it to use simple naming (no numbering)
@@ -554,17 +569,21 @@ def main(argv=None):
     # Warnings from best-effort cleanup go to stderr with a level prefix
     logging.basicConfig(format="[%(levelname)s] %(message)s")
     shard_size = _SINGLE_SHARD_SENTINEL_MB if args.single_shard else args.shard_size
-    cdxj_to_zipnum(
-        args.output,
-        args.input,
-        shard_size_mb=shard_size,
-        chunk_size=args.chunk_size,
-        base=args.base,
-        idx_name=args.idx_file,
-        loc_name=args.loc_file,
-        compress_level=args.compress_level,
-        workers=args.workers,
-    )
+    try:
+        cdxj_to_zipnum(
+            args.output,
+            args.input,
+            shard_size_mb=shard_size,
+            chunk_size=args.chunk_size,
+            base=args.base,
+            idx_name=args.idx_file,
+            loc_name=args.loc_file,
+            compress_level=args.compress_level,
+            workers=args.workers,
+        )
+    except UnsortedInputError as exc:
+        print(f"[ERROR] Conversion stopped, no ZipNum index written: {exc}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

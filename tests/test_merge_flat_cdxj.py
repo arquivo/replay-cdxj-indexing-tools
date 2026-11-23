@@ -234,7 +234,14 @@ from io import StringIO
 from pathlib import Path
 
 # Import the module under test
-from replay_cdxj_indexing_tools.merge.merge_flat_cdxj import get_all_files, merge_sorted_files
+from unittest import mock
+
+from replay_cdxj_indexing_tools.cdxj_lines import UnsortedInputError
+from replay_cdxj_indexing_tools.merge.merge_flat_cdxj import (
+    get_all_files,
+    main,
+    merge_sorted_files,
+)
 
 
 class TestGetAllFiles(unittest.TestCase):
@@ -798,6 +805,49 @@ class TestMergeSortedFiles(unittest.TestCase):
         self.assertIn(f"{file1}:1: skipping corrupt CDXJ line (1000 NUL bytes)", warnings)
         self.assertIn(f"{file2}:2: skipping corrupt CDXJ line (no key before", warnings)
         self.assertIn("Skipped 2 corrupt CDXJ line(s)", warnings)
+
+    def test_merge_stops_on_unsorted_input(self):
+        """An input out of byte order stops the merge, names the file and lines,
+        and removes the partial output"""
+        file1 = self.create_test_file("file1.cdxj", ["pt,a)/ 1 {}", "pt,d)/ 1 {}"])
+        # Blank line 2 still counts, so the lines reported are the file's own numbers
+        file2 = self.create_test_file(
+            "file2.cdxj", ["pt,b)/ 1 {}", "", "pt,e)/ 1 {}", "pt,c)/ 1 {}"]
+        )
+        output = str(self.test_path / "output.cdxj")
+
+        with self.assertRaises(UnsortedInputError) as ctx:
+            merge_sorted_files([file1, file2], output)
+
+        err = ctx.exception
+        self.assertEqual((err.source, err.prev_lineno, err.lineno), (file2, 3, 4))
+        self.assertFalse(os.path.exists(output))
+
+    def test_merge_rejects_locale_sorted_input(self):
+        """A file sorted under a non-C locale (lowercase before uppercase) is rejected"""
+        file1 = self.create_test_file("file1.cdxj", ["pt,a)/a 1 {}", "pt,a)/B 1 {}"])
+        output = str(self.test_path / "output.cdxj")
+
+        with self.assertRaises(UnsortedInputError):
+            merge_sorted_files([file1], output)
+
+    def test_main_exits_with_error_on_unsorted_input(self):
+        """The CLI prints why the merge stopped, with file and line numbers, and exits 1"""
+        file1 = self.create_test_file("file1.cdxj", ["pt,b)/ 1 {}", "pt,a)/ 1 {}"])
+        output = str(self.test_path / "output.cdxj")
+
+        stderr = StringIO()
+        argv = ["merge-flat-cdxj", "-q", output, file1]
+        with mock.patch.object(sys, "argv", argv), contextlib.redirect_stderr(stderr):
+            with self.assertRaises(SystemExit) as ctx:
+                main()
+
+        self.assertEqual(ctx.exception.code, 1)
+        message = stderr.getvalue()
+        self.assertIn(f"[ERROR] Merge stopped: {file1} is not sorted", message)
+        self.assertIn("line 2 sorts before line 1", message)
+        self.assertIn("LC_ALL=C sort", message)
+        self.assertFalse(os.path.exists(output))
 
     def test_merge_to_stdout(self):
         """Test merging to stdout (output_file = '-')"""

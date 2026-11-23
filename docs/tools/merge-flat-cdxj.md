@@ -140,6 +140,10 @@ CDXJ records are sorted by:
 1. **Primary**: SURT key (lexicographic)
 2. **Secondary**: Timestamp (chronological)
 
+Lines are compared byte by byte, the order `LC_ALL=C sort` produces. Every input file
+must already be in that order: the merge stops at the first line that is not (see
+[Unsorted Input](#unsorted-input)).
+
 Example sorted order:
 ```
 pt,governo,www)/ 20230101120000 {...}
@@ -264,17 +268,31 @@ cat merge.log
 
 ### Unsorted Input
 
-If input files are not properly sorted:
+Each input file is checked while it is read. The k-way merge only produces sorted output
+from sorted inputs, and an index built from unsorted data silently misses records on
+lookup, so the merge stops at the first line that sorts before the line preceding it.
+It prints the file and both line numbers to stderr, removes the partially written output
+file (when not writing to stdout) and exits with status 1:
 
-```bash
-# Error: Input file 'file.cdxj' is not sorted at line 1234
+```
+[ERROR] Merge stopped: /data/indexes/AWP-2023.cdxj is not sorted: line 2 sorts before line 1
+  line 1: 'pt,governo,www)/ 20230615120000 {"url": "https://www.governo.pt/"}'
+  line 2: 'pt,Publico,www)/ 20230101120000 {"url": "https://www.publico.pt/"}'
+CDXJ input must be sorted in byte order, e.g. with: LC_ALL=C sort
 ```
 
-**Solution:** Sort input files before merging:
+Lines are compared whole, without the line terminator, byte by byte. Equal lines are
+allowed. The usual cause is a file sorted under a locale such as `en_US.UTF-8`, which
+ignores case and punctuation; it has to be sorted with `LC_ALL=C`.
+
+**Solution:** Re-sort the file named in the error and run the merge again:
 ```bash
-export LC_ALL=C
-sort file.cdxj > file_sorted.cdxj
+LC_ALL=C sort file.cdxj > file_sorted.cdxj
 ```
+
+When the output is stdout (`-`), the lines already written stay in the pipe. Run the
+pipeline with `set -o pipefail` so the failure stops it, and discard what the next stage
+produced.
 
 ### Memory Issues
 

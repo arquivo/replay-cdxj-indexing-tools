@@ -356,6 +356,24 @@ curl "http://localhost:8080/test_collection/20230615120000/https://www.governo.p
 
 ## Troubleshooting
 
+### Unsorted Input
+
+pywb's binary search only finds records in an index built from sorted input, so the
+input is checked while it is read and the conversion stops at the first line that sorts
+before the line preceding it. The shards and `.idx` already written are removed, and the
+tool exits with status 1:
+
+```
+[ERROR] Conversion stopped, no ZipNum index written: merged.cdxj is not sorted: line 2 sorts before line 1
+  line 1: 'pt,governo,www)/ 20230615120000 {"url": "https://www.governo.pt/"}'
+  line 2: 'pt,Publico,www)/ 20230101120000 {"url": "https://www.publico.pt/"}'
+CDXJ input must be sorted in byte order, e.g. with: LC_ALL=C sort
+```
+
+Lines are compared whole, without the line terminator, byte by byte (the order of
+`LC_ALL=C sort`); equal lines are allowed. When the input is a merge of several files,
+`merge-flat-cdxj` runs the same check per file and names the file to re-sort.
+
 ### Empty Summary Index
 
 If `index.cdxj.gz` is empty:

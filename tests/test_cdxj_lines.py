@@ -5,13 +5,19 @@ Tests for replay_cdxj_indexing_tools.cdxj_lines - shared CDXJ input line filteri
 Covers corrupt-line detection (NUL bytes, missing key before the JSON block) on both
 str and bytes lines, silent skipping of blank lines, stderr warnings naming the input
 and line number, the per-run warning cap, and the final summary (issue #111).
+Also covers SortOrderChecker, which stops at the first line out of byte order.
 """
 
 import contextlib
 import io
 import unittest
 
-from replay_cdxj_indexing_tools.cdxj_lines import CdxjLineFilter, corrupt_reason
+from replay_cdxj_indexing_tools.cdxj_lines import (
+    CdxjLineFilter,
+    SortOrderChecker,
+    UnsortedInputError,
+    corrupt_reason,
+)
 
 VALID = 'pt,a)/ 20200101000000 {"url": "http://a.pt/"}\n'
 NUL_PREFIXED = "\x00" * 50 + '{"url": "http://a.pt/"}\n'
@@ -86,6 +92,62 @@ class TestCdxjLineFilter(unittest.TestCase):
         _, stderr = self.run_filter([JSON_ONLY] * 5, max_warnings=2)
         self.assertEqual(stderr.count("skipping corrupt CDXJ line"), 2)
         self.assertIn("Skipped 5 corrupt CDXJ line(s) (3 not shown).", stderr)
+
+
+class TestSortOrderChecker(unittest.TestCase):
+    """Tests for SortOrderChecker.check() and UnsortedInputError."""
+
+    @staticmethod
+    def check_all(lines, source="in.cdxj"):
+        checker = SortOrderChecker(source)
+        for lineno, line in enumerate(lines, 1):
+            checker.check(line, lineno)
+
+    def test_sorted_lines_with_duplicates_pass(self):
+        lines = ["pt,a)/ 1 {}\n", "pt,a)/ 1 {}\n", "pt,a)/ 2 {}\n", "pt,b)/ 1 {}\n"]
+        self.check_all(lines)
+        self.check_all([line.encode() for line in lines])
+
+    def test_out_of_order_line_raises(self):
+        lines = [b"pt,a)/ 1 {}\n", b"pt,c)/ 1 {}\n", b"pt,b)/ 1 {}\n"]
+        with self.assertRaises(UnsortedInputError) as ctx:
+            self.check_all(lines, source="data/x.cdxj")
+        err = ctx.exception
+        self.assertEqual((err.source, err.prev_lineno, err.lineno), ("data/x.cdxj", 2, 3))
+        message = str(err)
+        self.assertIn("data/x.cdxj is not sorted: line 3 sorts before line 2", message)
+        self.assertIn("line 2: 'pt,c)/ 1 {}'", message)
+        self.assertIn("line 3: 'pt,b)/ 1 {}'", message)
+        self.assertIn("LC_ALL=C sort", message)
+
+    def test_locale_order_is_rejected(self):
+        # A locale-aware sort (e.g. en_US.UTF-8) puts lowercase before uppercase;
+        # byte order (LC_ALL=C) puts 'B' (0x42) before 'a' (0x61).
+        with self.assertRaises(UnsortedInputError):
+            self.check_all(["pt,a)/a 1 {}\n", "pt,a)/B 1 {}\n"])
+        self.check_all(["pt,a)/B 1 {}\n", "pt,a)/a 1 {}\n"])
+
+    def test_line_terminator_is_ignored(self):
+        # sort compares lines without their newline: "abc" < "abc\tx" even though
+        # "\n" (0x0a) > "\t" (0x09); a last line without newline equals its duplicate.
+        self.check_all(["abc\n", "abc\tx\n"])
+        self.check_all([b"pt,a)/ 1 {}\r\n", b"pt,a)/ 1 {}"])
+
+    def test_utf8_text_and_bytes_agree(self):
+        # Code point order of str matches byte order of its UTF-8 encoding
+        lines = ["pt,a)/z 1 {}\n", "pt,a)/\u00e9 1 {}\n"]
+        self.check_all(lines)
+        self.check_all([line.encode("utf-8") for line in lines])
+        with self.assertRaises(UnsortedInputError):
+            self.check_all(lines[::-1])
+        with self.assertRaises(UnsortedInputError):
+            self.check_all([line.encode("utf-8") for line in lines[::-1]])
+
+    def test_message_escapes_control_characters(self):
+        with self.assertRaises(UnsortedInputError) as ctx:
+            self.check_all([b"pt,b)/ 1 \x1b[2J{}\n", b"pt,a)/ 1 {}\n"])
+        self.assertNotIn("\x1b", str(ctx.exception))
+        self.assertIn("\\x1b[2J", str(ctx.exception))
 
 
 if __name__ == "__main__":
