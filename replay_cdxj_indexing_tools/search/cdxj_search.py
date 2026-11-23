@@ -169,6 +169,11 @@ Examples:
 
   # Search with glob pattern
   cdxj-search --url http://example.com /data/RAQ*.cdxj
+
+  # Search a remote ZipNum index without downloading it
+  cdxj-search --url http://example.com/ --matchType domain \\
+    https://example.org/indexes/index.idx
+  cdxj-search --url http://example.com/ s3://bucket/indexes/index.idx
         """,
     )
 
@@ -179,7 +184,10 @@ Examples:
 
     # File inputs
     parser.add_argument(
-        "files", nargs="+", metavar="FILE", help="CDXJ/ZipNum files, glob patterns, or directories"
+        "files",
+        nargs="+",
+        metavar="FILE",
+        help="CDXJ/ZipNum files, glob patterns, directories, or http(s):// and s3:// URLs",
     )
 
     # Search options

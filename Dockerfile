@@ -20,9 +20,9 @@ WORKDIR /app
 # Copy all files
 COPY . .
 
-# Install package
+# Install package, with the extras for reading indexes over http(s):// and s3://
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir -e ".[http,s3]"
 
 # Create directories for input/output
 RUN mkdir -p /data/input /data/output
@@ -40,7 +40,9 @@ CMD ["sh", "-c", "echo 'Available commands:' && \
      echo '  filter-excessive-urls' && \
      echo '  filter-blocklist' && \
      echo '  cdxj-index-collection' && \
+     echo '  cdxj-search' && \
      echo '' && \
      echo 'Example usage:' && \
      echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools merge-flat-cdxj --help' && \
-     echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools flat-cdxj-to-zipnum -i input/file.cdxj -o output/'"]
+     echo '  docker run -v /path/to/data:/data arquivo/replay-cdxj-indexing-tools flat-cdxj-to-zipnum -i input/file.cdxj -o output/' && \
+     echo '  docker run arquivo/replay-cdxj-indexing-tools cdxj-search --url https://example.pt/ --matchType domain https://example.org/indexes/collection.idx'"]

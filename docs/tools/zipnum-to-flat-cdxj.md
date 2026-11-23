@@ -2,6 +2,8 @@
 
 Convert ZipNum format indexes back to flat CDXJ - decompress and merge sharded indexes into a single flat CDXJ stream. Enables round-trip conversion, data recovery, and pipeline reprocessing.
 
+The `.idx`, `.loc` and shards can also be read from `http(s)://` or `s3://` URLs, without downloading the index first; see [Remote Indexes](../remote-indexes.md).
+
 ## Command-Line Usage
 
 ### Basic Syntax
@@ -39,9 +41,9 @@ zipnum-to-flat-cdxj -i indexes/index.idx | gzip -9 > arquivo.cdxj.gz
 
 ### Options
 
-- `-i, --input FILE` - Input .idx file or `-` for stdin (required)
-- `--base-dir DIR` - Base directory for shard files (default: idx file directory)
-- `--loc FILE` - Custom .loc file path (default: auto-detect)
+- `-i, --input FILE` - Input .idx file, `http(s)://` or `s3://` URL, or `-` for stdin (required)
+- `--base-dir DIR` - Base directory or URL for shard files (default: idx file directory)
+- `--loc FILE` - Custom .loc file or URL (default: auto-detect)
 - `--workers N` - Deprecated and ignored (decompression is streamed sequentially); prints a warning if given
 
 ## Python API

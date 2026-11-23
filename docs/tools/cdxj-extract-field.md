@@ -2,6 +2,8 @@
 
 Extract specific JSON fields from CDXJ records, outputting one field value per line to stdout.
 
+The input can also be an `http(s)://` or `s3://` URL, streamed without downloading it first; see [Remote Indexes](../remote-indexes.md).
+
 ## Purpose
 
 This tool reads CDXJ lines from stdin or a file, parses the JSON payload, extracts a specified field, and writes the field value to stdout. Useful for:

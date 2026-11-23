@@ -2,6 +2,8 @@
 
 Aggregate capture statistics from a CDXJ stream using pluggable sinks, in a single pass over the input.
 
+The input can also be an `http(s)://` or `s3://` URL, streamed without downloading it first; see [Remote Indexes](../remote-indexes.md).
+
 ## Purpose
 
 This tool reads a CDXJ stream from stdin or a file and feeds it to one or more "sink" plugins, each writing its own CSV of aggregated statistics. Built-in sinks:

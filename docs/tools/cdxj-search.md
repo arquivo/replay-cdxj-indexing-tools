@@ -56,6 +56,14 @@ cdxj-search --url http://example.com /data/indexes/*.cdxj
 cdxj-search --url http://example.com /data/indexes/
 ```
 
+**Search a remote index without downloading it** (needs the `http` or `s3` extra, see
+[Remote Indexes](../remote-indexes.md)):
+```bash
+cdxj-search --url http://example.com/ --matchType domain \
+  https://example.org/indexes/collection/collection.idx
+cdxj-search --url http://example.com/ s3://indexes/collection/collection.idx
+```
+
 ### Options
 
 #### Required (one of):

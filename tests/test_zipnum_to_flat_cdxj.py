@@ -176,6 +176,23 @@ class TestFindLocFile:
         found = find_loc_file("-")
         assert found is None
 
+    def test_find_loc_in_directory_named_like_an_idx(self, tmp_path):
+        """Only the trailing .idx is replaced, not one earlier in the path."""
+        index_dir = tmp_path / "a.idx"
+        index_dir.mkdir()
+        (index_dir / "test.idx").write_text("dummy content\n")
+        (index_dir / "test.loc").write_text("dummy content\n")
+        (tmp_path / "a").mkdir()
+        (tmp_path / "a" / "test.loc").write_text("dummy content\n")
+
+        assert find_loc_file(str(index_dir / "test.idx")) == str(index_dir / "test.loc")
+
+    def test_missing_loc_file_option_is_ignored(self, tmp_path, capsys):
+        """A --loc file that does not exist is ignored, as before: shards are found by name."""
+        idx_file, expected = _write_shards(tmp_path, num_shards=1, lines_per_shard=10)
+        zipnum_to_flat_cdxj(str(idx_file), loc_file=str(tmp_path / "missing.loc"))
+        assert capsys.readouterr().out.encode() == expected
+
 
 class TestResolveShardPath:
     """Test resolving shard file paths."""
@@ -204,6 +221,16 @@ class TestResolveShardPath:
 
         path = resolve_shard_path("test-01", base_dir, None)
         assert path == os.path.join(base_dir, "test-01.cdx.gz")
+
+    def test_resolve_without_loc_map_keeps_shard_extension(self, tmp_path):
+        """Shard names written by flat-cdxj-to-zipnum already end in .cdx.gz"""
+        base_dir = str(tmp_path)
+        assert resolve_shard_path("test-01.cdx.gz", base_dir, None) == os.path.join(
+            base_dir, "test-01.cdx.gz"
+        )
+        assert resolve_shard_path("test-01.cdxj.gz", base_dir, None) == os.path.join(
+            base_dir, "test-01.cdxj.gz"
+        )
 
     def test_resolve_shard_not_in_loc(self, tmp_path):
         """Test resolving when shard not in loc map (falls back to default)."""
@@ -417,6 +444,24 @@ class TestCommandLine:
 
         captured = capsys.readouterr()
         assert b"com,example)" in captured.out.encode()
+
+    @pytest.mark.parametrize(
+        "loc_entry", ["../outside.cdx.gz", "test\x1b[2J.cdx.gz", "https://h.example/x.cdx.gz"]
+    )
+    def test_rejected_shard_location_is_a_one_line_error(self, tmp_path, capsys, loc_entry):
+        """A .loc entry outside the index's directory gives one error line and exit 1."""
+        idx_file = tmp_path / "test.idx"
+        idx_file.write_text("com,example)/ 20230101000000\ttest\t0\t100\t1\n")
+        (tmp_path / "test.loc").write_text(f"test\t{loc_entry}\n")
+
+        with pytest.raises(SystemExit) as exc_info:
+            main(["-i", str(idx_file)])
+
+        assert exc_info.value.code == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error: Path traversal detected in .loc file")
+        assert err.count("\n") == 1
+        assert "\x1b" not in err
 
 
 class TestEdgeCases:

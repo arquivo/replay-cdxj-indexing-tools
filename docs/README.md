@@ -19,6 +19,7 @@ Welcome to the CDXJ Indexing Tools documentation. This guide covers everything f
 - **[Reference Implementation](reference-implementation.md)** - `cdxj-index-collection` complete guide
 - **[Incremental Workflow](incremental-workflow.md)** - Daily/incremental updates
 - **[Redis Integration](redis-integration.md)** - Path index to Redis setup guide
+- **[Remote Indexes](remote-indexes.md)** - Search and process indexes over HTTP(S) and S3 without downloading them
 - **[Pipeline Examples](pipeline-examples.md)** - Real-world workflows
 - **[Troubleshooting](troubleshooting.md)** - Common issues and solutions
 
@@ -53,6 +54,9 @@ Individual tool documentation:
 
 **...use individual tools in custom pipelines:**
 → [Pipeline Examples](pipeline-examples.md) → [Tool Reference](tools/)
+
+**...query a published index without downloading it:**
+→ [Remote Indexes](remote-indexes.md)
 
 **...fix an error:**
 → [Troubleshooting](troubleshooting.md)

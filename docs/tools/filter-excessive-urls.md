@@ -2,6 +2,8 @@
 
 Find and remove URLs that appear excessively in CDXJ files. This helps eliminate crawler traps, spam sites, and overly-represented URLs from web archive indexes.
 
+The input can also be an `http(s)://` or `s3://` URL, streamed without downloading it first; see [Remote Indexes](../remote-indexes.md).
+
 ## Command-Line Usage
 
 The tool has three modes: **find**, **remove**, and **auto**.
