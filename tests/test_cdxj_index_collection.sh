@@ -329,24 +329,6 @@ test_keep_temp_flag() {
     cleanup_test_env
 }
 
-test_no_compress_flag() {
-    setup_test_env
-    touch "$TEST_DIR/collections/$TEST_COLLECTION/test.warc.gz"
-    
-    # Run script and check that --no-compress is accepted (will fail on missing deps)
-    bash "$SCRIPT" "$TEST_COLLECTION" \
-        --collections-dir "$TEST_DIR/collections" \
-        --output-dir "$TEST_DIR/zipnum" \
-        --temp-dir "$TEST_DIR/temp" \
-        --no-compress 2>&1 > /dev/null || true
-    
-    # If we get here without syntax error, flag was accepted
-    echo -e "${GREEN}✓${NC} Parses --no-compress flag"
-    ((TESTS_PASSED++))
-    
-    cleanup_test_env
-}
-
 test_unknown_option() {
     local output=$(bash "$SCRIPT" TEST --unknown-option 2>&1 || true)
     assert_contains "$output" "Unknown option" "Rejects unknown options"
@@ -540,7 +522,6 @@ main() {
     run_test "Warns about missing blocklist" test_missing_blocklist_warning
     run_test "Accepts custom blocklist" test_custom_blocklist
     run_test "Parses --keep-temp flag" test_keep_temp_flag
-    run_test "Parses --no-compress flag" test_no_compress_flag
     run_test "Rejects unknown options" test_unknown_option
     run_test "Rejects multiple collection names" test_multiple_collections
     run_test "Counts WARC files correctly" test_warc_count_display

@@ -52,6 +52,10 @@ Test coverage for Python CLI tools:
   - Compressed file handling
   - Edge cases and boundary conditions
 
+- **`test_cdxj_index_collection_invocations.py`** - CLI calls made by `cdxj-index-collection.sh`
+  - Every `flat-cdxj-to-zipnum` command in the script parses with the converter's own argument parser
+  - The script's `--shard-size` value reaches the converter as its shard size
+
 ### Shell Script Tests
 
 #### Current Test Suite
@@ -63,14 +67,14 @@ Test coverage for Python CLI tools:
 bash tests/test_cdxj_index_collection.sh
 ```
 
-**Coverage (31 tests):**
+**Coverage (30 tests):**
 - Script validation (exists, executable, syntax)
 - Help and usage output
 - Command-line flags:
   - `--incremental`, `--jobs`, `--threshold`, `--shard-size`
   - `--addfield` (single and multiple)
   - `--addfield-func`
-  - `--blocklist`, `--keep-temp`, `--no-compress`
+  - `--blocklist`, `--keep-temp`
 - Error handling:
   - Missing/non-existent collections
   - Empty directories

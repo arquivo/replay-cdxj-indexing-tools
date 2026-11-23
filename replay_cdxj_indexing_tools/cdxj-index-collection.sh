@@ -31,7 +31,7 @@ TEMP_BASE="/data/cdxj-processing-tmp"
 DEFAULT_BLOCKLIST="arquivo-blocklist.txt"
 EXCESSIVE_THRESHOLD=1000
 PARALLEL_JOBS=$(nproc)
-SHARD_SIZE=3000
+SHARD_SIZE=100
 
 # Colors for output
 RED='\033[0;31m'
@@ -54,12 +54,11 @@ Options:
   --blocklist FILE          Path to blocklist file (default: $BLOCKLIST_DIR/$DEFAULT_BLOCKLIST)
   --threshold N             Excessive URLs threshold (default: $EXCESSIVE_THRESHOLD)
   --jobs N                  Number of parallel jobs (default: $PARALLEL_JOBS)
-  --shard-size N            ZipNum shard size (default: $SHARD_SIZE)
+  --shard-size N            ZipNum shard size in MB (default: $SHARD_SIZE)
   --collections-dir DIR     Base directory for collections (default: $COLLECTIONS_BASE)
   --output-dir DIR      Output directory base (default: $OUTPUT_BASE)
   --temp-dir DIR        Temporary directory base (default: $TEMP_BASE)
   --keep-temp           Keep temporary files after processing
-  --no-compress         Don't compress ZipNum output
   --incremental         Only index new/modified WARCs (for daily updates)
   --help                Show this help message
 
@@ -162,7 +161,6 @@ check_dependencies() {
 COLLECTION_NAME=""
 BLOCKLIST=""
 KEEP_TEMP=0
-COMPRESS="--compress"
 INCREMENTAL=0
 
 while [[ $# -gt 0 ]]; do
@@ -200,10 +198,6 @@ while [[ $# -gt 0 ]]; do
             ;;
         --keep-temp)
             KEEP_TEMP=1
-            shift
-            ;;
-        --no-compress)
-            COMPRESS=""
             shift
             ;;
         --incremental)
@@ -516,7 +510,7 @@ merge-flat-cdxj - "$FILTERED_PROCESS_DIR"/*.cdxj | \
     tee >(wc -l | xargs -I {} echo -e "  ${BLUE}→${NC} After merge: {} lines" >&2) | \
     filter-excessive-urls auto -i - -n "$EXCESSIVE_THRESHOLD" -v 2>&1 | \
     tee >(grep "output" | sed "s/^/  ${BLUE}→${NC} /" >&2) | \
-    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -n "$SHARD_SIZE" $COMPRESS
+    flat-cdxj-to-zipnum -o "$OUTPUT_DIR" -i - -s "$SHARD_SIZE"
 
 echo ""
 log_success "Pipeline processing complete"
