@@ -305,7 +305,7 @@ PARALLEL_JOBS=16
 # Stage 1: Index WARCs in parallel
 echo "Stage 1: Indexing WARCs..."
 parallel -j $PARALLEL_JOBS \
-    'cdx-indexer --cdxj {} > {.}.cdxj' \
+    'cdx-indexer --cdxj --sort {} > {.}.cdxj' \
     ::: /data/warcs/*.warc.gz
 
 # Stage 2: Add collection metadata in parallel

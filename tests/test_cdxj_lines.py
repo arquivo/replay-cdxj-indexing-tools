@@ -10,6 +10,8 @@ Also covers SortOrderChecker, which stops at the first line out of byte order.
 
 import contextlib
 import io
+import os
+import tempfile
 import unittest
 
 from replay_cdxj_indexing_tools.cdxj_lines import (
@@ -17,6 +19,7 @@ from replay_cdxj_indexing_tools.cdxj_lines import (
     SortOrderChecker,
     UnsortedInputError,
     corrupt_reason,
+    remove_partial_output,
 )
 
 VALID = 'pt,a)/ 20200101000000 {"url": "http://a.pt/"}\n'
@@ -148,6 +151,63 @@ class TestSortOrderChecker(unittest.TestCase):
             self.check_all([b"pt,b)/ 1 \x1b[2J{}\n", b"pt,a)/ 1 {}\n"])
         self.assertNotIn("\x1b", str(ctx.exception))
         self.assertIn("\\x1b[2J", str(ctx.exception))
+
+    def test_message_escapes_control_characters_in_source(self):
+        with self.assertRaises(UnsortedInputError) as ctx:
+            self.check_all(["b\n", "a\n"], source="in\x1b[2J.cdxj")
+        self.assertNotIn("\x1b", str(ctx.exception))
+
+    def test_message_preview_of_huge_line_is_bounded(self):
+        with self.assertRaises(UnsortedInputError) as ctx:
+            self.check_all([b"b" * 10_000_000 + b"\n", b"a\n"])
+        self.assertLess(len(str(ctx.exception)), 500)
+
+
+class TestRemovePartialOutput(unittest.TestCase):
+    """Tests for remove_partial_output()."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def path(self, name):
+        return os.path.join(self.tmp.name, name)
+
+    def remove(self, path):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            remove_partial_output(path)
+        return stderr.getvalue()
+
+    def test_regular_file_is_removed(self):
+        path = self.path("out.cdxj")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("partial\n")
+        self.assertEqual(self.remove(path), "")
+        self.assertFalse(os.path.exists(path))
+
+    def test_missing_file_is_ignored(self):
+        self.assertEqual(self.remove(self.path("missing.cdxj")), "")
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "needs symlinks")
+    def test_symlink_is_left_in_place(self):
+        target = self.path("target.cdxj")
+        with open(target, "w", encoding="utf-8") as f:
+            f.write("partial\n")
+        link = self.path("link.cdxj")
+        os.symlink(target, link)
+        warning = self.remove(link)
+        self.assertTrue(os.path.islink(link))
+        self.assertTrue(os.path.exists(target))
+        self.assertIn("Partial output left in place (not a regular file)", warning)
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "needs FIFOs")
+    def test_fifo_is_left_in_place(self):
+        fifo = self.path("out.fifo")
+        os.mkfifo(fifo)
+        warning = self.remove(fifo)
+        self.assertTrue(os.path.exists(fifo))
+        self.assertIn("not a regular file", warning)
 
 
 if __name__ == "__main__":

@@ -98,7 +98,7 @@ The script executes 5 stages sequentially:
 ```bash
 find /data/collections/AWP999 -name "*.warc.gz" | \
     parallel --bar --eta -j $JOBS \
-    'cdx-indexer {} > indexes/{/.}.cdxj'
+    'cdx-indexer --sort {} > indexes/{/.}.cdxj'
 ```
 
 **Features:**
@@ -111,7 +111,7 @@ find /data/collections/AWP999 -name "*.warc.gz" | \
 ```bash
 # Only index if WARC is newer than CDXJ
 if [[ $WARC_FILE -nt $CDXJ_FILE ]]; then
-    cdx-indexer $WARC_FILE > $CDXJ_FILE
+    cdx-indexer --sort $WARC_FILE > $CDXJ_FILE
 fi
 ```
 
@@ -301,7 +301,7 @@ Each stage shows:
 **Solution:**
 ```bash
 # Write to temporary file
-cdx-indexer file.warc.gz > file.cdxj.tmp
+cdx-indexer --sort file.warc.gz > file.cdxj.tmp
 
 # Only move if successful
 if [ $? -eq 0 ]; then

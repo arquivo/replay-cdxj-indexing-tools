@@ -483,7 +483,7 @@ JSONDecodeError: Expecting value
 
 3. **Re-index from source:**
    ```bash
-   cdx-indexer source.warc.gz > reindexed.cdxj
+   cdx-indexer --sort source.warc.gz > reindexed.cdxj
    ```
 
 ## Integration Issues

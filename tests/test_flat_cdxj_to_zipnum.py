@@ -1017,7 +1017,7 @@ class TestCdxjToZipnum(unittest.TestCase):
 
         self.assertEqual(ctx.exception.code, 1)
         message = stderr.getvalue()
-        self.assertIn("[ERROR] Conversion stopped, no ZipNum index written:", message)
+        self.assertIn("[ERROR] Conversion stopped:", message)
         self.assertIn(f"{input_file} is not sorted: line 2 sorts before line 1", message)
         self.assertEqual(os.listdir(self.output_dir), [])
 

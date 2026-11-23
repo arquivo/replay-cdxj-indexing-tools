@@ -42,7 +42,7 @@ Process step-by-step for custom workflows:
 
 ```bash
 # 1. Index WARCs (using pywb's cdx-indexer)
-cdx-indexer collection/*.warc.gz > indexes/index.cdxj
+cdx-indexer --sort collection/*.warc.gz > indexes/index.cdxj
 
 # 2. Merge multiple indexes
 merge-flat-cdxj merged.cdxj indexes/*.cdxj

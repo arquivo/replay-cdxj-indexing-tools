@@ -144,6 +144,7 @@ from replay_cdxj_indexing_tools.cdxj_lines import (
     CdxjLineFilter,
     SortOrderChecker,
     UnsortedInputError,
+    remove_partial_output,
 )
 from replay_cdxj_indexing_tools.cli_utils import positive_int
 
@@ -171,7 +172,7 @@ def _open_temp_shard(output_dir: str) -> Tuple[BinaryIO, str]:
 
 
 def _remove_temp_shard(temp_path: str) -> None:
-    """Best-effort removal of an output file; failures are logged, never raised."""
+    """Best-effort removal of a temp shard file; failures are logged, never raised."""
     if temp_path and os.path.exists(temp_path):
         try:
             os.unlink(temp_path)
@@ -460,7 +461,7 @@ def cdxj_to_zipnum(
         if isinstance(exc, UnsortedInputError):
             # The .idx and the shards committed so far index a wrongly ordered input
             for path in [idx_name, *created_shards[:current_shard]]:
-                _remove_temp_shard(path)
+                remove_partial_output(path)
         raise
 
     # If only one shard was created, rename it to use simple naming (no numbering)
@@ -582,7 +583,7 @@ def main(argv=None):
             workers=args.workers,
         )
     except UnsortedInputError as exc:
-        print(f"[ERROR] Conversion stopped, no ZipNum index written: {exc}", file=sys.stderr)
+        print(f"[ERROR] Conversion stopped: {exc}", file=sys.stderr)
         sys.exit(1)
 
 

@@ -233,7 +233,7 @@ From WARC to ZipNum:
 
 # 1. Index WARCs (parallel)
 find /data/warcs -name "*.warc.gz" | \
-    parallel -j8 "cdx-indexer --postappend --cdxj {} -o {}.cdxj"
+    parallel -j8 "cdx-indexer --postappend --cdxj --sort {} -o {}.cdxj"
 
 # 2. Merge indexes
 merge-flat-cdxj merged.cdxj /data/warcs/*.cdxj
@@ -364,7 +364,7 @@ before the line preceding it. The shards and `.idx` already written are removed,
 tool exits with status 1:
 
 ```
-[ERROR] Conversion stopped, no ZipNum index written: merged.cdxj is not sorted: line 2 sorts before line 1
+[ERROR] Conversion stopped: merged.cdxj is not sorted: line 2 sorts before line 1
   line 1: 'pt,governo,www)/ 20230615120000 {"url": "https://www.governo.pt/"}'
   line 2: 'pt,Publico,www)/ 20230101120000 {"url": "https://www.publico.pt/"}'
 CDXJ input must be sorted in byte order, e.g. with: LC_ALL=C sort

@@ -363,7 +363,7 @@ INDEXED_DATE=$(date +%Y%m%d)
 
 # Stage 1: Index WARCs in parallel
 parallel -j 16 \
-    'cdx-indexer --cdxj {} > {.}.cdxj' \
+    'cdx-indexer --cdxj --sort {} > {.}.cdxj' \
     ::: *.warc.gz
 
 # Stage 2: Add collection metadata in parallel
