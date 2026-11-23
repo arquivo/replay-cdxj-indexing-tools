@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.4.1 (2026-11-23)
+
+### Bug Fixes
+
+- **zipnum**: Build .idx keys from the first two fields of the line
+  ([`95f02c9`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/95f02c98c77d9bf78cea5989eaff76bbcc2d0bb0))
+
+### Documentation
+
+- Sort and check CDXJ in byte order with LC_ALL=C
+  ([`cf99bf1`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/cf99bf1f12296626fd7f6265505a1db84d892438))
+
+
 ## v1.4.0 (2026-11-23)
 
 ### Bug Fixes
