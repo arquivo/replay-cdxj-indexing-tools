@@ -156,8 +156,7 @@ filter-excessive-urls auto \
 flat-cdxj-to-zipnum \
     -o /data/zipnum/AWP999/ \
     -i filtered-excessive.cdxj \
-    -n 3000 \
-    --compress
+    -s 100
 ```
 
 **Output:** Compressed ZipNum shards ready for pywb

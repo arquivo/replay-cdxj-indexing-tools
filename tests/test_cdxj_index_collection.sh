@@ -334,6 +334,15 @@ test_unknown_option() {
     assert_contains "$output" "Unknown option" "Rejects unknown options"
 }
 
+test_invalid_shard_size() {
+    local value
+    for value in 0 abc -5 1.5; do
+        local output=$(bash "$SCRIPT" TEST --shard-size "$value" 2>&1 || true)
+        assert_contains "$output" "shard-size must be a positive integer" \
+            "Rejects --shard-size $value"
+    done
+}
+
 test_multiple_collections() {
     local output=$(bash "$SCRIPT" COL1 COL2 2>&1 || true)
     assert_contains "$output" "Too many arguments" "Rejects multiple collection names"
@@ -523,6 +532,7 @@ main() {
     run_test "Accepts custom blocklist" test_custom_blocklist
     run_test "Parses --keep-temp flag" test_keep_temp_flag
     run_test "Rejects unknown options" test_unknown_option
+    run_test "Rejects invalid --shard-size" test_invalid_shard_size
     run_test "Rejects multiple collection names" test_multiple_collections
     run_test "Counts WARC files correctly" test_warc_count_display
     run_test "Creates required directories" test_directory_creation

@@ -226,6 +226,12 @@ if [ -z "$COLLECTION_NAME" ]; then
     usage
 fi
 
+# Validate --shard-size before any indexing work starts
+if ! [[ "$SHARD_SIZE" =~ ^[1-9][0-9]*$ ]]; then
+    log_error "--shard-size must be a positive integer (MB), got: $SHARD_SIZE"
+    usage
+fi
+
 # Use collection name as the collection field value
 COLLECTION_FIELD="$COLLECTION_NAME"
 
@@ -281,7 +287,7 @@ echo "  Temp dir:           $TEMP_DIR"
 echo "  Blocklist:          $BLOCKLIST"
 echo "  Excessive threshold: $EXCESSIVE_THRESHOLD"
 echo "  Parallel jobs:      $PARALLEL_JOBS"
-echo "  Shard size:         $SHARD_SIZE"
+echo "  Shard size:         ${SHARD_SIZE} MB"
 echo "  Incremental mode:   $INCREMENTAL"
 echo "  Keep temp files:    $KEEP_TEMP"
 echo ""

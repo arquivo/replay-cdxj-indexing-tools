@@ -67,7 +67,7 @@ Test coverage for Python CLI tools:
 bash tests/test_cdxj_index_collection.sh
 ```
 
-**Coverage (30 tests):**
+**Coverage:**
 - Script validation (exists, executable, syntax)
 - Help and usage output
 - Command-line flags:
