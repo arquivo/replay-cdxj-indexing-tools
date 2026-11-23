@@ -4,6 +4,8 @@ Filter CDXJ records matching regex patterns in a blocklist file. Use this to rem
 
 **This tool matches regex patterns against ENTIRE CDXJ lines** (like `grep -E -v`), providing flexibility for filtering by SURT domain prefixes and URL patterns (including paths).
 
+The input can also be an `http(s)://` or `s3://` URL, streamed without downloading it first; see [Remote Indexes](../remote-indexes.md).
+
 ## Command-Line Usage
 
 ### Basic Syntax

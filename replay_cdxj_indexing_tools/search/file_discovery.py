@@ -7,32 +7,50 @@ import os
 import sys
 from typing import List
 
+from replay_cdxj_indexing_tools import storage
+
+_INDEX_SUFFIXES = (".cdxj", ".idx", ".cdxj.gz")
+
+
+def _discover_remote(pattern: str) -> List[str]:
+    """Expand an s3:// prefix ending in "/" or wildcard; any other URL is taken as a file."""
+    if pattern.endswith("/"):
+        return [loc for loc in storage.list_remote_files(pattern) if loc.endswith(_INDEX_SUFFIXES)]
+    if storage.has_wildcards(pattern):
+        return storage.glob_remote(pattern)
+    return [pattern]
+
 
 def discover_files(patterns: List[str], verbose: bool = False) -> List[str]:
     """
     Discover files from patterns (paths, globs, or directories).
 
+    Remote URLs (see storage.is_remote) are taken as files, except s3:// locations
+    that end in "/" (listed like a directory) or contain wildcards (globbed).
+
     Args:
-        patterns: List of file patterns, paths, or directories
+        patterns: List of file patterns, paths, directories, or remote URLs
         verbose: If True, print discovery info to stderr
 
     Returns:
-        List of absolute file paths
+        List of absolute file paths and remote URLs
     """
     files = set()  # Use set to avoid duplicates
 
     for pattern in patterns:
+        if storage.is_remote(pattern):
+            matched = _discover_remote(pattern)
+            if not matched and verbose:
+                print(f"Warning: Pattern '{pattern}' matched no files", file=sys.stderr)
+            files.update(matched)
+
         # Check if it's a directory
-        if os.path.isdir(pattern):
+        elif os.path.isdir(pattern):
             if verbose:
                 print(f"Scanning directory: {pattern}", file=sys.stderr)
             for root, _, filenames in os.walk(pattern):
                 for filename in filenames:
-                    if (
-                        filename.endswith(".cdxj")
-                        or filename.endswith(".idx")
-                        or filename.endswith(".cdxj.gz")
-                    ):
+                    if filename.endswith(_INDEX_SUFFIXES):
                         files.add(os.path.abspath(os.path.join(root, filename)))
 
         # Check if it's an exact file
@@ -94,7 +112,7 @@ def find_zipnum_index_file(data_file: str) -> str:
     # Standard naming: index.cdxj.gz -> index.idx
     if data_file.endswith(".cdxj.gz"):
         idx_file = data_file[:-8] + ".idx"  # Remove 'cdxj.gz' (8 chars), add '.idx'
-        if os.path.exists(idx_file):
+        if storage.exists(idx_file):
             return idx_file
 
     raise FileNotFoundError(f"Could not find index file for data: {data_file}")

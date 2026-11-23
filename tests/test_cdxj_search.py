@@ -629,7 +629,9 @@ class TestZipNumSearch(unittest.TestCase):
                         loc_filepath=malicious_loc,
                     )
                 )
-        self.assertIn("Path traversal attempt via .loc file", logs.output[0])
+        self.assertIn(
+            "Rejected shard location: Path traversal detected in .loc file", logs.output[0]
+        )
 
     def test_zipnum_path_traversal_absolute(self):
         """Absolute path outside base_dir in .loc entry must raise ValueError."""

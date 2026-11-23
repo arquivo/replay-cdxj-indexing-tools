@@ -58,11 +58,11 @@ PARAMETERS
 ==========
 
 Required:
-    -i, --input FILE       Input .idx file or '-' for stdin
+    -i, --input FILE       Input .idx file or URL, or '-' for stdin
 
 Optional:
-    --base-dir DIR         Base directory for shard files (default: idx file directory)
-    --loc FILE            Custom .loc file path (default: auto-detect)
+    --base-dir DIR         Base directory or URL for shard files (default: idx file directory)
+    --loc FILE            Custom .loc file or URL (default: auto-detect)
     --workers N           Deprecated and ignored (decompression is streamed
                           sequentially); prints a warning if given
 
@@ -83,6 +83,8 @@ NOTES
 - A corrupt or truncated shard raises an error and exits non-zero, but data
   already decompressed from it has been written; use `set -o pipefail` or
   check the exit status in pipelines
+- A missing local shard is reported as a warning and skipped; a missing or
+  unreadable remote shard is an error (exit status 1)
 - Use shell redirection to save output to file
 - Compatible with all ZipNum files created by cdxj-to-zipnum
 
@@ -108,17 +110,32 @@ merge-cdxj output.cdxj temp.cdxj other.cdxj
 """
 
 import gzip
-import os
 import shutil
 import sys
 import warnings
 from argparse import ArgumentParser
 from typing import List, Optional, Tuple
 
-from replay_cdxj_indexing_tools.path_safety import resolve_within
+from replay_cdxj_indexing_tools import storage
+from replay_cdxj_indexing_tools.zipnum.locations import (
+    loc_location,
+    read_loc_file,
+    read_loc_if_present,
+    resolve_shard_path,
+)
 
 # Read/write size used when streaming a shard to stdout
 _COPY_BUFSIZE = 256 * 1024
+
+__all__ = [
+    "find_loc_file",
+    "main",
+    "parse_args",
+    "read_idx_file",
+    "read_loc_file",
+    "resolve_shard_path",
+    "zipnum_to_flat_cdxj",
+]
 
 
 def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
@@ -136,7 +153,7 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
     if idx_path == "-":
         fh = sys.stdin.buffer
     else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; finally closes
-        fh = open(idx_path, "rb")
+        fh = storage.open_input(idx_path, "rb")
 
     try:
         for raw_line in fh:
@@ -162,73 +179,38 @@ def read_idx_file(idx_path: str) -> List[Tuple[str, str, int, int, int]]:
     return entries
 
 
-def read_loc_file(loc_path: str) -> dict:
-    """
-    Read .loc file and return dict mapping shard_name -> filepath.
-    """
-    loc_map = {}
-
-    with open(loc_path, "r", encoding="utf-8") as fh:
-        for line in fh:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-
-            parts = line.split("\t")
-            if len(parts) < 2:
-                continue
-
-            shard_name = parts[0]
-            filepath = parts[1]
-            loc_map[shard_name] = filepath
-
-    return loc_map
-
-
 def find_loc_file(idx_path: str) -> Optional[str]:
     """
-    Try to find .loc file based on .idx file path.
+    Try to find .loc file based on .idx file path (a trailing .idx becomes .loc).
     Returns path if found, None otherwise.
     """
     if idx_path == "-":
         return None
 
-    # Try replacing .idx with .loc
-    base = idx_path.replace(".idx", "")
-    loc_path = f"{base}.loc"
+    loc_path = loc_location(idx_path)
 
-    if os.path.exists(loc_path):
+    if storage.exists(loc_path):
         return loc_path
 
     return None
 
 
-def resolve_shard_path(shard_name: str, base_dir: str, loc_map: Optional[dict] = None) -> str:
+def _copy_shard(shard_path: str, output) -> None:
     """
-    Resolve the full path to a shard file.
-
-    1. If loc_map provided, use it to find filepath
-    2. Otherwise, construct path as: base_dir/shard_name.cdx.gz
-
-    Path traversal defense: all resolved paths must remain within base_dir.
+    Decompress one shard to ``output``. A missing local shard is a warning; a
+    missing remote shard is an error, so a remote export is never silently partial.
     """
-    if loc_map and shard_name in loc_map:
-        # Use path from .loc file
-        loc_path = loc_map[shard_name]
-        # If relative, resolve against base_dir
-        if not os.path.isabs(loc_path):
-            loc_path = os.path.join(base_dir, loc_path)
-        try:
-            return resolve_within(loc_path, base_dir)
-        except ValueError as e:
-            raise ValueError(f"Path traversal detected in .loc file: {loc_path!r}") from e
-
-    # Default: shard_name.cdx.gz in base_dir
-    shard_path = os.path.join(base_dir, f"{shard_name}.cdx.gz")
     try:
-        return resolve_within(shard_path, base_dir)
-    except ValueError as e:
-        raise ValueError(f"Path traversal detected in .idx shard name: {shard_name!r}") from e
+        raw = storage.open_input(shard_path, "rb")
+    except FileNotFoundError:
+        if storage.is_remote(shard_path):
+            raise
+        print(f"Warning: Shard file not found: {shard_path}", file=sys.stderr)
+        return
+
+    # Stream in fixed-size chunks so memory use does not grow with shard size
+    with raw, gzip.open(raw, "rb") as gz:
+        shutil.copyfileobj(gz, output, _COPY_BUFSIZE)
 
 
 def zipnum_to_flat_cdxj(
@@ -268,18 +250,15 @@ def zipnum_to_flat_cdxj(
         if idx_path == "-":
             base_dir = "."
         else:
-            base_dir = os.path.dirname(os.path.abspath(idx_path))
+            base_dir = storage.parent_location(idx_path)
 
     # Try to find and read .loc file
     loc_map = None
     if loc_file:
-        if os.path.exists(loc_file):
-            loc_map = read_loc_file(loc_file)
-    else:
+        loc_map = read_loc_if_present(loc_file)
+    elif idx_path != "-":
         # Auto-detect .loc file
-        auto_loc = find_loc_file(idx_path)
-        if auto_loc:
-            loc_map = read_loc_file(auto_loc)
+        loc_map = read_loc_if_present(loc_location(idx_path))
 
     # Unique shard names, in order of first appearance
     shard_names = dict.fromkeys(entry[1] for entry in entries)
@@ -289,15 +268,7 @@ def zipnum_to_flat_cdxj(
     output = sys.stdout.buffer
 
     for shard_name in shard_names:
-        shard_path = resolve_shard_path(shard_name, base_dir, loc_map)
-
-        if not os.path.exists(shard_path):
-            print(f"Warning: Shard file not found: {shard_path}", file=sys.stderr)
-            continue
-
-        # Stream in fixed-size chunks so memory use does not grow with shard size
-        with gzip.open(shard_path, "rb") as gz:
-            shutil.copyfileobj(gz, output, _COPY_BUFSIZE)
+        _copy_shard(resolve_shard_path(shard_name, base_dir, loc_map), output)
 
     # Flush output
     output.flush()
@@ -310,19 +281,19 @@ def parse_args(argv=None):
         "-i",
         "--input",
         required=True,
-        help="Input .idx file or '-' for stdin",
+        help="Input .idx file, http(s):// or s3:// URL, or '-' for stdin",
     )
     p.add_argument(
         "--base-dir",
         type=str,
         default=None,
-        help="Base directory for shard files (default: idx file directory)",
+        help="Base directory or URL for shard files (default: idx file directory)",
     )
     p.add_argument(
         "--loc",
         type=str,
         default=None,
-        help="Custom .loc file path (default: auto-detect)",
+        help="Custom .loc file or URL (default: auto-detect)",
     )
     p.add_argument(
         "--workers",
@@ -347,11 +318,16 @@ def main(argv=None):
             file=sys.stderr,
         )
 
-    zipnum_to_flat_cdxj(
-        idx_path=args.input,
-        base_dir=args.base_dir,
-        loc_file=args.loc,
-    )
+    try:
+        zipnum_to_flat_cdxj(
+            idx_path=args.input,
+            base_dir=args.base_dir,
+            loc_file=args.loc,
+        )
+    except (OSError, ValueError) as e:
+        # Unreadable or missing input, or a rejected location
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 if __name__ == "__main__":

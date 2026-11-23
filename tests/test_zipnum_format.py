@@ -11,17 +11,25 @@ import os
 import sys
 import tempfile
 import unittest
+import zlib
 from pathlib import Path
+from unittest import mock
 
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from replay_cdxj_indexing_tools.search.zipnum_search import (  # noqa: E402
+    _MAX_REMOTE_FETCH,
+    _block_matches,
+    _coalesce_blocks,
+    _gunzip_block,
+    logger,
     parse_idx_line,
     read_loc_file,
     search_zipnum_file,
     search_zipnum_index,
 )
+from replay_cdxj_indexing_tools.zipnum.locations import loc_location  # noqa: E402
 
 
 def _record(surt, timestamp="20200101000000"):
@@ -497,6 +505,114 @@ class TestZipNumIdxInvalidLines(unittest.TestCase):
 
     def test_search_before_the_garbage_line(self):
         _assert_search(self, self, "com,site010)/", False, 1)
+
+
+_DECOMPRESSED_CAP = "replay_cdxj_indexing_tools.search.zipnum_search._MAX_BLOCK_DECOMPRESSED"
+
+
+class TestBlockDecompression(unittest.TestCase):
+    """Blocks are decompressed like gzip.decompress(), with a cap on the output."""
+
+    def test_same_as_gzip_decompress(self):
+        one = gzip.compress(b"a 1\nb 2\n")
+        two = one + gzip.compress(b"c 3\n")
+        for data in (b"", one, two):
+            self.assertEqual(_gunzip_block(data), gzip.decompress(data))
+
+    def test_truncated_and_damaged_blocks_raise_like_gzip(self):
+        data = gzip.compress(b"a 1\n" * 1000)
+        with self.assertRaises(EOFError):
+            _gunzip_block(data[: len(data) // 2])
+        with self.assertRaises(zlib.error):
+            _gunzip_block(b"\x00" * 50)
+
+    def test_local_block_over_the_cap_is_skipped_with_a_warning(self):
+        blocks = [[_record(f"com,a)/{i:05d}") for i in range(100)], [_record("com,b)/")]]
+        with tempfile.TemporaryDirectory() as directory:
+            idx_path, _ = _write_zipnum(directory, blocks)
+            with mock.patch(_DECOMPRESSED_CAP, 1000):
+                with self.assertLogs(logger, "WARNING") as logs:
+                    results = list(search_zipnum_file(idx_path, "com,", match_prefix=True))
+        self.assertEqual(results, blocks[1])
+        self.assertIn("decompresses to more than 1000 bytes", logs.output[0])
+
+    def test_remote_block_over_the_cap_is_an_error(self):
+        data = gzip.compress(b"com,a)/ 1\n" * 200)
+        with mock.patch(_DECOMPRESSED_CAP, 1000):
+            with self.assertRaisesRegex(ValueError, "decompresses to more than 1000 bytes"):
+                _block_matches(data, 0, "com,", True, False, shard_location="https://h/x.cdx.gz")
+
+    def test_unexpected_errors_are_not_taken_as_a_damaged_block(self):
+        data = gzip.compress(b"com,a)/ 1\n")
+        with mock.patch("zlib.decompressobj", side_effect=RuntimeError):
+            with self.assertRaises(RuntimeError):
+                _block_matches(data, 0, "com,", True, False)
+
+
+class TestDuplicateIdxBlocks(unittest.TestCase):
+    """A block listed more than once in the .idx is read, and its matches given, once."""
+
+    def test_duplicate_idx_line_gives_each_match_once(self):
+        blocks = [
+            [_record("com,a)/1"), _record("com,a)/2")],
+            [_record("com,b)/1"), _record("com,b)/2")],
+        ]
+        with tempfile.TemporaryDirectory() as directory:
+            idx_path, _ = _write_zipnum(directory, blocks)
+            with open(idx_path, encoding="utf-8") as fh:
+                lines = fh.readlines()
+            with open(idx_path, "w", encoding="utf-8") as fh:
+                fh.writelines([lines[0], lines[0], lines[1], lines[1]])
+
+            results = list(search_zipnum_file(idx_path, "com,", match_prefix=True))
+
+        self.assertEqual(sorted(results), sorted(blocks[0] + blocks[1]))
+
+
+class TestCoalesceBlocks(unittest.TestCase):
+    """Adjacent blocks of a remote shard are fetched in one range request, up to a limit."""
+
+    MB = 1024 * 1024
+
+    def _groups(self, blocks):
+        return [[offset for _, offset, _ in group] for group in _coalesce_blocks(blocks)]
+
+    def test_adjacent_pair_is_one_group(self):
+        self.assertEqual(self._groups([("b", 100, 50), ("a", 0, 100)]), [[0, 100]])
+
+    def test_gap_splits_groups(self):
+        self.assertEqual(self._groups([("a", 0, 100), ("b", 101, 50)]), [[0], [101]])
+
+    def test_groups_stop_at_the_fetch_limit(self):
+        self.assertEqual(_MAX_REMOTE_FETCH, 16 * self.MB)
+        blocks = [(f"k{i}", i * 6 * self.MB, 6 * self.MB) for i in range(5)]
+        groups = _coalesce_blocks(blocks)
+        self.assertEqual([len(group) for group in groups], [2, 2, 1])
+        for group in groups:
+            self.assertLessEqual(sum(length for _, _, length in group), _MAX_REMOTE_FETCH)
+
+    def test_raw_input_with_duplicate_offsets_gives_separate_groups(self):
+        # search_zipnum_file de-duplicates blocks first; this is the helper on its own
+        self.assertEqual(self._groups([("a", 0, 100), ("a", 0, 100)]), [[0], [0]])
+
+    def test_empty(self):
+        self.assertEqual(_coalesce_blocks([]), [])
+
+
+class TestLocLocation(unittest.TestCase):
+    """The .loc of an .idx: only a trailing .idx is replaced."""
+
+    def test_trailing_idx_only(self):
+        cases = [
+            ("/data/index.idx", "/data/index.loc"),
+            ("/data/a.idx/index.idx", "/data/a.idx/index.loc"),
+            ("https://cdx.idx.example.org/c/index.idx", "https://cdx.idx.example.org/c/index.loc"),
+            ("s3://indexes.idx.example/c/index.idx", "s3://indexes.idx.example/c/index.loc"),
+            ("http://h/a.idx/index.idx", "http://h/a.idx/index.loc"),
+            ("/data/index", "/data/index.loc"),
+        ]
+        for idx, loc in cases:
+            self.assertEqual(loc_location(idx), loc)
 
 
 if __name__ == "__main__":

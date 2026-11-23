@@ -67,12 +67,18 @@ PYTHON API
 """
 
 import argparse
+import contextlib
 import os
 import re
 import subprocess
 import sys
 import tempfile
-from typing import List, Optional, Pattern, Tuple
+from typing import IO, List, Optional, Pattern, Tuple
+
+from replay_cdxj_indexing_tools import storage
+
+# Bytes read from a remote input at a time while piping it into grep
+_FEED_CHUNK = 1024 * 1024
 
 
 def load_blocklist(blocklist_path: str) -> List[Pattern]:
@@ -118,6 +124,56 @@ def load_blocklist(blocklist_path: str) -> List[Pattern]:
     return patterns
 
 
+def _copy_counting_lines(src: IO[bytes], dest: IO[bytes]) -> int:
+    """
+    Copy ``src`` to ``dest`` in fixed-size chunks; return the number of lines,
+    counting a final line without a newline.
+    """
+    lines = 0
+    last = b"\n"
+    for chunk in iter(lambda: src.read(_FEED_CHUNK), b""):
+        lines += chunk.count(b"\n")
+        last = chunk[-1:]
+        dest.write(chunk)
+    return lines if last == b"\n" else lines + 1
+
+
+def _grep_remote(cmd: List[str], input_path: str, output_path: str) -> Tuple[int, int]:
+    """
+    Run grep over a remote input by copying it into grep's stdin, and write the
+    lines it keeps to ``output_path`` ('-' for stdout).
+
+    grep writes to a temporary file rather than a pipe, so feeding its stdin from
+    this thread cannot deadlock on a full output pipe. Nothing is written to the
+    output if reading the input fails.
+
+    Returns:
+        Tuple of (lines kept, number of input lines)
+    """
+    total_lines = 0
+    with storage.open_input(input_path, "rb") as src, tempfile.TemporaryFile() as kept:
+        with subprocess.Popen(cmd + ["-"], stdin=subprocess.PIPE, stdout=kept) as proc:
+            stdin = proc.stdin
+            assert stdin is not None  # stdin is PIPE
+            try:
+                total_lines = _copy_counting_lines(src, stdin)
+            except BrokenPipeError:
+                pass  # grep exited early
+            finally:
+                # On a read error too: grep then ends, and the error propagates
+                with contextlib.suppress(BrokenPipeError):
+                    stdin.close()
+        kept.seek(0)
+        if output_path == "-":
+            sys.stdout.flush()
+            lines_kept = _copy_counting_lines(kept, sys.stdout.buffer)
+            sys.stdout.buffer.flush()
+        else:
+            with open(output_path, "wb") as dest:
+                lines_kept = _copy_counting_lines(kept, dest)
+    return lines_kept, total_lines
+
+
 def filter_cdxj_by_blocklist(
     input_path: str,
     blocklist_patterns: List[Pattern],
@@ -133,7 +189,8 @@ def filter_cdxj_by_blocklist(
         grep -E -v -f blocklist.txt input.cdxj > output.cdxj
 
     Args:
-        input_path: Input CDXJ file, or '-' for stdin
+        input_path: Input CDXJ file, remote location (see storage.is_remote), or '-'
+            for stdin
         blocklist_patterns: List of compiled regex Pattern objects to block
             (deprecated, use blocklist_file)
         output_path: Output file, or '-' for stdout (default: stdout)
@@ -165,6 +222,10 @@ def filter_cdxj_by_blocklist(
     try:
         # Build grep command
         cmd = ["grep", "-a", "-E", "-v", "-f", blocklist_file]
+
+        if input_path != "-" and storage.is_remote(input_path):
+            lines_kept, total_lines = _grep_remote(cmd, input_path, output_path)
+            return lines_kept, total_lines - lines_kept
 
         # Handle input
         if input_path == "-":
@@ -241,7 +302,12 @@ Blocklist file format:
         """,
     )
 
-    parser.add_argument("-i", "--input", required=True, help="Input CDXJ file, or - for stdin")
+    parser.add_argument(
+        "-i",
+        "--input",
+        required=True,
+        help="Input CDXJ file, http(s):// or s3:// URL, or - for stdin",
+    )
     parser.add_argument(
         "-b", "--blocklist", required=True, help="Blocklist file with regex patterns (one per line)"
     )
@@ -285,7 +351,7 @@ Blocklist file format:
     except KeyboardInterrupt:
         print("\n# Interrupted by user", file=sys.stderr)
         sys.exit(1)
-    except (IOError, OSError) as e:
+    except (OSError, ValueError) as e:  # ValueError: a rejected input location
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 

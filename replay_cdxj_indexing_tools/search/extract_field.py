@@ -73,6 +73,8 @@ import json
 import sys
 from typing import Optional, Tuple
 
+from replay_cdxj_indexing_tools import storage
+
 
 def parse_cdxj_line(line: str) -> Tuple[str, str, str, Optional[dict]]:
     """
@@ -201,8 +203,8 @@ def extract_field_from_cdxj(
         # Open input file
         if input_file == "-":
             infile = sys.stdin
-        else:  # pylint: disable-next=consider-using-with,unspecified-encoding  # locale
-            infile = open(input_file, "r", buffering=buffer_size)
+        else:  # pylint: disable-next=consider-using-with  # stdin/file conditional; closed below
+            infile = storage.open_input(input_file, "r", buffering=buffer_size)
 
         try:
             for line in infile:
@@ -298,7 +300,7 @@ Examples:
         "-i",
         dest="input_file",
         default="-",
-        help="Input CDXJ file (default: stdin)",
+        help="Input CDXJ file or http(s):// or s3:// URL (default: stdin)",
     )
 
     parser.add_argument(
