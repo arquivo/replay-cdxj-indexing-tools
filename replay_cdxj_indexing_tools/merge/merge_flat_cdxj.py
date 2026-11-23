@@ -57,6 +57,7 @@ from replay_cdxj_indexing_tools.cdxj_lines import (
     CdxjLineFilter,
     SortOrderChecker,
     UnsortedInputError,
+    remove_partial_output,
 )
 
 
@@ -205,8 +206,8 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
     Blank lines are skipped; corrupt lines are skipped with a warning on stderr
     (see iter_records and CdxjLineFilter).
 
-    Raises UnsortedInputError if an input file is not sorted; a partially written
-    output file is removed first.
+    Raises UnsortedInputError if an input file is not sorted; the partially written
+    output file is removed first (see remove_partial_output).
 
     Time Complexity: O(N log k) where N is total lines and k is number of files
     Space Complexity: O(k) for the heap
@@ -264,8 +265,7 @@ def merge_sorted_files(files, output_file, buffer_size=1024 * 1024, verbose=Fals
                             heapq.heappush(heap, (next_line, idx))
             except UnsortedInputError:
                 # The output so far is a valid-looking prefix of a wrong merge
-                with contextlib.suppress(OSError):
-                    os.unlink(output_file)
+                remove_partial_output(output_file)
                 raise
 
     line_filter.report()

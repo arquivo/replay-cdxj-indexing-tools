@@ -823,6 +823,31 @@ class TestMergeSortedFiles(unittest.TestCase):
         self.assertEqual((err.source, err.prev_lineno, err.lineno), (file2, 3, 4))
         self.assertFalse(os.path.exists(output))
 
+    def test_merge_to_stdout_stops_on_unsorted_input(self):
+        """Writing to stdout, the merge stops at the unsorted line; lines before it stay"""
+        file1 = self.create_test_file("file1.cdxj", ["pt,a)/ 1 {}", "pt,c)/ 1 {}", "pt,b)/ 1 {}"])
+
+        stdout = StringIO()
+        with contextlib.redirect_stdout(stdout), self.assertRaises(UnsortedInputError):
+            merge_sorted_files([file1], "-")
+
+        self.assertEqual(stdout.getvalue(), "pt,a)/ 1 {}\npt,c)/ 1 {}\n")
+
+    @unittest.skipUnless(hasattr(os, "symlink"), "needs symlinks")
+    def test_merge_leaves_non_regular_output_in_place(self):
+        """A symlink given as the output is not deleted when the merge stops"""
+        file1 = self.create_test_file("file1.cdxj", ["pt,b)/ 1 {}", "pt,a)/ 1 {}"])
+        target = self.test_path / "target.cdxj"
+        link = self.test_path / "link.cdxj"
+        os.symlink(target, link)
+
+        stderr = StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(UnsortedInputError):
+            merge_sorted_files([file1], str(link))
+
+        self.assertTrue(link.is_symlink())
+        self.assertIn("Partial output left in place (not a regular file)", stderr.getvalue())
+
     def test_merge_rejects_locale_sorted_input(self):
         """A file sorted under a non-C locale (lowercase before uppercase) is rejected"""
         file1 = self.create_test_file("file1.cdxj", ["pt,a)/a 1 {}", "pt,a)/B 1 {}"])

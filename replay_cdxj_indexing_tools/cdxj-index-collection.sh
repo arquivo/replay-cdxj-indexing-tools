@@ -362,10 +362,11 @@ index_warc() {
     # Clean up any existing temporary file (from previous interrupted run)
     rm -f "$cdxj_tmp"
     
-    # Index the WARC to temporary file (atomic operation)
+    # Index the WARC to temporary file (atomic operation). --sort writes records in
+    # key order, not WARC order: merge-flat-cdxj stops on an unsorted input.
     echo "  [INDEX] $warc_basename" >&2
     touch "$cdxj_tmp"
-    cdx-indexer --postappend --cdxj "$warc_path" -o "$cdxj_tmp" 2>/dev/null
+    cdx-indexer --postappend --cdxj --sort "$warc_path" -o "$cdxj_tmp" 2>/dev/null
     
     local retval=$?
     if [ $retval -ne 0 ]; then

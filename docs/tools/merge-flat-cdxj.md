@@ -271,8 +271,12 @@ cat merge.log
 Each input file is checked while it is read. The k-way merge only produces sorted output
 from sorted inputs, and an index built from unsorted data silently misses records on
 lookup, so the merge stops at the first line that sorts before the line preceding it.
-It prints the file and both line numbers to stderr, removes the partially written output
-file (when not writing to stdout) and exits with status 1:
+It prints the file and both line numbers to stderr, deletes the partially written output
+file and exits with status 1. Only a regular file is deleted: a device or symlink given
+as the output is left in place with a warning, and lines already written to stdout (`-`)
+stay in the pipe.
+
+Example:
 
 ```
 [ERROR] Merge stopped: /data/indexes/AWP-2023.cdxj is not sorted: line 2 sorts before line 1
