@@ -44,12 +44,11 @@ Complete guide to the `cdxj-index-collection` script for production CDXJ process
 | `--blocklist FILE` | `/data/blocklists/arquivo-blocklist.txt` | Path to blocklist file |
 | `--threshold N` | `1000` | Excessive URLs threshold |
 | `--jobs N` | `$(nproc)` | Number of parallel jobs |
-| `--shard-size N` | `3000` | ZipNum shard size (lines) |
+| `--shard-size N` | `100` | ZipNum shard size (MB) |
 | `--collections-dir DIR` | `/data/collections` | Collections base directory |
 | `--output-dir DIR` | `/data/zipnum` | Output directory base |
 | `--temp-dir DIR` | `/tmp/cdxj-processing` | Temporary directory |
 | `--keep-temp` | off | Keep temporary files |
-| `--no-compress` | off | Don't compress ZipNum |
 | `--incremental` | off | Only index new/modified WARCs |
 | `--help` | - | Show help message |
 
@@ -200,7 +199,7 @@ flat-cdxj-to-zipnum \
 ./cdxj-index-collection AWP999 \
     --jobs 64 \
     --threshold 5000 \
-    --shard-size 5000 \
+    --shard-size 200 \
     --blocklist /custom/blocklist.txt \
     --keep-temp
 ```
@@ -208,7 +207,7 @@ flat-cdxj-to-zipnum \
 **Custom settings:**
 - 64 parallel jobs (high-core server)
 - More lenient excessive threshold (5000)
-- Larger shards (5000 lines)
+- Larger shards (200 MB)
 - Custom blocklist
 - Keep temp files for inspection
 
