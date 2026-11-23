@@ -37,7 +37,7 @@ done
 
 **Merged output** — verify the output is still sorted:
 ```bash
-sort -c index.cdxj && echo "sorted OK" || echo "sort order violated"
+LC_ALL=C sort -c index.cdxj && echo "sorted OK" || echo "sort order violated"
 ```
 
 ### Recovering partial CDXJ files
@@ -105,7 +105,7 @@ with the same values.
 
 ```bash
 # Check sort order
-sort -c index.cdxj
+LC_ALL=C sort -c index.cdxj
 
 # Check for malformed lines (must have at least surt + timestamp + JSON)
 awk 'NF < 3 { print NR": "$0 }' index.cdxj | head
@@ -132,7 +132,7 @@ for i, line in enumerate(sys.stdin, 1):
 for f in shards/*.cdxj.gz; do gzip -t "$f" || echo "BAD: $f"; done
 
 # Verify the .idx file is sorted
-sort -c index.idx
+LC_ALL=C sort -c index.idx
 
 # Spot-check: search for a known URL should return results
 cdxj-search --url http://example.com/ index.idx
@@ -196,10 +196,12 @@ idempotent.
 
 ### `sort -c` reports "disorder"
 
-The input to `merge-flat-cdxj` must be sorted. If one of the input files is out of order,
-sort it first:
+The input to `merge-flat-cdxj` must be sorted in byte order. If one of the input files is
+out of order, sort it first. Set `LC_ALL=C` for both the check and the sort: under a
+locale such as `en_US.UTF-8`, `sort` ignores punctuation, so a file it reports as sorted
+can still be out of byte order.
 ```bash
-sort -o input_sorted.cdxj input.cdxj
+LC_ALL=C sort -o input_sorted.cdxj input.cdxj
 ```
 
 ---

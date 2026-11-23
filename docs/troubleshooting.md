@@ -450,7 +450,7 @@ of order, naming the file and lines. A file sorted under another locale (e.g.
 
 1. **Remove duplicates:**
    ```bash
-   sort -u input.cdxj > deduplicated.cdxj
+   LC_ALL=C sort -u input.cdxj > deduplicated.cdxj
    ```
 
 2. **During merge:**
