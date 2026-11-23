@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.4.0 (2026-11-23)
+
+### Bug Fixes
+
+- Delete only regular partial output and index WARCs sorted
+  ([`e183650`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/e18365006b04fc8271db6577cf2fb1882e6688c1))
+
+### Features
+
+- Stop merge and ZipNum conversion on input that is not sorted
+  ([`92352f6`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/92352f6e2c1f3c73029664e8fd20969b557264c7))
+
+
 ## v1.3.1 (2026-11-23)
 
 ### Bug Fixes
