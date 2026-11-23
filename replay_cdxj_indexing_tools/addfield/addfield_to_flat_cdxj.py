@@ -646,7 +646,7 @@ Custom Field Function File Format:
         sys.exit(1)
     except SyntaxError as e:
         # str(SyntaxError) embeds the raw filename; repr() it (CWE-117). Some errors
-        # (e.g. NUL bytes on Python >= 3.11) carry no location.
+        # (e.g. NUL bytes) carry no location.
         location = ""
         if e.filename is not None and e.lineno is not None:
             location = f" ({e.filename!r}, line {e.lineno})"

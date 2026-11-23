@@ -938,7 +938,7 @@ class TestLoadAddfieldFunctionSecurity(unittest.TestCase):
         result, _ = self._run_cli({"ADDFIELD_PLUGIN_DIR": self.plugin_dir}, source=b"x = 1\0\n")
 
         self.assertEqual(result.returncode, 1)
-        # SyntaxError (Python >= 3.11) or ValueError (3.10), both without a location.
+        # SyntaxError without a location.
         self.assertRegex(
             result.stderr, r"(?m)^Error: source code string cannot contain null bytes$"
         )
