@@ -132,6 +132,8 @@ Test against multiple Python versions using Docker containers:
 # Test on specific Python version
 make ci-py311  # Python 3.11
 make ci-py312  # Python 3.12
+make ci-py313  # Python 3.13
+make ci-py314  # Python 3.14
 
 # Test on all Python versions
 make ci-all

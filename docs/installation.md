@@ -2,7 +2,7 @@
 
 ## Requirements
 
-- Python 3.11 or higher
+- Python 3.11 to 3.14
 - pip package manager
 - Virtual environment (recommended)
 - Docker (optional, for containerized deployment)

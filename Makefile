@@ -207,7 +207,15 @@ ci-py312: ## Run full CI checks in Python 3.12 container
 	$(call run_ci_version,3.12)
 .PHONY: ci-py312
 
-ci-all: ci-py311 ci-py312 ## Run full CI checks on all Python versions
+ci-py313: ## Run full CI checks in Python 3.13 container
+	$(call run_ci_version,3.13)
+.PHONY: ci-py313
+
+ci-py314: ## Run full CI checks in Python 3.14 container
+	$(call run_ci_version,3.14)
+.PHONY: ci-py314
+
+ci-all: ci-py311 ci-py312 ci-py313 ci-py314 ## Run full CI checks on all Python versions
 	@echo ""
 	@echo "=========================================="
 	@echo "✓ All Python versions passed CI checks!"

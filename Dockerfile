@@ -1,7 +1,7 @@
 # Dockerfile for replay-cdxj-indexing-tools
 # Build and run CDXJ indexing tools in a containerized environment
 
-FROM python:3.11-slim
+FROM python:3.14-slim
 
 LABEL maintainer="contacto@arquivo.pt"
 LABEL description="Tools for web archive replay CDXJ indexing"
