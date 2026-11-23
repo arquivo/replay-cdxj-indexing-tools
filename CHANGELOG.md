@@ -2,6 +2,17 @@
 
 <!-- version list -->
 
+## v1.3.1 (2026-11-23)
+
+### Bug Fixes
+
+- **pipeline**: Address review nits for zipnum invocation
+  ([`41cbd6f`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/41cbd6f6104b7a90dd3f79d6a757bf7bbae69143))
+
+- **pipeline**: Pass shard size to flat-cdxj-to-zipnum with -s
+  ([`d38c630`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/d38c6301fd57e29db632765f3b2ee2572b4ac86a))
+
+
 ## v1.3.0 (2026-11-19)
 
 ### Features
