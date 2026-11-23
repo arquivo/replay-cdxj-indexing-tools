@@ -412,10 +412,17 @@ gzip: invalid compressed data
 
 ### SURT ordering errors
 
-**Symptom:**
+**Symptom:** `merge-flat-cdxj` or `flat-cdxj-to-zipnum` stops with exit status 1:
 ```
-AssertionError: CDXJ not in SURT order
+[ERROR] Merge stopped: /data/indexes/AWP-2023.cdxj is not sorted: line 2 sorts before line 1
+  line 1: 'pt,governo,www)/ 20230615120000 {"url": "https://www.governo.pt/"}'
+  line 2: 'pt,Publico,www)/ 20230101120000 {"url": "https://www.publico.pt/"}'
+CDXJ input must be sorted in byte order, e.g. with: LC_ALL=C sort
 ```
+
+Both tools require input in byte order (`LC_ALL=C sort`) and stop at the first line out
+of order, naming the file and lines. A file sorted under another locale (e.g.
+`en_US.UTF-8`, which ignores case and punctuation) is the usual cause.
 
 **Solutions:**
 

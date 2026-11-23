@@ -104,6 +104,12 @@ Total: 22 tests across 4 test classes
    - test_corrupt_lines_do_not_produce_bogus_idx_key: Lines with NUL bytes or no key
      are skipped with a file:line warning instead of reaching the .idx or the shard
 
+   - test_unsorted_input_stops_conversion_and_removes_output: Input out of byte order
+     raises with the input name and line numbers; no shard, .idx or temp file is left
+
+   - test_main_exits_with_error_on_unsorted_input: The CLI explains why the conversion
+     stopped on stderr and exits with status 1
+
    - test_real_cdxj_data: Tests with authentic Portuguese (.pt) domain data from
      web archives (aas.pt, edp.pt, governo.pt, sapo.pt, uc.pt) including full
      CDXJ metadata (URL, MIME type, status, digest, length, offset, filename)
@@ -223,6 +229,8 @@ import os
 import shutil
 import tempfile
 import unittest
+
+from replay_cdxj_indexing_tools.cdxj_lines import UnsortedInputError
 
 # Import the module under test
 from replay_cdxj_indexing_tools.zipnum.flat_cdxj_to_zipnum import (
@@ -974,6 +982,44 @@ class TestCdxjToZipnum(unittest.TestCase):
         self.assertIn(f"{input_file}:1: skipping corrupt CDXJ line (5000 NUL bytes)", warnings)
         self.assertIn(f"{input_file}:4: skipping corrupt CDXJ line (no key before", warnings)
         self.assertIn("Skipped 2 corrupt CDXJ line(s)", warnings)
+
+    def test_unsorted_input_stops_conversion_and_removes_output(self):
+        """
+        Test that input out of byte order stops the conversion with an error naming
+        the input and lines, and leaves no shard, .idx or temp file behind, even
+        after shards were already committed.
+        """
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        with open(input_file, "wb") as f:
+            for i in range(3000):
+                data = os.urandom(100).hex()
+                f.write(f'org,example)/{i:06d} 2020 {{"data": "{data}"}}\n'.encode())
+            f.write(b'org,example)/000001 2020 {"data": "late"}\n')
+
+        with self.assertRaises(UnsortedInputError) as ctx:
+            cdxj_to_zipnum(self.output_dir, input_file, shard_size_mb=0, chunk_size=100)
+
+        err = ctx.exception
+        self.assertEqual((err.source, err.prev_lineno, err.lineno), (input_file, 3000, 3001))
+        self.assertEqual(os.listdir(self.output_dir), [])
+
+    def test_main_exits_with_error_on_unsorted_input(self):
+        """
+        Test that the CLI prints why the conversion stopped and exits with status 1.
+        """
+        input_file = os.path.join(self.input_dir, "test.cdxj")
+        with open(input_file, "wb") as f:
+            f.write(b"pt,b)/ 2020 {}\npt,a)/ 2020 {}\n")
+
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as ctx:
+            main(["-i", input_file, "-o", self.output_dir])
+
+        self.assertEqual(ctx.exception.code, 1)
+        message = stderr.getvalue()
+        self.assertIn("[ERROR] Conversion stopped, no ZipNum index written:", message)
+        self.assertIn(f"{input_file} is not sorted: line 2 sorts before line 1", message)
+        self.assertEqual(os.listdir(self.output_dir), [])
 
     def test_idx_file_includes_cdxgz_extension(self):
         """
