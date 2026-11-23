@@ -749,7 +749,7 @@ validate_cdxj() {
     fi
     
     # Check if sorted
-    if ! sort -c "$file" 2>/dev/null; then
+    if ! LC_ALL=C sort -c "$file" 2>/dev/null; then
         echo "  ERROR: File is not sorted!"
         return 1
     fi

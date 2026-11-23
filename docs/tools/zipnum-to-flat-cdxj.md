@@ -372,7 +372,7 @@ wc -l output.cdxj
 head -10 output.cdxj
 
 # Check sorting
-sort -c output.cdxj && echo "✓ Properly sorted" || echo "✗ Not sorted"
+LC_ALL=C sort -c output.cdxj && echo "✓ Properly sorted" || echo "✗ Not sorted"
 ```
 
 ### Compare Round-Trip
@@ -489,7 +489,7 @@ for prefix in {a..z} {0..9}; do
 done
 
 # Then merge
-cat output_*.cdxj | sort > final.cdxj
+cat output_*.cdxj | LC_ALL=C sort > final.cdxj
 rm output_*.cdxj
 ```
 
