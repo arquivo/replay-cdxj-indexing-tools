@@ -2,6 +2,19 @@
 
 <!-- version list -->
 
+## v1.5.0 (2026-11-23)
+
+### Chores
+
+- Drop Python 3.10 support
+  ([`0d6de72`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/0d6de721f27fe7149ec5694d085ce587f98f2b5f))
+
+### Features
+
+- Support Python 3.13 and 3.14
+  ([`dd5fa92`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/dd5fa92c1b749e9fdc363d697ab35c42266505f7))
+
+
 ## v1.4.1 (2026-11-23)
 
 ### Bug Fixes
