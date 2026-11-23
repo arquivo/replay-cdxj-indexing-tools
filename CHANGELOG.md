@@ -2,6 +2,14 @@
 
 <!-- version list -->
 
+## v1.6.0 (2026-11-23)
+
+### Features
+
+- Read indexes from http(s):// and s3:// locations
+  ([`f5e4f58`](https://github.com/arquivo/replay-cdxj-indexing-tools/commit/f5e4f585c3967b9d669a0745de66e4a276dcac6f))
+
+
 ## v1.5.0 (2026-11-23)
 
 ### Chores
