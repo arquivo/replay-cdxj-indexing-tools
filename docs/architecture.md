@@ -324,7 +324,7 @@ file.warc.gz → file.cdxj.tmp → file.cdxj
 
 ### System Requirements
 
-- **Python:** 3.7+ (tested: 3.7-3.12)
+- **Python:** 3.11+ (tested: 3.11-3.14)
 - **GNU parallel:** For parallel indexing
 - **pywb:** CDX indexer (`cdx-indexer`)
 

@@ -18,7 +18,7 @@ jobs:
     
     strategy:
       matrix:
-        python-version: ['3.11', '3.12']
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     
     steps:
     - name: Checkout code
@@ -54,7 +54,7 @@ jobs:
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
-      if: matrix.python-version == '3.12'
+      if: matrix.python-version == '3.14'
       with:
         file: ./coverage.xml
         flags: unittests

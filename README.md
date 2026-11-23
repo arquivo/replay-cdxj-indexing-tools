@@ -142,7 +142,7 @@ Each stage is optimized for throughput and memory efficiency.
 
 ## Requirements
 
-- **Python:** 3.7+ (tested on 3.7-3.12)
+- **Python:** 3.11+ (tested on 3.11-3.14)
 - **pywb:** ≥2.9.1 (for `cdx-indexer`)
 - **GNU parallel:** For parallel WARC indexing
 
